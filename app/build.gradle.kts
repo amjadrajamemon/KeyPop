@@ -5,13 +5,13 @@ plugins {
 
 android {
     namespace = "com.aetherkeys.keyboard"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.aetherkeys.keyboard"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.1-github-smoke"
+        targetSdk = 36
+        versionCode = 3
+        versionName = "0.2.0-visual-studio"
     }
     buildTypes { release { isMinifyEnabled = false } }
     compileOptions {
