@@ -41,8 +41,14 @@ object KeyPopSkins {
     fun active(context: Context): KeyPopSkin {
         val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
         val original=all[index(context)]
-        return if(prefs.contains("customAccent"))
+        val themed=if(prefs.contains("customAccent"))
             original.copy(accent=prefs.getInt("customAccent",original.accent)) else original
+        if(!prefs.getBoolean("highContrast",false))return themed
+        // Contrast mode improves legibility without changing profile identity.
+        val bg=themed.background
+        val luminance=android.graphics.Color.luminance(bg)
+        val ink=if(luminance>0.45)Color.BLACK else Color.WHITE
+        return themed.copy(ink=ink,outline=true)
     }
     fun radius(skin: KeyPopSkin, user: Int): Float = when (skin.shape) {
         0 -> user.toFloat() * 1.35f

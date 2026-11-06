@@ -234,6 +234,7 @@ class MainActivity : Activity() {
         toggle(controls,"Clipboard history (opt in)","Encrypted local history with manual deletion and pinning","history",false)
         toggle(controls,"Long-press Backspace deletes a word","Hold delete to remove the preceding word","wordDelete",true)
         toggle(controls,"Spacebar cursor gestures","Drag on Space to move the cursor; hold to select a language","spaceCursor",true)
+        toggle(controls,"High-contrast key labels","Force black or white glyphs and outlined keys for readability","highContrast",false)
         addCard(root,controls)
 
         translate=card()
