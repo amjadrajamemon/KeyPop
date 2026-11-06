@@ -1,5 +1,8 @@
 package com.aetherkeys.keyboard
 
+import android.content.ClipData
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -31,6 +34,21 @@ class AetherImeService : InputMethodService() {
     private var shift=false
     private var symbols=false
     private var clipsOpen=false
+    private var translatorOpen=false
+    private var translateSource=""
+    private var translateResult=""
+    private var translationStatus=""
+    private var translateTarget=0
+    private val codes=listOf("en","ur","sd")
+    private val speechReceiver=object:BroadcastReceiver() {
+        override fun onReceive(context:Context,intent:Intent) {
+            if(intent.action==KeyPopVoiceActivity.RESULT_ACTION) {
+                val recognized=intent.getStringExtra("text").orEmpty()
+                if(recognized.isNotBlank() && !sensitive(currentInputEditorInfo))
+                    currentInputConnection?.commitText(recognized+" ",1)
+            }
+        }
+    }
     private var emojiOpen=false
     private var pinnedOnly=false
     private var cursorTools=false
@@ -72,6 +90,10 @@ class AetherImeService : InputMethodService() {
 
     override fun onCreate() {
         super.onCreate()
+        val filter=IntentFilter(KeyPopVoiceActivity.RESULT_ACTION)
+        if(Build.VERSION.SDK_INT>=33)
+            registerReceiver(speechReceiver,filter,Context.RECEIVER_NOT_EXPORTED)
+        else @Suppress("DEPRECATION") registerReceiver(speechReceiver,filter)
         clipboard.addPrimaryClipChangedListener {
             if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",true)) {
                 try {
@@ -87,6 +109,11 @@ class AetherImeService : InputMethodService() {
         }
     }
 
+    override fun onDestroy() {
+        try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
+        super.onDestroy()
+    }
+
     override fun onCreateInputView():View {
         language=prefs.getInt("language",0).coerceIn(0,2)
         current=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
@@ -95,7 +122,7 @@ class AetherImeService : InputMethodService() {
     }
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
         super.onStartInputView(info,restarting)
-        clipsOpen=false;emojiOpen=false;cursorTools=false
+        clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false
         shift=false;capsLock=false
         draw()
     }
@@ -158,7 +185,24 @@ class AetherImeService : InputMethodService() {
         topButton("✦  "+languages[language],1.5f) { cycleLanguage() }
         if(!secure) topButton("▤ Clips",1f) { clipsOpen=!clipsOpen;emojiOpen=false;draw() }
         topButton(if(symbols) "ABC" else "?#@",.75f) { symbols=!symbols;clipsOpen=false;emojiOpen=false;draw() }
-        if(!secure && !isNumeric) topButton("☺",.55f) { emojiOpen=!emojiOpen;clipsOpen=false;draw() }
+        if(!secure && !isNumeric) {
+            topButton("☺",.50f) { emojiOpen=!emojiOpen;clipsOpen=false;translatorOpen=false;draw() }
+            topButton("⇄",.55f) {
+                translatorOpen=!translatorOpen;emojiOpen=false;clipsOpen=false
+                if(translatorOpen) {
+                    translateSource=currentInputConnection?.getSelectedText(0)?.toString()
+                        ?: currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
+                    translateResult="";translationStatus=""
+                    translateTarget=(language+1)%3
+                }
+                draw()
+            }
+            topButton("🎙",.52f) {
+                val lang=when(language){1->"ur-PK";2->"sd-PK";else->"en-US"}
+                startActivity(Intent(this,KeyPopVoiceActivity::class.java)
+                    .putExtra("lang",lang).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
         topButton("↤↦",.65f) { cursorTools=!cursorTools;draw() }
         topButton(when(prefs.getInt("handMode",0)) {1->"◧";2->"◨";else->"↔"},.55f) {
             val next=(prefs.getInt("handMode",0)+1)%3
@@ -170,6 +214,7 @@ class AetherImeService : InputMethodService() {
         }
         root.addView(top)
         if(clipsOpen && !secure) { drawClips(root); return }
+        if(translatorOpen && !secure && !isNumeric) showTranslator(root)
         if(emojiOpen && !secure && !isNumeric) {
             root.addView(TextView(this).apply {
                 text="EMOJI  •  TAP TO INSERT";setTextColor(palette().accent);textSize=11f
@@ -307,6 +352,88 @@ class AetherImeService : InputMethodService() {
         language=(language+1)%3
         prefs.edit().putInt("language",language).apply()
         shift=false;capsLock=false;symbols=false;clipsOpen=false;emojiOpen=false;draw()
+    }
+    private fun showTranslator(root:LinearLayout) {
+        val style=palette()
+        val panel=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(d(9),d(8),d(9),d(5))
+            background=gradient(style.surface,style.background,12)
+        }
+        val original=TextView(this).apply {
+            text="SOURCE · "+languages[language]+"\n"+
+                (if(translateSource.isBlank()) "Select text or type a message first" else translateSource.take(180))
+            textSize=11f;setTextColor(style.ink)
+        }
+        panel.addView(original)
+        val resultView=TextView(this).apply {
+            text=if(translateResult.isBlank()) translationStatus else translateResult
+            textSize=13f;setTextColor(style.ink)
+            setPadding(0,d(6),0,d(6))
+        }
+        val controls=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+        fun small(label:String,weight:Float=1f,onTap:()->Unit) {
+            controls.addView(chip(label,onTap=onTap),
+                LinearLayout.LayoutParams(0,d(38),weight).apply { rightMargin=d(3) })
+        }
+        small("To "+languages[translateTarget]) {
+            translateTarget=(translateTarget+1)%3;translateResult="";translationStatus=""
+            draw()
+        }
+        small("Translate",1.3f) {
+            if(translateSource.isBlank()) {
+                translationStatus="Select or type a message first";resultView.text=translationStatus
+            } else {
+                translationStatus="Translating… (first use may download a language model)"
+                resultView.text=translationStatus
+                KeyPopTranslator.translate(codes[language],codes[translateTarget],translateSource,
+                    prefs.getBoolean("remoteTranslate",false),prefs.getString("translateEndpoint","").orEmpty()) { outcome ->
+                    outcome.onSuccess { translateResult=it;resultView.text=it }
+                        .onFailure { translationStatus=it.message ?: "Translation unavailable";resultView.text=translationStatus }
+                }
+            }
+        }
+        small("×") {translatorOpen=false;draw()}
+        panel.addView(controls)
+        panel.addView(resultView)
+        if(translateResult.isNotBlank()) {
+            val actions=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
+            fun translatedAction(label:String,fn:()->Unit) {
+                actions.addView(chip(label,onTap=fn),LinearLayout.LayoutParams(0,d(38),1f).apply{rightMargin=d(3)})
+            }
+            translatedAction("Copy") {
+                clipboard.setPrimaryClip(ClipData.newPlainText("KeyPop translation",translateResult))
+            }
+            fun insert():Boolean {
+                val input=currentInputConnection ?: return false
+                val selected=input.getSelectedText(0)
+                input.beginBatchEdit()
+                if(selected.isNullOrEmpty()) {
+                    val previous=input.getTextBeforeCursor(translateSource.length,0)?.toString().orEmpty()
+                    if(previous==translateSource) input.deleteSurroundingText(translateSource.length,0)
+                }
+                val ok=input.commitText(translateResult,1)
+                input.endBatchEdit()
+                return ok
+            }
+            translatedAction("Insert") { if(insert()){translatorOpen=false;draw()} }
+            translatedAction("Send") {
+                if(insert()) {
+                    translatorOpen=false;draw()
+                    val action=(currentInputEditorInfo?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
+                    if(action==EditorInfo.IME_ACTION_SEND) {
+                        currentInputConnection?.performEditorAction(action)
+                    } else Toast.makeText(this,"Inserted. Use the app's Send button.",Toast.LENGTH_SHORT).show()
+                }
+            }
+            translatedAction("Share") {
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type="text/plain";putExtra(Intent.EXTRA_TEXT,translateResult)
+                },"Share translation").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            panel.addView(actions)
+        }
+        root.addView(panel)
     }
     private fun drawClips(root:LinearLayout) {
         val s=palette()
