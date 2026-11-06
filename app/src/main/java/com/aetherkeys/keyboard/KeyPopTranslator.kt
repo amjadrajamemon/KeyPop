@@ -17,6 +17,13 @@ object KeyPopTranslator {
                   endpoint: String,done:(Result<String>)->Unit) {
         if(text.isBlank()) { done(Result.failure(IllegalArgumentException("Nothing to translate")));return }
         if(source==target) { done(Result.success(text));return }
+        // The on-device Sindhi phrasebook serves known phrases without any upload.
+        // Unknown phrases continue to the optional HTTPS provider path.
+        if(source=="sd" || target=="sd") {
+            KeyPopSindhiPhrasebook.translate(source,target,text)?.let {
+                done(Result.success(it));return
+            }
+        }
         val from=TranslateLanguage.fromLanguageTag(source)
         val to=TranslateLanguage.fromLanguageTag(target)
         if(from!=null && to!=null) {

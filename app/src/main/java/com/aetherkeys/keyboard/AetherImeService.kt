@@ -722,7 +722,9 @@ class AetherImeService : InputMethodService() {
         val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
         bar.removeAllViews()
         val suggestionLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
-        val values=lexicon.suggestions(suggestionLanguage,word)
+        val prefix=before.removeSuffix(word).trimEnd()
+        val previous=Regex("[\\p{L}]+$").find(prefix)?.value.orEmpty()
+        val values=lexicon.suggestions(suggestionLanguage,word,previous=previous)
         if(values.isEmpty()) {
             bar.addView(chip("✦ Local suggestions") {},
                 LinearLayout.LayoutParams(-1,d(32)))

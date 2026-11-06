@@ -63,24 +63,14 @@ class KeyPopLexicon(context:Context) {
         val updated=(old+value).toList().takeLast(2000).toSet()
         store.edit().putStringSet("learned_"+lang,updated).apply()
     }
-    fun suggestions(lang:Int,fragment:String,limit:Int=3):List<String> {
-        val lower=fragment.lowercase(Locale.ROOT).trim()
-        if(lower.isEmpty()||lower.length>32)return emptyList()
-        val all=words(lang)
-        val prefix=all.asSequence().filter{it.startsWith(lower)&&it!=lower}.take(40).toList()
-        val typo=if(lower.length>=3)all.asSequence()
-            .filter{it!=lower && !it.startsWith(lower) && it.length in (lower.length-1)..(lower.length+1)}
-            .map{it to editDistanceAtMost2(lower,it)}
-            .filter{it.second<=1}.take(20).sortedBy{it.second}.map{it.first}.toList()
-            else emptyList()
-        return (prefix+typo).distinct().take(limit)
+    fun suggestions(lang:Int,fragment:String,limit:Int=3,previous:String=""):List<String> {
+        val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+        return KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
+            learned+words(lang),limit)
     }
     fun correction(lang:Int,word:String):String? {
-        val lower=word.lowercase(Locale.ROOT)
-        if(lower.length<4||lower in words(lang))return null
-        return suggestions(lang,lower).firstOrNull {
-            it.length in (lower.length-1)..(lower.length+1) && editDistanceAtMost2(lower,it)==1
-        }
+        val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+        return KeyPopTypingIntelligence.correction(lang,word,learned+words(lang))
     }
     fun glide(lang:Int,path:List<String>):String? {
         if(lang!=0 || path.size<3)return null
@@ -92,7 +82,7 @@ class KeyPopLexicon(context:Context) {
             for(ch in sequence)if(i<word.length && word[i]==ch)i++
             return i==word.length
         }
-        return words(lang).asSequence().filter {
+        return (words(lang)+KeyPopTypingIntelligence.list(lang)).asSequence().filter {
             it.length>=3 && it.first()==start && it.last()==end && isSubsequence(it)
         }.minByOrNull { kotlin.math.abs(it.length-sequence.length) }
     }
