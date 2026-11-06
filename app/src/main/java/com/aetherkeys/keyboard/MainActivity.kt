@@ -236,6 +236,11 @@ class MainActivity : Activity() {
         toggle(controls,"Spacebar cursor gestures","Drag on Space to move the cursor; hold to select a language","spaceCursor",true)
         toggle(controls,"High-contrast key labels","Force black or white glyphs and outlined keys for readability","highContrast",false)
         toggle(controls,"Subtle animated themes","Animate selected theme effects at reduced frame rate; respects Android reduced-motion settings","animatedThemes",false)
+        toggle(controls,"Private performance diagnostics","Measure keyboard view construction only; never capture typed content","performanceMetrics",false)
+        controls.addView(gap(7))
+        controls.addView(action("Performance Lab — timing measurements and export") {
+            startActivity(Intent(this,KeyPopDiagnosticsActivity::class.java))
+        })
         addCard(root,controls)
 
         translate=card()

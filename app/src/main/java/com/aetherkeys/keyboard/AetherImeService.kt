@@ -177,10 +177,12 @@ class AetherImeService : InputMethodService() {
 
     override fun onFinishInputView(finishingInput:Boolean) {
         themeAnimator?.pause()
+        KeyPopDiagnostics.flush(this)
         super.onFinishInputView(finishingInput)
     }
 
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
+        val viewStart=SystemClock.elapsedRealtimeNanos()
         super.onStartInputView(info,restarting)
         clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false;writingOpen=false
         shift=false;capsLock=false
@@ -190,6 +192,7 @@ class AetherImeService : InputMethodService() {
             if(inserted)pendingSpeech=null
         } else if(pending!=null && info?.packageName!=voiceTargetPackage) pendingSpeech=null
         draw()
+        KeyPopDiagnostics.observeKeyboardBuild(this,SystemClock.elapsedRealtimeNanos()-viewStart)
     }
 
     private fun d(v:Int)=(v*resources.displayMetrics.density).toInt()
