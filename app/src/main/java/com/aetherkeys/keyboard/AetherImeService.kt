@@ -773,7 +773,7 @@ class AetherImeService : InputMethodService() {
             else KeyPopLayouts.active(this,language)
         val keyHeight=prefs.getInt("height",51).coerceIn(36,90)
         // Dedicated 0–9 row exactly once, above the alphabetic rows.
-        if(KeyPopRowParity.hasNumberRow(prefs.getBoolean("numberRow",true),symbols,isNumeric))
+        if(KeyPopRowParity.hasNumberRow(prefs.getBoolean("numberRow",true),symbols,numeric(currentInputEditorInfo)))
             addRow(root, KeyPopRowParity.digits,keyHeight-10)
         rows.forEachIndexed { i, row ->
             val keys=if(i==rows.lastIndex && !symbols && !isNumeric) listOf("⇧")+row+listOf("⌫") else row
@@ -816,7 +816,7 @@ class AetherImeService : InputMethodService() {
             val variants=KeyPopRowParity.alternates(
                 KeyPopMaterialHints.candidates(label,altLanguage,material),
                 label,KeyPopRowParity.hasNumberRow(
-                    prefs.getBoolean("numberRow",true),symbols,isNumeric))
+                    prefs.getBoolean("numberRow",true),symbols,numeric(currentInputEditorInfo)))
             val actualHint=if(prefs.getBoolean("hints",true))variants.firstOrNull() else null
             // A number row and a second numeric hint row create visual duplication.
             val caption=if(!material && !symbols && actualHint!=null && label.length==1)
