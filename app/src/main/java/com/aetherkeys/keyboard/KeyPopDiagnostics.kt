@@ -15,7 +15,8 @@ object KeyPopDiagnostics {
     fun percentile(samples:List<Long>,percent:Int):Long {
         if(samples.isEmpty())return 0L
         val ordered=samples.sorted()
-        val rank=((ordered.lastIndex*percent.coerceIn(0,100))/100.0).toInt()
+        val rank=(kotlin.math.ceil(ordered.size*percent.coerceIn(0,100)/100.0).toInt()-1)
+            .coerceIn(0,ordered.lastIndex)
         return ordered[rank]
     }
     @Synchronized fun observeKeyboardBuild(context:Context,elapsedNanos:Long) {
