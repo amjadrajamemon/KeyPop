@@ -32,6 +32,7 @@ import android.widget.HorizontalScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class AetherImeService : InputMethodService() {
     private val prefs by lazy { getSharedPreferences("keypop",Context.MODE_PRIVATE) }
@@ -39,6 +40,7 @@ class AetherImeService : InputMethodService() {
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
     private val keyViews=ArrayList<Pair<Button,String>>()
+    private val imagePreviewExecutor=Executors.newFixedThreadPool(2)
     private val clipboard by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
     private val languages=listOf("ENGLISH","اردو","سنڌي")
     private var language=0
@@ -148,6 +150,7 @@ class AetherImeService : InputMethodService() {
     override fun onDestroy() {
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
         try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
+        imagePreviewExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -865,9 +868,25 @@ class AetherImeService : InputMethodService() {
         }
         val savedImages=try{KeyPopImageStore(this).list()}catch(_:Exception){emptyList()}
         val images=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-        for(image in savedImages.take(25)) {
-            val line=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-            val label=(if(image.pinned)"📌 " else "")+"📷 Screenshot · "+image.mime
+        for(image in savedImages.take(20)) {
+            val line=LinearLayout(this).apply{
+                orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+            }
+            val preview=android.widget.ImageView(this).apply{
+                contentDescription="Saved screenshot image preview"
+                scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(0xFF26344B.toInt())
+                setPadding(d(1),d(1),d(1),d(1))
+            }
+            line.addView(preview,LinearLayout.LayoutParams(d(49),d(42)))
+            imagePreviewExecutor.submit {
+                val bitmap=runCatching{KeyPopImageStore(this).thumbnail(image,110)}.getOrNull()
+                if(bitmap!=null)android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    if(preview.isAttachedToWindow)preview.setImageBitmap(bitmap)
+                    else bitmap.recycle()
+                }
+            }
+            val label=(if(image.pinned)"📌 " else "")+"📷 "+image.mime
             line.addView(chip(label,2f) {
                 val uri=KeyPopImageStore(this).uriForShare(image)
                 if(uri==null){Toast.makeText(this,"Image unavailable",Toast.LENGTH_SHORT).show()}
