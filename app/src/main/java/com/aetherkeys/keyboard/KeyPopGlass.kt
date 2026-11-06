@@ -63,6 +63,7 @@ object KeyPopGlass {
 }
 
 /** Single glyph with precisely positioned, independent corner hint. */
+@android.annotation.SuppressLint("AppCompatCustomView")
 class KeyPopHintKey(context:Context):Button(context) {
     var hintText:String?=null
     var hintColor:Int=Color.WHITE
