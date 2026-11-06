@@ -10,13 +10,35 @@ android {
         applicationId = "com.aetherkeys.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.0-visual-studio"
+        versionCode = 8
+        versionName = "0.6.0-consolidated-alpha"
     }
-    buildTypes { release { isMinifyEnabled = false } }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+    buildTypes {
+        debug {
+            // Coexist with previous alpha installations; no destructive uninstall required.
+            applicationIdSuffix = ".previewv06"
+            versionNameSuffix = "-preview"
+        }
+        release { isMinifyEnabled = false }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+}
+
+
+dependencies {
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("androidx.core:core:1.15.0")
+    testImplementation("junit:junit:4.13.2")
 }
