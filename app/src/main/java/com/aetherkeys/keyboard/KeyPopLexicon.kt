@@ -68,6 +68,8 @@ class KeyPopLexicon(context:Context) {
         return KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
             learned+words(lang),limit)
     }
+    fun nextWords(lang:Int,previous:String):List<String> =
+        KeyPopTypingIntelligence.nextWords(lang,previous)
     fun correction(lang:Int,word:String):String? {
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         return KeyPopTypingIntelligence.correction(lang,word,learned+words(lang))

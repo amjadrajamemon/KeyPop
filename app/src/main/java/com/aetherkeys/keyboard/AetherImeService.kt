@@ -987,33 +987,66 @@ class AetherImeService : InputMethodService() {
         val bar=suggestionBar ?:return
         val input=currentInputConnection ?:return
         if(sensitive(currentInputEditorInfo)||numeric(currentInputEditorInfo))return
-        val before=input.getTextBeforeCursor(48,0)?.toString().orEmpty()
+        val before=input.getTextBeforeCursor(140,0)?.toString().orEmpty()
         val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
+        val predLang=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
+        val without=before.removeSuffix(word).trimEnd()
+        val previous=Regex("[\\p{L}]+$").find(without)?.value.orEmpty()
+        val values=if(word.isBlank())lexicon.nextWords(predLang,previous)
+            else lexicon.suggestions(predLang,word,previous=previous)
+        val grammar=if(prefs.getBoolean("grammarHints",true))
+            KeyPopGrammarRules.suggest(before,predLang) else null
+        val spelling=if(word.length>=4 && prefs.getBoolean("grammarHints",true))
+            lexicon.correction(predLang,word) else null
         bar.removeAllViews()
-        val suggestionLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
-        val prefix=before.removeSuffix(word).trimEnd()
-        val previous=Regex("[\\p{L}]+$").find(prefix)?.value.orEmpty()
-        val values=lexicon.suggestions(suggestionLanguage,word,previous=previous)
-        if(values.isEmpty()) {
-            bar.addView(chip("✦ Local suggestions") {},
-                LinearLayout.LayoutParams(-1,d(32)))
-            return
+        var count=0
+        fun suggestion(label:String,select:()->Unit) {
+            bar.addView(chip(label,onTap=select),
+                LinearLayout.LayoutParams(0,d(34),1f).apply{
+                    leftMargin=d(2);rightMargin=d(2)
+                })
+            count++
         }
-        for(candidate in values) {
-            bar.addView(chip(candidate) {
-                val current=input.getTextBeforeCursor(48,0)?.toString().orEmpty()
-                val actual=Regex("[\\p{L}]+$").find(current)?.value
-                if(actual!=null) {
-                    input.beginBatchEdit()
-                    input.deleteSurroundingText(actual.length,0)
-                    input.commitText(candidate+" ",1)
-                    input.endBatchEdit()
-                    lexicon.learn(language,candidate)
+        if(grammar!=null) suggestion("✓ "+grammar.label) {
+            val fresh=currentInputConnection ?:return@suggestion
+            val ending=fresh.getTextBeforeCursor(grammar.remove,0)?.toString().orEmpty()
+            if(ending.length==grammar.remove &&
+                before.endsWith(ending)) {
+                fresh.beginBatchEdit()
+                fresh.deleteSurroundingText(grammar.remove,0)
+                fresh.commitText(grammar.replacement,1)
+                fresh.endBatchEdit()
+                refreshSuggestions()
+            }
+        }
+        if(spelling!=null && spelling!=word && count<3)
+            suggestion("✓ "+spelling) {
+                val current=currentInputConnection ?:return@suggestion
+                val actual=current.getTextBeforeCursor(word.length,0)?.toString().orEmpty()
+                if(actual==word) {
+                    current.beginBatchEdit()
+                    current.deleteSurroundingText(word.length,0)
+                    current.commitText(spelling+" ",1)
+                    current.endBatchEdit()
                     refreshSuggestions()
                 }
-            },LinearLayout.LayoutParams(0,d(32),1f).apply {
-                leftMargin=d(2);rightMargin=d(2)
-            })
+            }
+        for(candidate in values.distinct()) {
+            if(count>=3)break
+            if(candidate==spelling)continue
+            suggestion(candidate) {
+                val current=currentInputConnection ?:return@suggestion
+                val actual=Regex("[\\p{L}]+$").find(
+                    current.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
+                if(actual==word) {
+                    current.beginBatchEdit()
+                    if(actual.isNotEmpty())current.deleteSurroundingText(actual.length,0)
+                    current.commitText(candidate+" ",1)
+                    current.endBatchEdit()
+                    lexicon.learn(predLang,candidate)
+                    refreshSuggestions()
+                }
+            }
         }
     }
     private fun press(value:String) {

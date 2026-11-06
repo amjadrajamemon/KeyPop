@@ -57,6 +57,17 @@ object KeyPopTypingIntelligence {
         return matches.sortedWith(compareByDescending<Candidate>{it.score}
             .thenBy{it.text.length}.thenBy{it.text}).take(limit.coerceIn(1,8)).map{it.text}
     }
+    /** Next-word predictions when the cursor follows a space; always available offline. */
+    fun nextWords(language:Int,previous:String):List<String> {
+        val last=normalized(previous)
+        val contextual=follow[language]?.get(last).orEmpty()
+        val defaults=when(language) {
+            1 ->listOf("آپ","میں","براہ","جی","شکریہ","یہ")
+            2 ->listOf("توهان","مان","مهرباني","ڇا","ٺيڪ","اسان")
+            else ->listOf("I","The","Please","Thanks","We","Hello")
+        }
+        return (contextual+defaults).distinct().take(3)
+    }
     fun correction(language:Int,typed:String,learned:Set<String> = emptySet()):String? {
         val word=normalized(typed)
         if(word.length<4 || word in learned || word in list(language))return null
