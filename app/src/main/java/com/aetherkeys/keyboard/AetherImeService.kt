@@ -112,29 +112,32 @@ class AetherImeService : InputMethodService() {
         listOf("ڌ","ڏ","ڊ","ڍ","ڙ","ژ","ڦ","ک","ڳ","گھ"),
         listOf("ڻ","ؤ","ھ","ء","ئ","و","ي","ه","ا","ب"))
 
+    private val clipListener=ClipboardManager.OnPrimaryClipChangedListener {
+        if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",false)) {
+            try {
+                val clip=clipboard.primaryClip
+                if(clip!=null && clip.itemCount>0 && clip.description.hasMimeType("text/plain")) {
+                    if(Build.VERSION.SDK_INT>=33 &&
+                        clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true)
+                        return@addPrimaryClipChangedListener
+                    clip.getItemAt(0).text?.toString()?.let { clipStore.save(it) }
+                }
+            } catch (_:Exception) { /* Never break typing on inaccessible clipboard. */ }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         window.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         val filter=IntentFilter(KeyPopVoiceActivity.RESULT_ACTION)
         androidx.core.content.ContextCompat.registerReceiver(
             this,speechReceiver,filter,androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
-        clipboard.addPrimaryClipChangedListener {
-            if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",false)) {
-                try {
-                    val clip=clipboard.primaryClip
-                    if(clip!=null && clip.itemCount>0 && clip.description.hasMimeType("text/plain")) {
-                        if(Build.VERSION.SDK_INT>=33 &&
-                            clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true)
-                            return@addPrimaryClipChangedListener
-                        clip.getItemAt(0).text?.toString()?.let { clipStore.save(it) }
-                    }
-                } catch (_:Exception) { /* Never break typing on inaccessible clipboard. */ }
-            }
-        }
+        clipboard.addPrimaryClipChangedListener(clipListener)
     }
 
     override fun onDestroy() {
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
+        try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
         super.onDestroy()
     }
 
