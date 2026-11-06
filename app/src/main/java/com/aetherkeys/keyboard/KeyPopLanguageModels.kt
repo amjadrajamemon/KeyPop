@@ -3,6 +3,8 @@ package com.aetherkeys.keyboard
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.speech.ModelDownloadListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -16,6 +18,12 @@ object KeyPopLanguageModels {
     val supportedText=listOf("en","ur")
     val languages=mapOf("en" to "English","ur" to "Urdu","sd" to "Sindhi")
     private val modelManager get()=RemoteModelManager.getInstance()
+    // Retain the recognition client while the Android provider is still reporting progress.
+    private val pendingVoiceRequests=LinkedHashSet<SpeechRecognizer>()
+    private val handler=Handler(Looper.getMainLooper())
+    private fun releaseVoice(recognizer:SpeechRecognizer) {
+        if(pendingVoiceRequests.remove(recognizer))recognizer.destroy()
+    }
 
     fun knownText(lang:String):Boolean = lang in supportedText
     private fun model(lang:String):TranslateRemoteModel? =
@@ -84,26 +92,44 @@ object KeyPopLanguageModels {
         }
         val speech=try { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }
             catch(e:Exception) {status("Speech service error: "+(e.message?:"unavailable"));return}
+        pendingVoiceRequests.add(speech)
+        val timeout=Runnable {
+            if(pendingVoiceRequests.contains(speech)) {
+                releaseVoice(speech)
+                status("Voice request is still unconfirmed. Check Android speech settings.")
+            }
+        }
+        handler.postDelayed(timeout,120_000L)
         try {
             val request=speechIntent(lang)
             if(Build.VERSION.SDK_INT>=34) {
                 speech.triggerModelDownload(request,context.mainExecutor,object:ModelDownloadListener {
                     override fun onProgress(completedPercent:Int) {
-                        status("Voice pack request: $completedPercent%")
+                        status("Voice provider download: $completedPercent%")
                     }
-                    override fun onSuccess() {status("Speech provider reports model ready")}
-                    override fun onScheduled() {status("Download scheduled by Android speech service")}
-                    override fun onError(error:Int) {status("Speech provider could not download model (error $error)")}
+                    override fun onSuccess() {
+                        handler.removeCallbacks(timeout);releaseVoice(speech)
+                        status("Android speech service confirms offline model ready")
+                    }
+                    override fun onScheduled() {
+                        handler.removeCallbacks(timeout);releaseVoice(speech)
+                        status("Speech model download scheduled by Android provider")
+                    }
+                    override fun onError(error:Int) {
+                        handler.removeCallbacks(timeout);releaseVoice(speech)
+                        status("Android speech model download failed (error $error)")
+                    }
                 })
             } else {
                 speech.triggerModelDownload(request)
-                status("Requested speech pack from Android; confirm availability in device speech settings")
+                status("Request sent to Android speech service; check its offline-language settings")
+                handler.postDelayed({
+                    handler.removeCallbacks(timeout);releaseVoice(speech)
+                },15_000L)
             }
         } catch(e:Exception) {
+            handler.removeCallbacks(timeout);releaseVoice(speech)
             status("Speech model request failed: "+(e.message?:"unavailable"))
-        } finally {
-            // The provider owns the download request beyond this component's lifetime.
-            speech.destroy()
         }
     }
 }

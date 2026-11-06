@@ -610,7 +610,6 @@ class AetherImeService : InputMethodService() {
         }
         shortcut("⚙ Settings",1.1f) {
             startActivity(Intent(this,MainActivity::class.java)
-                .putExtra("openSection","settings")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         root.addView(toolbar,LinearLayout.LayoutParams(-1,d(44)))
