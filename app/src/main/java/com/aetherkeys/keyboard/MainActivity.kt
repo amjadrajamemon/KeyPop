@@ -427,7 +427,7 @@ class MainActivity : Activity() {
                 .putExtra("target",prefs.getInt("autoTarget",1)))
         })
         translate.addView(gap(7))
-        translate.addView(text("Common English/Urdu/Sindhi phrases are built into KeyPop and work offline. Other English/Urdu text uses a downloaded on-device ML Kit model. Unrestricted Sindhi still needs a separately configured provider; remote sending is off by default.",12f,muted))
+        translate.addView(text("Common phrases work without downloads. Full offline Sindhi sentences require separately installed IndicTrans2 models (English ↔ Sindhi and Urdu ↔ Sindhi). English/Urdu models use ML Kit. Remote translation is optional and off by default.",12f,muted))
         toggle(translate,"Auto Translate on Send","Press the keyboard Send key to translate and insert automatically","autoTranslate",false)
         translate.addView(gap(5))
         val targetLabels=listOf("English","اردو","سنڌي")
