@@ -13,6 +13,14 @@ android {
         versionCode = 4
         versionName = "0.3.0-parity-candidate"
     }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
     buildTypes {
         debug {
             // Coexist with previous alpha installations; no destructive uninstall required.
