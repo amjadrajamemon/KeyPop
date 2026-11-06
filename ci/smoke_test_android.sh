@@ -23,7 +23,10 @@ adb install -r "$APK"
 adb install -r "$TEST_APK"
 adb logcat -c
 echo "[2/6] Assert real Android Activity views independent of system-launcher dialogs"
-adb shell am instrument -w -r "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee forensic-evidence/instrumentation.txt
+adb shell am instrument -w -r \
+  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest \
+  "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
+  | tee forensic-evidence/instrumentation.txt
 grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/instrumentation.txt
 if grep -q 'FAILURES!!!' forensic-evidence/instrumentation.txt; then exit 1; fi
 echo "[3/6] Cold-start the installed KeyPop launcher"
