@@ -30,7 +30,7 @@ object KeyboardPresetCatalog {
         KeyboardErgonomics(3,"Samsung-style · One UI","Structured key grid, dedicated number row and utility row",
             "Samsung Keyboard-inspired",12,52,3,7,17,true,true),
         KeyboardErgonomics(4,"Gesture Minimal","Larger letter targets and simplified bottom row",
-            "Fleksy-inspired",13,61,5,11,19,false,false),
+            "Fleksy-inspired",13,61,5,11,19,false,true),
         KeyboardErgonomics(5,"Faceted Comfort","Staggered offset keys with an original angular appearance",
             "Typewise-inspired",14,58,5,5,18,false,true)
     )

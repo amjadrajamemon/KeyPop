@@ -28,6 +28,25 @@ class MainActivity : Activity() {
     private val accent = 0xFF8C82FF.toInt()
     private val prefs by lazy { getSharedPreferences("keypop", MODE_PRIVATE) }
     private val livePreviews=ArrayList<KeyboardPreview>()
+    private var keyboardDefaultStatus:TextView?=null
+    private fun updateDefaultKeyboardStatus() {
+        val selected=runCatching {
+            Settings.Secure.getString(contentResolver,
+                Settings.Secure.DEFAULT_INPUT_METHOD).orEmpty()
+        }.getOrDefault("")
+        val matches=selected.contains(packageName) &&
+            selected.contains("AetherImeService")
+        keyboardDefaultStatus?.text=if(matches)
+            "✓ KeyPop is the default keyboard. Android normally restores it after reboot and unlock."
+        else
+            "Not selected as default. Select KeyPop once in the Android keyboard chooser."
+        keyboardDefaultStatus?.setTextColor(
+            if(matches)0xFF89EBB5.toInt() else 0xFFFFC97A.toInt())
+    }
+    override fun onResume() {
+        super.onResume()
+        updateDefaultKeyboardStatus()
+    }
     private fun d(v:Int)=(v*resources.displayMetrics.density).toInt()
 
     private fun background(color:Int, radius:Int=18, border:Int?=null): GradientDrawable =
@@ -123,6 +142,10 @@ class MainActivity : Activity() {
 
         val onboarding=card()
         onboarding.addView(text("01  ·  GET STARTED",12f,0xFF83CFF4.toInt(),true))
+        onboarding.addView(gap(7))
+        keyboardDefaultStatus=text("Checking default keyboard…",13f,muted)
+        onboarding.addView(keyboardDefaultStatus)
+        onboarding.addView(text("After restarting the phone, KeyPop automatically appears on text fields if it remains the Android default. It cannot force itself over the lock screen or home screen.",12f,muted))
         onboarding.addView(gap(10))
         onboarding.addView(action("Enable KeyPop in Android settings",true) {
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
@@ -131,7 +154,12 @@ class MainActivity : Activity() {
         onboarding.addView(action("Choose KeyPop as your keyboard") {
             (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
         })
+        onboarding.addView(gap(6))
+        onboarding.addView(action("Refresh default keyboard status"){
+            updateDefaultKeyboardStatus()
+        })
         addCard(root,onboarding)
+        updateDefaultKeyboardStatus()
 
         studio=card()
         studio.addView(text("THEME STUDIO",12f,0xFF83CFF4.toInt(),true))
@@ -300,12 +328,13 @@ class MainActivity : Activity() {
         toggle(controls,"Roman Urdu / Sindhi typing","Use English letters; convert common words into native script on Space","romanMode",false)
         toggle(controls,"Predictive word suggestions","Local suggestions learn words only outside sensitive fields","suggestions",true)
         toggle(controls,"Autocorrection","Optional basic autocorrect based on the local dictionary","autoCorrect",false)
+        toggle(controls,"Visible grammar and spelling fixes","Show tappable offline correction options while typing","grammarHints",true)
         toggle(controls,"Double-space punctuation","Two spaces insert a period and one space","doubleSpace",true)
         toggle(controls,"Auto capitalize sentences","Capitalize the first English letter of a sentence","autoCap",true)
         toggle(controls,"Tablet split typing","Extra central gap in wide-screen layouts","splitKeyboard",false)
         toggle(controls,"Floating keyboard","Drag the ⠿ handle to reposition the compact keyboard","floating",false)
         toggle(controls,"Glide English words","Slide between letters to insert common words","glide",false)
-        toggle(controls,"Long-press number hints","Reveal additional characters by holding a key","hints",true)
+        toggle(controls,"Show alternate-character hints","Symbols appear in the hold-and-slide popup even when hints are hidden","hints",true)
         toggle(controls,"Haptic feedback","Small vibration when a key is pressed","haptics",false)
         toggle(controls,"Keyboard sound","Subtle key click sound","sound",false)
         toggle(controls,"Clipboard history (opt in)","Encrypted local history with manual deletion and pinning","history",false)
@@ -323,7 +352,14 @@ class MainActivity : Activity() {
         translate=card()
         translate.addView(text("TRANSLATION ENGINE",12f,0xFF83CFF4.toInt(),true))
         translate.addView(gap(6))
-        translate.addView(text("Write, translate, send",21f,ink,true))
+        translate.addView(text("Write, speak, translate and send",21f,ink,true))
+        translate.addView(gap(8))
+        translate.addView(action("🎙 Open built-in Voice Translate",true){
+            startActivity(Intent(this,KeyPopVoiceActivity::class.java)
+                .putExtra("lang","en-US")
+                .putExtra("target",prefs.getInt("autoTarget",1)))
+        })
+        translate.addView(gap(7))
         translate.addView(text("Common English/Urdu/Sindhi phrases are built into KeyPop and work offline. Other English/Urdu text uses a downloaded on-device ML Kit model. Unrestricted Sindhi still needs a separately configured provider; remote sending is off by default.",12f,muted))
         toggle(translate,"Auto Translate on Send","Press the keyboard Send key to translate and insert automatically","autoTranslate",false)
         translate.addView(gap(5))
