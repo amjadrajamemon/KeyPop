@@ -12,12 +12,33 @@ function evidence() {
   adb shell dumpsys input_method > forensic-evidence/ime-state.txt || true
 }
 trap evidence EXIT
+echo "[0/8] Inspect APK metadata and wait for a responsive Android emulator"
 test -s "$APK"; test -s "$TEST_APK"
 AAPT="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" -name aapt -type f | sort -V | tail -1)"
 test -n "$AAPT"
 "$AAPT" dump badging "$APK" > forensic-evidence/apk-badging.txt
-grep -q "previewv100" forensic-evidence/apk-badging.txt
-grep -q "KeyPopHomeActivity" forensic-evidence/apk-badging.txt
+if ! grep -q "previewv100" forensic-evidence/apk-badging.txt; then
+    echo "Unexpected APK package identity; dump:" >&2
+    head -30 forensic-evidence/apk-badging.txt >&2
+    exit 1
+fi
+# The real launcher Activity is checked by the instrumentation and cold-start
+# steps below. Different aapt versions may format launchable-activity differently.
+head -5 forensic-evidence/apk-badging.txt
+ready=0
+for attempt in $(seq 1 50); do
+    if adb get-state 2>/dev/null | grep -qx device &&
+       [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] &&
+       adb shell pm list packages >/dev/null 2>&1; then
+        ready=1;break
+    fi
+    sleep 2
+done
+if [ "$ready" != "1" ]; then
+    echo "Android emulator did not provide a stable ADB session" >&2
+    adb devices -l >&2 || true
+    exit 1
+fi
 echo "[1/6] Install the application and Android instrumentation tests"
 adb install -r "$APK"
 adb install -r "$TEST_APK"
