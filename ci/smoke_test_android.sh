@@ -2,8 +2,9 @@
 set -euo pipefail
 PKG="com.aetherkeys.keyboard.previewv100"
 SERVICE="$PKG/com.aetherkeys.keyboard.AetherImeService"
-APK="dist/KeyPop-v1.0.0-rc1-x86_64-debug.apk"
-TEST_APK="dist/KeyPop-v1.0.0-rc1-androidTest.apk"
+# Derive the actual file names published by this build, not a stale version.
+APK="$(find dist -maxdepth 1 -name 'KeyPop-*-x86_64-debug.apk' -type f | head -1)"
+TEST_APK="$(find dist -maxdepth 1 -name 'KeyPop-*-androidTest.apk' -type f | head -1)"
 mkdir -p forensic-evidence
 function evidence() {
   adb logcat -d -v time > forensic-evidence/logcat.txt || true
