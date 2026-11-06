@@ -579,25 +579,8 @@ class MainActivity : Activity() {
         }
         // Never force an unverified model-management activity on top of the launcher.
         // Let the user choose keyboard setup or a separate, consent-driven download screen.
-        if(!prefs.getBoolean("firstLaunchPacksV091",false)) {
-            prefs.edit().putBoolean("firstLaunchPacksV091",true).apply()
-            shell.post {
-                if(!isFinishing && !isDestroyed) {
-                    android.app.AlertDialog.Builder(this)
-                        .setTitle("Welcome to KeyPop")
-                        .setMessage("First enable KeyPop in Android keyboard settings and choose it as your default keyboard. You can also download optional English/Urdu translation models over Wi-Fi or mobile data. Basic Sindhi phrases already work offline; full Sindhi translation requires a separate compatible engine.")
-                        .setPositiveButton("Language packs") { _,_ ->
-                            startActivity(Intent(this,KeyPopModelManagerActivity::class.java)
-                                .putExtra("firstRun",true))
-                        }
-                        .setNegativeButton("Enable keyboard") { _,_ ->
-                            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
-                        }
-                        .setNeutralButton("Later",null)
-                        .show()
-                }
-            }
-        }
+        // First-run activation and pack management are owned by KeyPopHomeActivity.
+        // Advanced settings must never force a startup dialog or change keyboard state.
     }
 
     private fun slider(parent:LinearLayout,title:String,key:String,low:Int,high:Int,default:Int,unit:String) {

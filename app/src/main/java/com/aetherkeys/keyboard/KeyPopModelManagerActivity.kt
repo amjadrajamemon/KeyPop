@@ -1,13 +1,11 @@
 package com.aetherkeys.keyboard
 
 import android.app.Activity
-import android.content.Intent
-import android.net.Uri
+import android.os.Bundle
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.os.Bundle
+import android.view.Gravity
 import android.view.View
-import android.widget.Button
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -15,147 +13,125 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 /**
- * Consent-based first-launch offline language setup.
- * Android cannot run custom code during installation; this runs on first app opening.
+ * Render a complete usable screen before asking Play Services about model availability.
+ * Model downloads are explicit and fail visibly rather than leaving a blank surface.
  */
 class KeyPopModelManagerActivity:Activity() {
-    private val bg=0xFF082D2B.toInt()
-    private val surface=0xFF19534F.toInt()
-    private val ink=0xFFF0FFFA.toInt()
-    private lateinit var root:LinearLayout
-    private lateinit var english:CheckBox
-    private lateinit var urdu:CheckBox
-    private lateinit var wifiOnly:CheckBox
-    private lateinit var englishStatus:TextView
-    private lateinit var urduStatus:TextView
-    private lateinit var voiceStatus:TextView
-    private lateinit var detail:TextView
+    private val bg=0xFF101D2B.toInt()
+    private val textColor=Color.WHITE
+    private val muted=0xFFC7D8E6.toInt()
+    private val teal=0xFF7FF0DA.toInt()
+    private lateinit var column:LinearLayout
+    private lateinit var wifi:CheckBox
+    private lateinit var statusEn:TextView
+    private lateinit var statusUr:TextView
     private lateinit var progress:ProgressBar
-    private var downloading=0
-    private fun dp(n:Int)=(n*resources.displayMetrics.density).toInt()
-    private fun line(value:String,size:Float=14f)=TextView(this).apply{
-        text=value;textSize=size;setTextColor(ink)
-        setPadding(dp(3),dp(5),dp(3),dp(5))
+    private lateinit var status:TextView
+    private var running=0
+    private fun dp(x:Int)=(x*resources.displayMetrics.density).toInt()
+    private fun label(t:String,size:Float=15f,color:Int=textColor)=TextView(this).apply{
+        text=t;textSize=size;setTextColor(color)
+        setPadding(0,dp(7),0,dp(7))
     }
-    private fun action(label:String,fn:()->Unit)=Button(this).apply{
-        text=label;textSize=13f;isAllCaps=false
-        setTextColor(ink)
-        background=GradientDrawable().apply{
-            setColor(surface);cornerRadius=dp(13).toFloat()
+    private fun button(title:String,fn:()->Unit) {
+        val view=label(title,15f).apply {
+            gravity=Gravity.CENTER
+            minHeight=dp(51)
+            background=GradientDrawable().apply {
+                setColor(0xFF245268.toInt())
+                cornerRadius=dp(11).toFloat()
+                setStroke(dp(1),0xFF5CACBF.toInt())
+            }
+            setOnClickListener { fn() }
         }
-        setOnClickListener{fn()}
+        column.addView(view,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})
     }
-    private fun button(label:String,fn:()->Unit){
-        root.addView(action(label,fn),LinearLayout.LayoutParams(-1,dp(46)).apply{
-            topMargin=dp(7)
-        })
-    }
-    override fun onCreate(savedInstanceState:Bundle?) {
+    override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
         window.statusBarColor=bg
         window.navigationBarColor=bg
-        val first=intent.getBooleanExtra("firstRun",false)
-        val scroll=ScrollView(this).apply{isFillViewport=true;setBackgroundColor(bg)}
-        root=LinearLayout(this).apply{
+        val outer=ScrollView(this).apply {
+            setBackgroundColor(bg);isFillViewport=true
+        }
+        column=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
-            setPadding(dp(18),dp(18),dp(18),dp(30))
+            setPadding(dp(18),dp(18),dp(18),dp(25))
         }
-        scroll.addView(root)
-        setContentView(scroll)
-        root.addView(line("KEYPOP  /  LANGUAGE ENGINE",12f))
-        root.addView(line(if(first)"Set up offline languages" else "Offline Language Packs",25f))
-        root.addView(line("Download packs now, or skip and download later in Settings. " +
-            "Downloads require your permission and are started after first launch, not during Android installation.",13f))
-        root.addView(line("English & Urdu: on-device ML Kit translation models. " +
-            "Common English, Urdu and Sindhi phrases are already included in KeyPop. " +
-            "Full Sindhi translation is not supplied by ML Kit.",12f))
-        english=CheckBox(this).apply{
-            text="English text translation";setTextColor(ink);isChecked=true
-        }
-        urdu=CheckBox(this).apply{
-            text="Urdu text translation";setTextColor(ink);isChecked=true
-        }
-        wifiOnly=CheckBox(this).apply{
-            text="Download on Wi-Fi only (uncheck for mobile data)";setTextColor(ink);isChecked=false
-        }
-        root.addView(english);root.addView(urdu);root.addView(wifiOnly)
-        englishStatus=line("English: checking...",13f)
-        urduStatus=line("Urdu: checking...",13f)
-        root.addView(englishStatus);root.addView(urduStatus)
-        root.addView(line("Sindhi • سنڌي: basic phrasebook included with KeyPop (no download required). Full-sentence offline Sindhi translation is not currently available through the ML Kit engine.",13f))
-        progress=ProgressBar(this).apply{isIndeterminate=true;visibility=View.GONE}
-        root.addView(progress,LinearLayout.LayoutParams(-1,dp(6)))
-        detail=line("No download requested yet.",12f)
-        root.addView(detail)
-        button("Download selected text language packs"){downloadSelected()}
-        button("Refresh installed model status"){refreshModels()}
-        root.addView(line("SINDHI OFFLINE DOWNLOAD — SEPARATE APP",15f))
-        root.addView(line("Google Translate offers a downloadable Sindhi offline pack. This pack belongs to Google Translate and cannot be imported into KeyPop's ML Kit engine. Open Google Translate, select Sindhi, and use the download icon next to that language.",12f))
-        button("Open Google Translate to download Sindhi") {
-            try {
-                val launch=packageManager.getLaunchIntentForPackage(
-                    "com.google.android.apps.translate")
-                val fallback=Intent(Intent.ACTION_VIEW,Uri.parse(
-                    "https://play.google.com/store/apps/details?id=com.google.android.apps.translate"))
-                startActivity(launch ?: fallback)
-                detail.text="In Google Translate, select Sindhi and tap its download icon. This installs the pack in Google Translate, not KeyPop."
-            } catch(error:Exception) {
-                detail.text="Unable to open Google Translate: "+(error.localizedMessage?:"No compatible browser or store installed")
+        outer.addView(column)
+        setContentView(outer)
+
+        column.addView(label("KEYPOP / OFFLINE LANGUAGES",13f,teal))
+        column.addView(label("Language Pack Manager",24f))
+        column.addView(label("Only English and Urdu translation models can be downloaded through the included ML Kit SDK. Models belong to this app and require Google Play services and a connection for initial download.",14f,muted))
+        wifi=CheckBox(this).apply {
+            text="Wi-Fi only (uncheck to use mobile data)"
+            setTextColor(textColor)
+            isChecked=getSharedPreferences("keypop",MODE_PRIVATE)
+                .getBoolean("packWifiOnly",false)
+            setOnCheckedChangeListener { _,checked->
+                getSharedPreferences("keypop",MODE_PRIVATE)
+                    .edit().putBoolean("packWifiOnly",checked).apply()
             }
         }
-        if(!first) {
-            button("Remove English text model"){
-                KeyPopLanguageModels.deleteText("en"){_,msg->detail.text=msg;refreshModels()}
-            }
-            button("Remove Urdu text model"){
-                KeyPopLanguageModels.deleteText("ur"){_,msg->detail.text=msg;refreshModels()}
-            }
+        column.addView(wifi)
+        column.addView(label("ENGLISH / EN",17f,teal))
+        statusEn=label("Not checked yet",13f,muted);column.addView(statusEn)
+        button("Download / repair English") {download("en")}
+        column.addView(label("URDU / اردو / UR",17f,teal))
+        statusUr=label("Not checked yet",13f,muted);column.addView(statusUr)
+        button("Download / repair Urdu") {download("ur")}
+        button("Check installed translation models"){check()}
+        progress=ProgressBar(this).apply{visibility=View.GONE;isIndeterminate=true}
+        column.addView(progress,LinearLayout.LayoutParams(-1,dp(28)).apply {topMargin=dp(9)})
+        status=label("No download in progress.",13f,muted)
+        column.addView(status)
+
+        column.addView(label("SINDHI / سنڌي / SD",18f,teal))
+        column.addView(label("Sindhi keyboard typing: available immediately. 30 common phrase translations: available offline. Full unrestricted Sindhi translation: unavailable in this APK because ML Kit has no Sindhi model. No misleading download button is shown.",14f,muted))
+        column.addView(label("Android speech services might offer Urdu or Sindhi dictation, but models are supplied by your device's provider, not by KeyPop.",13f,muted))
+        button("Check offline voice service"){
+            status.text=runCatching { KeyPopLanguageModels.voiceAvailability(this) }
+                .getOrElse { "Voice service check failed: "+(it.localizedMessage?:"unknown") }
         }
-        root.addView(line("VOICE PACKS (ANDROID PROVIDER)",15f))
-        voiceStatus=line(KeyPopLanguageModels.voiceAvailability(this),12f)
-        root.addView(voiceStatus)
-        root.addView(line("KeyPop does not currently bundle speech-recognition model files. " +
-            "Android 13+ can request offline models from the installed speech service; " +
-            "availability and consent are controlled by your device/provider.",12f))
-        button("Request English offline speech"){
-            KeyPopLanguageModels.requestOnDeviceVoice(this,"en"){voiceStatus.text=it}
+        button("Request Urdu speech model (Android 13+)") {
+            status.text="Requesting Urdu model from Android speech provider…"
+            runCatching { KeyPopLanguageModels.requestOnDeviceVoice(this,"ur") {
+                if(!isFinishing&&!isDestroyed)status.text=it
+            } }.onFailure { status.text="Provider request failed: "+it.localizedMessage }
         }
-        button("Request Urdu offline speech"){
-            KeyPopLanguageModels.requestOnDeviceVoice(this,"ur"){voiceStatus.text=it}
-        }
-        root.addView(line("Sindhi: common typed phrases work offline. Full offline Sindhi voice and text models are not yet available in this build.",12f))
-        button(if(first)"Skip / Finish setup" else "Done"){finish()}
-        refreshModels()
+        button("Close Language Pack Manager"){finish()}
+        // This screen is visible before querying model availability; no hidden startup work.
     }
-    private fun refreshModels(){
-        KeyPopLanguageModels.checkText("en"){_,message->englishStatus.text="English: "+message}
-        KeyPopLanguageModels.checkText("ur"){_,message->urduStatus.text="Urdu: "+message}
+    private fun check() {
+        status.text="Checking installed text models…"
+        runCatching {
+            KeyPopLanguageModels.checkText("en") { _,msg->
+                if(!isFinishing&&!isDestroyed)statusEn.text="English: "+msg
+            }
+            KeyPopLanguageModels.checkText("ur") { _,msg->
+                if(!isFinishing&&!isDestroyed)statusUr.text="Urdu: "+msg
+            }
+        }.onFailure {status.text="Model check could not run: "+it.localizedMessage}
     }
-    private fun downloadSelected(){
-        val languages=buildList{
-            if(english.isChecked)add("en")
-            if(urdu.isChecked)add("ur")
-        }
-        if(languages.isEmpty()){
-            detail.text="Select at least one language to download."
-            return
-        }
-        downloading=languages.size
+    private fun download(lang:String) {
+        running++
         progress.visibility=View.VISIBLE
-        detail.text="Preparing "+downloading+" model download(s) using "+
-            (if(wifiOnly.isChecked)"Wi-Fi only" else "Wi-Fi or mobile data")+
-            ". Google ML Kit does not report byte-by-byte progress."
-        languages.forEach{lang->
-            KeyPopLanguageModels.downloadText(lang,wifiOnly.isChecked){ok,message->
-                if(isFinishing || isDestroyed)return@downloadText
-                detail.text=(if(ok)"✓ " else "⚠ ")+
-                    (KeyPopLanguageModels.languages[lang]?:lang)+": "+message
-                downloading--
-                if(downloading<=0){
-                    progress.visibility=View.GONE
-                    refreshModels()
-                }
+        val target=if(lang=="en")statusEn else statusUr
+        val name=if(lang=="en")"English" else "Urdu"
+        target.text="$name: download requested"
+        status.text="$name: requesting model over "+if(wifi.isChecked)"Wi-Fi" else "Wi-Fi/mobile data"
+        runCatching {
+            KeyPopLanguageModels.downloadText(lang,wifi.isChecked) { ok,msg->
+                if(isFinishing||isDestroyed)return@downloadText
+                target.text="$name: "+msg
+                status.text=if(ok)"✓ $name model installed" else "$name download did not complete: "+msg
+                running=(running-1).coerceAtLeast(0)
+                if(running==0)progress.visibility=View.GONE
             }
+        }.onFailure {
+            target.text="$name: download could not start: "+(it.localizedMessage?:"unknown")
+            running=(running-1).coerceAtLeast(0)
+            if(running==0)progress.visibility=View.GONE
         }
     }
 }

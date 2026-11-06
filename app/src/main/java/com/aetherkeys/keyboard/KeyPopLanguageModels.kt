@@ -34,7 +34,7 @@ object KeyPopLanguageModels {
     fun checkText(lang:String,callback:(Boolean?,String)->Unit) {
         val m=if(knownText(lang))model(lang) else null
         if(m==null) {
-            callback(null,"No ML Kit model is available for this language")
+            callback(null,"ML Kit has no downloadable translation pack for this language")
             return
         }
         try {
