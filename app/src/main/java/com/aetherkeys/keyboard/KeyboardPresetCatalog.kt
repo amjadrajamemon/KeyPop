@@ -81,43 +81,94 @@ class KeyboardPresetPreview(context:Context,private val candidate:KeyboardErgono
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
     private fun dp(v:Float)=v*resources.displayMetrics.density
     override fun onMeasure(w:Int,h:Int) {
-        setMeasuredDimension(MeasureSpec.getSize(w),dp(140f).toInt())
+        setMeasuredDimension(MeasureSpec.getSize(w),dp(154f).toInt())
     }
     override fun onDraw(canvas:Canvas) {
+        super.onDraw(canvas)
         val skin=KeyPopSkins.all[candidate.skin]
-        val width=width.toFloat();val height=height.toFloat()
-        paint.color=skin.background
-        canvas.drawRoundRect(0f,0f,width,height,dp(12f),dp(12f),paint)
-        paint.color=skin.accent;paint.textSize=dp(11f);paint.isFakeBoldText=true
-        canvas.drawText("KEYPOP   •   "+candidate.name.uppercase(),dp(10f),dp(16f),paint)
-        paint.isFakeBoldText=false
+        val w=width.toFloat()
+        val h=height.toFloat()
+        val material=candidate.id==KeyboardPresetCatalog.MATERIAL
+        paint.shader=android.graphics.LinearGradient(0f,0f,w,h,
+            KeyPopGlass.blend(skin.background,Color.WHITE,0.10f),
+            KeyPopGlass.blend(skin.background,Color.BLACK,0.20f),
+            android.graphics.Shader.TileMode.CLAMP)
+        canvas.drawRoundRect(0f,0f,w,h,dp(10f),dp(10f),paint)
+        paint.shader=null
+        val toolbarHeight=dp(24f)
+        if(material){
+            val bar=listOf("▦","▤","GIF","⚙","⇄","◈","🎙")
+            val cell=w/bar.size
+            bar.forEachIndexed { i,label->
+                paint.color=skin.ink
+                paint.textSize=dp(if(label=="GIF")9f else 12f)
+                paint.typeface=android.graphics.Typeface.DEFAULT_BOLD
+                paint.textAlign=Paint.Align.CENTER
+                canvas.drawText(label,(i+.5f)*cell,dp(15f),paint)
+            }
+        }else{
+            paint.color=skin.ink;paint.textSize=dp(9f)
+            paint.typeface=android.graphics.Typeface.DEFAULT_BOLD
+            paint.textAlign=Paint.Align.LEFT
+            canvas.drawText("KEYPOP   /   "+candidate.name.uppercase(),dp(8f),dp(15f),paint)
+        }
+        val footerHeight=dp(28f)
         val rows=mutableListOf("QWERTYUIOP","ASDFGHJKL","ZXCVBNM")
         if(candidate.numberRow)rows.add(0,"1234567890")
-        val upper=dp(23f)
-        val total=height-upper-dp(9f)
-        val gap=dp(3f)
-        val rowHeight=(total-gap*(rows.size-1))/rows.size
-        rows.forEachIndexed{rowIndex,keys->
-            val y=upper+rowIndex*(rowHeight+gap)
-            val stagger=when {
-                candidate.id==KeyboardPresetCatalog.FACETED && rowIndex%2==1 ->dp(12f)
-                keys.length==9 ->dp(14f)
-                keys.length==7 ->dp(28f)
-                else->dp(7f)
-            }
-            val usable=width-2*stagger
-            val kw=(usable-gap*(keys.length-1))/keys.length
-            keys.forEachIndexed{index,ch->
-                val x=stagger+index*(kw+gap)
-                paint.color=skin.key
-                val corner=dp(if(candidate.id==KeyboardPresetCatalog.FACETED)4f else
-                    candidate.radius.coerceAtMost(19).toFloat()/1.8f)
-                canvas.drawRoundRect(x,y,x+kw,y+rowHeight,corner,corner,paint)
+        val gap=dp(2.8f)
+        val available=h-toolbarHeight-footerHeight-dp(7f)-gap*(rows.size-1)
+        val rowHeight=available/rows.size
+        fun keyCap(label:String,x:Float,y:Float,kw:Float,kh:Float,primary:Boolean,cornerHint:String?){
+            val color=if(primary)skin.accent else skin.key
+            val radius=dp((if(material)6 else candidate.radius.coerceIn(5,18)/1.7f).toFloat())
+            val top=KeyPopGlass.blend(color,Color.WHITE,0.14f)
+            val lower=KeyPopGlass.blend(color,Color.BLACK,0.12f)
+            paint.shader=android.graphics.LinearGradient(x,y,x,y+kh,top,lower,
+                android.graphics.Shader.TileMode.CLAMP)
+            canvas.drawRoundRect(x,y,x+kw,y+kh,radius,radius,paint)
+            paint.shader=null
+            paint.textAlign=Paint.Align.CENTER
+            paint.typeface=android.graphics.Typeface.create("sans-serif-medium",0)
+            paint.color=if(primary)Color.WHITE else skin.ink
+            paint.textSize=dp(if(label.length>=5)7.8f else 10f)
+            canvas.drawText(label,x+kw/2f,y+kh*.65f,paint)
+            if(cornerHint!=null){
+                paint.textSize=dp(5.7f)
+                paint.textAlign=Paint.Align.RIGHT
                 paint.color=skin.ink
-                paint.textSize=dp(10f);paint.textAlign=Paint.Align.CENTER
-                canvas.drawText(ch.toString(),x+kw/2f,y+rowHeight*.68f,paint)
+                canvas.drawText(cornerHint,x+kw-dp(2f),y+dp(6f),paint)
             }
         }
+        rows.forEachIndexed { rowIndex,keys->
+            val visual=if(rowIndex==rows.lastIndex)"⇧"+keys+"⌫" else keys
+            val y=toolbarHeight+rowIndex*(rowHeight+gap)
+            val side=when{
+                candidate.id==KeyboardPresetCatalog.FACETED && rowIndex%2==1->dp(13f)
+                keys.length==9->dp(16f)
+                else->dp(4.5f)
+            }
+            val kw=(w-2*side-gap*(visual.length-1))/visual.length
+            visual.forEachIndexed { i,ch->
+                val key=ch.toString()
+                val x=side+i*(kw+gap)
+                val hint=if(material&&ch.isLetter())
+                    KeyPopMaterialHints.candidates(key.lowercase(),0,true).firstOrNull() else null
+                keyCap(key,x,y,kw,rowHeight,key in listOf("⇧","⌫"),hint)
+            }
+        }
+        val footer=KeyboardPresetCatalog.foot(candidate.id,false)
+        val weights=footer.map{KeyboardPresetCatalog.keyWeight(candidate.id,it)}
+        val total=weights.sum()
+        val free=w-dp(8f)-gap*(footer.size-1)
+        var cursor=dp(4f)
+        val y=h-footerHeight-dp(3f)
+        footer.forEachIndexed { i,label->
+            val kw=(free*weights[i]/total)
+            val show=when(label){"SPACE"->"English";"☺,"->"☺";"↵"->"↵";else->label}
+            keyCap(show,cursor,y,kw,footerHeight-dp(3f),label=="↵",null)
+            cursor+=kw+gap
+        }
+        paint.shader=null
         paint.textAlign=Paint.Align.LEFT
     }
 }
