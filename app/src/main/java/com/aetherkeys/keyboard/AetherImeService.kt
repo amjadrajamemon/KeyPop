@@ -422,121 +422,143 @@ class AetherImeService : InputMethodService() {
         updateThemeAnimation()
         root.setPadding(d(3),d(5),d(3),d(6))
         applyFloatingLayout()
-        val top=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
-        fun topButton(value:String,weight:Float=1f,callback:()->Unit):Button {
-            val control=chip(value,weight,callback)
-            val minWidth=if(value.length>8)106 else if(value.length>5)86 else 52
-            top.addView(control,LinearLayout.LayoutParams(d(minWidth),d(36)).apply {
-                leftMargin=d(2);rightMargin=d(2)
-            })
-            return control
-        }
         val secure=sensitive(currentInputEditorInfo)
         val isNumeric=numeric(currentInputEditorInfo)
-        topButton("✦  "+languages[language],1.5f) { cycleLanguage() }
-        if(language!=0 && !secure && !isNumeric)
-            topButton(if(prefs.getBoolean("romanMode",false))"Roman ✓" else "a→ا",.85f) {
-                val enabled=!prefs.getBoolean("romanMode",false)
-                prefs.edit().putBoolean("romanMode",enabled).apply()
-                draw()
+        val toolbar=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL
+            gravity=Gravity.CENTER_VERTICAL
+            setPadding(d(2),0,d(2),0)
+        }
+        fun shortcut(label:String,weight:Float,fn:()->Unit) {
+            val control=chip(label,onTap=fn)
+            control.contentDescription=label
+            control.textSize=11f
+            toolbar.addView(control,LinearLayout.LayoutParams(0,d(42),weight).apply {
+                leftMargin=d(2);rightMargin=d(2)
+            })
+        }
+        shortcut(if(toolsOpen)"Close Menu" else "☷  Tools",1.12f) {
+            toolsOpen=!toolsOpen;resizeOpen=false;draw()
+        }
+        shortcut(if(resizeOpen)"✓  Done" else "↕  Resize",1f) {
+            resizeOpen=!resizeOpen;toolsOpen=false;draw()
+        }
+        shortcut(if(secure)"Paste" else "▤  Clips",.9f) {
+            if(secure)currentInputConnection?.performContextMenuAction(android.R.id.paste)
+            else {clipsOpen=!clipsOpen;emojiOpen=false;toolsOpen=false;resizeOpen=false;draw()}
+        }
+        shortcut("☺  Emoji",.9f) {
+            if(!secure && !isNumeric){
+                emojiOpen=!emojiOpen;clipsOpen=false;toolsOpen=false
+                translatorOpen=false;writingOpen=false;resizeOpen=false;draw()
             }
-        if(secure) topButton("Paste",.75f) {
-            val ok=currentInputConnection?.performContextMenuAction(android.R.id.paste) ?: false
-            if(!ok) Toast.makeText(this,"This field does not accept keyboard paste",Toast.LENGTH_SHORT).show()
         }
-        if(!secure) topButton("▤ Clips",1f) { clipsOpen=!clipsOpen;emojiOpen=false;draw() }
-        topButton(if(symbols) "ABC" else "?#@",.75f) {
-            symbols=!symbols;extended=false;clipsOpen=false;emojiOpen=false;draw()
+        shortcut("⚙ Settings",1.1f) {
+            startActivity(Intent(this,MainActivity::class.java)
+                .putExtra("openSection","settings")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
-        topButton(if(extended) "1/2" else "2/2",.53f) { extended=!extended;draw() }
-        if(!secure && !isNumeric) {
-            topButton("☺",.50f) { emojiOpen=!emojiOpen;clipsOpen=false;translatorOpen=false;draw() }
-            topButton("✍",.58f) {
-                writingOpen=!writingOpen
-                translatorOpen=false;emojiOpen=false;clipsOpen=false
-                if(writingOpen) {
-                    writingSource=currentInputConnection?.getSelectedText(0)?.toString()
-                        ?: currentInputConnection?.getTextBeforeCursor(800,0)?.toString().orEmpty()
-                    writingPreview="";writingMode="Formal"
+        root.addView(toolbar,LinearLayout.LayoutParams(-1,d(44)))
+        if(toolsOpen) {
+            val panel=LinearLayout(this).apply {
+                orientation=LinearLayout.VERTICAL
+                setPadding(d(6),d(5),d(6),d(6))
+                background=gradient(s.surface,s.background,10,s.accent)
+            }
+            panel.addView(TextView(this).apply {
+                text="TOOLS  ·  Choose a feature (your theme stays unchanged)"
+                textSize=11f;setTextColor(s.ink);setPadding(d(4),0,0,d(5))
+            })
+            fun menuRow(vararg entries:Pair<String,()->Unit>) {
+                val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+                entries.forEach { (label,fn)->
+                    row.addView(chip(label,onTap=fn),LinearLayout.LayoutParams(0,d(39),1f).apply {
+                        rightMargin=d(4);topMargin=d(2)
+                    })
                 }
-                draw()
+                panel.addView(row)
             }
-            topButton("⇄",.55f) {
-                translatorOpen=!translatorOpen;emojiOpen=false;clipsOpen=false;writingOpen=false
-                if(translatorOpen) {
-                    translateSource=currentInputConnection?.getSelectedText(0)?.toString()
-                        ?: currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
-                    translateResult="";translationStatus=""
-                    translateTarget=if(language==0)1 else 0
-                }
-                draw()
-            }
-            topButton("🎙",.52f) {
-                voiceTargetPackage=currentInputEditorInfo?.packageName.orEmpty()
-                pendingSpeech=null
-                val lang=when(language){1->"ur-PK";2->"sd-PK";else->"en-US"}
-                startActivity(Intent(this,KeyPopVoiceActivity::class.java)
-                    .putExtra("lang",lang).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-        }
-        if(!secure && !isNumeric) topButton(if(prefs.getBoolean("autoTranslate",false))"AUTO ✓" else "AUTO ⇄",.7f) {
-            val enabled=!prefs.getBoolean("autoTranslate",false)
-            prefs.edit().putBoolean("autoTranslate",enabled).apply()
-            Toast.makeText(this,if(enabled)"Translate on Send enabled" else "Translate on Send disabled",Toast.LENGTH_SHORT).show()
-            draw()
-        }
-        topButton("↤↦",.65f) { cursorTools=!cursorTools;draw() }
-        val floatControl=topButton(if(prefs.getBoolean("floating",false))"⠿" else "▣",.54f) {
-            prefs.edit().putBoolean("floating",!prefs.getBoolean("floating",false)).apply()
-            draw()
-        }
-        if(prefs.getBoolean("floating",false)) {
-            var initialX=0f;var initialY=0f
-            var baseX=0;var baseY=0;var dragged=false
-            floatControl.setOnTouchListener { _,event ->
-                when(event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialX=event.rawX;initialY=event.rawY;dragged=false
-                        baseX=prefs.getInt("floatX",0);baseY=prefs.getInt("floatY",24)
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val deltaX=(event.rawX-initialX).toInt()
-                        val deltaY=(event.rawY-initialY).toInt()
-                        if(kotlin.math.abs(deltaX)+kotlin.math.abs(deltaY)>d(8))dragged=true
-                        if(dragged) {
-                            prefs.edit().putInt("floatX",(baseX+deltaX).coerceIn(-d(50),d(50)))
-                                .putInt("floatY",(baseY-deltaY).coerceIn(8,150)).apply()
-                            applyFloatingLayout()
+            menuRow(
+                "Language" to {cycleLanguage()},
+                (if(symbols)"Letters" else "Symbols") to {
+                    symbols=!symbols;extended=false;toolsOpen=false;draw()
+                },
+                "Extra keys" to {extended=!extended;toolsOpen=false;draw()}
+            )
+            if(!secure && !isNumeric){
+                menuRow(
+                    "Writing" to {
+                        writingOpen=!writingOpen
+                        translatorOpen=false;emojiOpen=false;clipsOpen=false;toolsOpen=false
+                        if(writingOpen) {
+                            writingSource=currentInputConnection?.getSelectedText(0)?.toString()
+                                ?:currentInputConnection?.getTextBeforeCursor(800,0)?.toString().orEmpty()
+                            writingPreview="";writingMode="Formal"
                         }
-                        true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        if(!dragged) {
-                            prefs.edit().putBoolean("floating",false).apply()
-                            draw()
+                        draw()
+                    },
+                    "Translate" to {
+                        translatorOpen=!translatorOpen
+                        writingOpen=false;emojiOpen=false;clipsOpen=false;toolsOpen=false
+                        if(translatorOpen) {
+                            translateSource=currentInputConnection?.getSelectedText(0)?.toString()
+                                ?:currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
+                            translateResult="";translationStatus=""
+                            translateTarget=if(language==0)1 else 0
                         }
-                        true
+                        draw()
+                    },
+                    "Voice input" to {
+                        voiceTargetPackage=currentInputEditorInfo?.packageName.orEmpty()
+                        pendingSpeech=null
+                        val code=when(language){1->"ur-PK";2->"sd-PK";else->"en-US"}
+                        startActivity(Intent(this,KeyPopVoiceActivity::class.java)
+                            .putExtra("lang",code).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
-                    MotionEvent.ACTION_CANCEL ->true
-                    else->false
-                }
+                )
+                menuRow(
+                    "Themes" to {
+                        startActivity(Intent(this,MainActivity::class.java)
+                            .putExtra("openSection","themes").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    },
+                    "Layouts" to {
+                        startActivity(Intent(this,MainActivity::class.java)
+                            .putExtra("openSection","layouts").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    },
+                    "GIF & Media" to {
+                        startActivity(Intent(this,KeyPopMediaStudioActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                )
+                menuRow(
+                    "Cursor tools" to {cursorTools=!cursorTools;toolsOpen=false;draw()},
+                    "Floating" to {
+                        prefs.edit().putBoolean("floating",!prefs.getBoolean("floating",false)).apply()
+                        resizeOpen=true;toolsOpen=false;draw()
+                    },
+                    "One-handed" to {
+                        prefs.edit().putInt("handMode",(prefs.getInt("handMode",0)+1)%3).apply()
+                        toolsOpen=false;draw()
+                    }
+                )
+                menuRow(
+                    (if(prefs.getBoolean("romanMode",false))"Roman: On" else "Roman typing") to {
+                        prefs.edit().putBoolean("romanMode",!prefs.getBoolean("romanMode",false)).apply()
+                        toolsOpen=false;draw()
+                    },
+                    (if(prefs.getBoolean("autoTranslate",false))"Auto-send: On" else "Translate Send") to {
+                        prefs.edit().putBoolean("autoTranslate",!prefs.getBoolean("autoTranslate",false)).apply()
+                        toolsOpen=false;draw()
+                    },
+                    "Layout Lab" to {
+                        startActivity(Intent(this,KeyPopLayoutStudioActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                )
             }
+            root.addView(panel)
         }
-        topButton(when(prefs.getInt("handMode",0)) {1->"◧";2->"◨";else->"↔"},.55f) {
-            val next=(prefs.getInt("handMode",0)+1)%3
-            prefs.edit().putInt("handMode",next).apply();draw()
-        }
-        topButton("◈",.55f) { prefs.edit().putInt("theme",(KeyPopSkins.index(this)+1)%15).apply();draw() }
-        topButton("⚙",.55f) {
-            startActivity(Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-        val toolbarScroll=HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled=false
-            isFillViewport=false
-            addView(top)
-        }
-        root.addView(toolbarScroll,LinearLayout.LayoutParams(-1,d(40)))
+        if(resizeOpen)showResizePanel(root)
         suggestionBar=null
         if(clipsOpen && !secure) { drawClips(root); return }
         if(writingOpen && !secure && !isNumeric) showWritingPanel(root)
