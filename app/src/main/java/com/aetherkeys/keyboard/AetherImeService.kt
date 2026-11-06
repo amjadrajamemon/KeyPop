@@ -535,7 +535,7 @@ class AetherImeService : InputMethodService() {
                 val button=chip(glyph,onTap=fn)
                 button.contentDescription=description
                 button.textSize=if(glyph=="GIF")13f else 21f
-                top.addView(button,LinearLayout.LayoutParams(0,d(45),1f).apply {
+                top.addView(button,LinearLayout.LayoutParams(0,d(40),1f).apply {
                     leftMargin=d(2);rightMargin=d(2)
                 })
             }
@@ -578,7 +578,7 @@ class AetherImeService : InputMethodService() {
                     .putExtra("target",prefs.getInt("autoTarget",1))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
-            root.addView(top,LinearLayout.LayoutParams(-1,d(49)))
+            root.addView(top,LinearLayout.LayoutParams(-1,d(43)))
         } else {
         val toolbar=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL
@@ -842,7 +842,7 @@ class AetherImeService : InputMethodService() {
         val keyHeight=prefs.getInt("height",51).coerceIn(36,90)
         // Dedicated 0–9 row exactly once, above the alphabetic rows.
         if(KeyPopRowParity.hasNumberRow(prefs.getBoolean("numberRow",true),symbols,numeric(currentInputEditorInfo)))
-            addRow(root, KeyPopRowParity.digits,keyHeight-10)
+            addRow(root, KeyPopRowParity.digits,keyHeight-5)
         rows.forEachIndexed { i, row ->
             val keys=if(i==rows.lastIndex && !symbols && !isNumeric) listOf("⇧")+row+listOf("⌫") else row
             val customRow=if(!isNumeric && !symbols && !extended && !emojiSearch)i else -1

@@ -65,13 +65,13 @@ object KeyboardPresetCatalog {
         }
     }
     fun keyWeight(id:Int,label:String):Float = when(label){
-        "SPACE" -> when(id) { MATERIAL->5.1f;FLOW->5.4f;GESTURE->5.8f;FACETED->5f;else->4.3f }
-        "?123","ABC" -> if(id==GESTURE)1.1f else if(id==MATERIAL)1.5f else 1.4f
-        "☺," ->1.12f
-        "↵" ->if(id==MATERIAL)1.38f else 1f
-        "." ->if(id==MATERIAL)0.8f else 1f
+        "SPACE" -> when(id) { MATERIAL->4.43f;FLOW->5.4f;GESTURE->5.8f;FACETED->5f;else->4.3f }
+        "?123","ABC" -> if(id==GESTURE)1.1f else if(id==MATERIAL)1.57f else 1.4f
+        "☺," -> if(id==MATERIAL)1.0f else 1.12f
+        "↵" ->if(id==MATERIAL)1.58f else 1f
+        "." ->if(id==MATERIAL)1f else 1f
         "?" ->if(id==MATERIAL)0.7f else 1f
-        "🌐" ->1.2f
+        "🌐" ->if(id==MATERIAL)1f else 1.2f
         else ->if(id==GESTURE)1.12f else 1f
     }
 }
