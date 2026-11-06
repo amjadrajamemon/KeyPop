@@ -51,6 +51,7 @@ class AetherImeService : InputMethodService() {
     private var symbols=false
     private var clipsOpen=false
     private var toolsOpen=false
+    private var toolsPage=0
     private var resizeOpen=false
     private val renderedRows=ArrayList<Pair<LinearLayout,Int>>()
     private var navSafeBottomPx=0
@@ -614,49 +615,113 @@ class AetherImeService : InputMethodService() {
         }
         root.addView(toolbar,LinearLayout.LayoutParams(-1,d(44)))
         }
+
         if(toolsOpen) {
             val panel=LinearLayout(this).apply {
                 orientation=LinearLayout.VERTICAL
-                setPadding(d(6),d(5),d(6),d(6))
-                background=gradient(s.surface,s.background,10,s.accent)
+                setPadding(d(8),d(8),d(8),d(8))
+                background=KeyPopGlass.background(this@AetherImeService,s)
             }
             panel.addView(TextView(this).apply {
-                text="TOOLS  ·  Choose a feature (your theme stays unchanged)"
-                textSize=11f;setTextColor(s.ink);setPadding(d(4),0,0,d(5))
+                text=listOf("EVERYDAY TOOLS","EDIT & CONTROL","ADVANCED TOOLS")[toolsPage]
+                textSize=11f
+                setTextColor(s.ink)
+                setPadding(d(8),d(3),0,d(7))
             })
-            fun menuRow(vararg entries:Pair<String,()->Unit>) {
-                val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-                entries.forEach { (label,fn)->
-                    row.addView(chip(label,onTap=fn),LinearLayout.LayoutParams(0,d(39),1f).apply {
-                        rightMargin=d(4);topMargin=d(2)
-                    })
+            fun grid(actions:List<Pair<String,()->Unit>>) {
+                actions.chunked(2).forEach { pair->
+                    val row=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
+                    pair.forEach { (title,action)->
+                        val tile=chip(title,onTap=action).apply {
+                            contentDescription=title
+                            textSize=15f
+                        }
+                        row.addView(tile,LinearLayout.LayoutParams(0,d(55),1f).apply {
+                            leftMargin=d(4)
+                            rightMargin=d(4)
+                            topMargin=d(4)
+                            bottomMargin=d(4)
+                        })
+                    }
+                    if(pair.size==1)row.addView(View(this),
+                        LinearLayout.LayoutParams(0,d(55),1f))
+                    panel.addView(row)
                 }
-                panel.addView(row)
             }
-            menuRow(
-                "Resize / Move" to {resizeOpen=true;toolsOpen=false;draw()},
-                "Language" to {cycleLanguage()},
-                (if(symbols)"Letters" else "Symbols") to {
-                    symbols=!symbols;extended=false;toolsOpen=false;draw()
-                },
-                "Extra keys" to {extended=!extended;toolsOpen=false;draw()}
-            )
-            if(!secure && !isNumeric){
-                menuRow(
-                    "Writing" to {
-                        writingOpen=!writingOpen
-                        translatorOpen=false;emojiOpen=false;clipsOpen=false;toolsOpen=false
-                        if(writingOpen) {
+            when(toolsPage) {
+                0 -> grid(listOf(
+                    "☺  Emoji" to {
+                        toolsOpen=false
+                        if(!secure && !isNumeric) {
+                            emojiOpen=true;clipsOpen=false;writingOpen=false;translatorOpen=false
+                        }
+                        draw()
+                    },
+                    "▣  Autofill" to {
+                        toolsOpen=false
+                        startActivity(Intent(this,MainActivity::class.java)
+                            .putExtra("openSection","security")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        draw()
+                    },
+                    "▤  Clipboard" to {
+                        toolsOpen=false
+                        if(!secure) {
+                            clipsOpen=true;emojiOpen=false;writingOpen=false;translatorOpen=false
+                        }
+                        draw()
+                    },
+                    "⬚  Floating" to {
+                        prefs.edit().putBoolean("floating",!prefs.getBoolean("floating",false)).apply()
+                        toolsOpen=false;draw()
+                    }
+                ))
+                1 -> grid(listOf(
+                    "↔  One-handed" to {
+                        prefs.edit().putInt("handMode",(prefs.getInt("handMode",0)+1)%3).apply()
+                        toolsOpen=false;draw()
+                    },
+                    "↕  Text editing" to {
+                        cursorTools=true;toolsOpen=false;draw()
+                    },
+                    "⤴  Share KeyPop" to {
+                        val share=Intent(Intent.ACTION_SEND).apply {
+                            type="text/plain"
+                            putExtra(Intent.EXTRA_TEXT,
+                                "KeyPop Keyboard: https://github.com/amjadrajamemon/KeyPop")
+                        }
+                        startActivity(Intent.createChooser(share,"Share KeyPop")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    },
+                    "⬚  Resize" to {resizeOpen=true;toolsOpen=false;draw()},
+                    "↶  Undo" to {
+                        val input=currentInputConnection
+                        val time=SystemClock.uptimeMillis()
+                        val down=KeyEvent(time,time,KeyEvent.ACTION_DOWN,
+                            KeyEvent.KEYCODE_Z,0,KeyEvent.META_CTRL_ON)
+                        val accepted=input?.sendKeyEvent(down)?:false
+                        input?.sendKeyEvent(KeyEvent.changeAction(down,KeyEvent.ACTION_UP))
+                        if(!accepted)Toast.makeText(this,
+                            "Undo is not available in this text field",Toast.LENGTH_SHORT).show()
+                        toolsOpen=false;draw()
+                    },
+                    "🌐  Next language" to {toolsOpen=false;cycleLanguage()}
+                ))
+                else -> grid(listOf(
+                    "✦  Writing" to {
+                        toolsOpen=false
+                        if(!secure&&!isNumeric) {
+                            writingOpen=true;translatorOpen=false;emojiOpen=false;clipsOpen=false
                             writingSource=currentInputConnection?.getSelectedText(0)?.toString()
                                 ?:currentInputConnection?.getTextBeforeCursor(800,0)?.toString().orEmpty()
                             writingPreview="";writingMode="Formal"
                         }
                         draw()
                     },
-                    "Translate" to {
-                        translatorOpen=!translatorOpen
-                        writingOpen=false;emojiOpen=false;clipsOpen=false;toolsOpen=false
-                        if(translatorOpen) {
+                    "⇄  Translate" to {
+                        toolsOpen=false
+                        if(!secure&&!isNumeric) {
+                            translatorOpen=true;writingOpen=false;emojiOpen=false;clipsOpen=false
                             translateSource=currentInputConnection?.getSelectedText(0)?.toString()
                                 ?:currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
                             translateResult="";translationStatus=""
@@ -664,7 +729,7 @@ class AetherImeService : InputMethodService() {
                         }
                         draw()
                     },
-                    "Voice Translate" to {
+                    "🎙 Voice" to {
                         voiceTargetPackage=currentInputEditorInfo?.packageName.orEmpty()
                         pendingSpeech=null;pendingSpeechSend=false
                         val code=when(language){1->"ur-PK";2->"sd-PK";else->"en-US"}
@@ -672,49 +737,52 @@ class AetherImeService : InputMethodService() {
                             .putExtra("lang",code)
                             .putExtra("target",prefs.getInt("autoTarget",if(language==0)1 else 0))
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
-                )
-                menuRow(
-                    "Themes" to {
-                        startActivity(Intent(this,MainActivity::class.java)
-                            .putExtra("openSection","themes").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
-                    "Layouts" to {
+                    "◈  Themes" to {
                         startActivity(Intent(this,MainActivity::class.java)
-                            .putExtra("openSection","layouts").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            .putExtra("openSection","themes")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
-                    "GIF & Media" to {
+                    "▤  GIF & Media" to {
                         startActivity(Intent(this,KeyPopMediaStudioActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
-                )
-                menuRow(
-                    "Cursor tools" to {cursorTools=!cursorTools;toolsOpen=false;draw()},
-                    "Floating" to {
-                        prefs.edit().putBoolean("floating",!prefs.getBoolean("floating",false)).apply()
-                        resizeOpen=true;toolsOpen=false;draw()
                     },
-                    "One-handed" to {
-                        prefs.edit().putInt("handMode",(prefs.getInt("handMode",0)+1)%3).apply()
-                        toolsOpen=false;draw()
-                    }
-                )
-                menuRow(
-                    (if(prefs.getBoolean("romanMode",false))"Roman: On" else "Roman typing") to {
-                        prefs.edit().putBoolean("romanMode",!prefs.getBoolean("romanMode",false)).apply()
-                        toolsOpen=false;draw()
-                    },
-                    (if(prefs.getBoolean("autoTranslate",false))"Auto-send: On" else "Translate Send") to {
-                        prefs.edit().putBoolean("autoTranslate",!prefs.getBoolean("autoTranslate",false)).apply()
-                        toolsOpen=false;draw()
-                    },
-                    "Layout Lab" to {
-                        startActivity(Intent(this,KeyPopLayoutStudioActivity::class.java)
+                    "⌨  Layouts" to {
+                        startActivity(Intent(this,MainActivity::class.java)
+                            .putExtra("openSection","layouts")
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    },
+                    "⇄  Symbols" to {
+                        symbols=!symbols;extended=false;toolsOpen=false;draw()
+                    },
+                    "✳  Extra keys" to {
+                        extended=!extended;toolsOpen=false;draw()
                     }
-                )
+                ))
             }
-            root.addView(panel)
+            panel.addView(View(this),LinearLayout.LayoutParams(-1,0,1f))
+            val pagination=LinearLayout(this).apply {
+                orientation=LinearLayout.HORIZONTAL
+                gravity=Gravity.CENTER
+            }
+            pagination.addView(chip("‹") {
+                toolsPage=(toolsPage+2)%3;draw()
+            }.apply {contentDescription="Previous tool page"},
+                LinearLayout.LayoutParams(d(56),d(37)))
+            pagination.addView(chip((0..2).joinToString("  "){
+                if(it==toolsPage)"●" else "○"
+            }) {toolsPage=(toolsPage+1)%3;draw()
+            }.apply {contentDescription="Tool page "+(toolsPage+1)+" of 3"},
+                LinearLayout.LayoutParams(d(112),d(37)))
+            pagination.addView(chip("›") {
+                toolsPage=(toolsPage+1)%3;draw()
+            }.apply {contentDescription="Next tool page"},
+                LinearLayout.LayoutParams(d(56),d(37)))
+            panel.addView(pagination)
+            root.addView(panel,LinearLayout.LayoutParams(-1,
+                d(if(toolsPage==0)276 else if(toolsPage==1)300 else 345)))
+            // Gboard-style tools replace the letter area rather than stack above it.
+            return
         }
         if(resizeOpen)showResizePanel(root)
         suggestionBar=null
