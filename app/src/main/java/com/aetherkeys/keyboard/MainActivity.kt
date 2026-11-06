@@ -190,6 +190,26 @@ class MainActivity : Activity() {
         })
         addCard(root,translate)
 
+        val vaultCard=card()
+        vaultCard.addView(text("LOGIN VAULT",12f,0xFF83CFF4.toInt(),true))
+        vaultCard.addView(gap(5))
+        vaultCard.addView(text("Secure sign-ins",21f,ink,true))
+        vaultCard.addView(text("Encrypted account storage with device authentication. Autofill is available where Android and the destination app support it; restricted banking fields cannot be overridden.",12f,muted))
+        vaultCard.addView(gap(12))
+        vaultCard.addView(action("Manage saved usernames & passwords",true) {
+            startActivity(Intent(this,KeyPopVaultActivity::class.java))
+        })
+        vaultCard.addView(gap(8))
+        vaultCard.addView(action("Choose KeyPop as Android Autofill service") {
+            if(android.os.Build.VERSION.SDK_INT>=26) {
+                val request=Intent("android.settings.REQUEST_SET_AUTOFILL_SERVICE")
+                    .setData(android.net.Uri.parse("package:"+packageName))
+                try {startActivity(request)}
+                catch(_:Exception){startActivity(Intent(Settings.ACTION_SETTINGS))}
+            }
+        })
+        addCard(root,vaultCard)
+
         val clipsCard=card()
         clipsCard.addView(text("CLIPBOARD STUDIO",12f,0xFF83CFF4.toInt(),true))
         clipsCard.addView(gap(4))
