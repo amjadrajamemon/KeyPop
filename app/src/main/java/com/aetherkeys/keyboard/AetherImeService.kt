@@ -471,6 +471,19 @@ class AetherImeService : InputMethodService() {
                     true
                 }
             }
+            button.contentDescription=when(label) {
+                "⌫" -> "Backspace. Hold to delete the previous word"
+                "⇧" -> "Shift. Double tap to lock uppercase"
+                "SPACE" -> "Spacebar. Hold to switch languages or slide to move cursor"
+                "↵" -> "Enter or app action"
+                "🌐" -> "Switch typing language"
+                "?123" -> "Switch to symbols and numbers"
+                "ABC" -> "Switch to letters"
+                else -> if(label.length==1) "Type "+label else label
+            }
+            button.isFocusable=true
+            if(label=="SPACE" && prefs.getBoolean("spaceCursor",true))
+                installSpaceGestures(button)
             keyViews.add(button to label)
             if(language==0 && !symbols && !numeric(currentInputEditorInfo) &&
                 prefs.getBoolean("glide",false) && label.length==1 && label[0].isLetter()) {
@@ -482,6 +495,59 @@ class AetherImeService : InputMethodService() {
         }
         parent.addView(row)
     }
+    /** Slide on Space to move the caret; long press for an explicit language menu. */
+    private fun installSpaceGestures(button:Button) {
+        var firstX=0f
+        var lastX=0f
+        var downTime=0L
+        var moved=false
+        fun languageMenu() {
+            val menu=android.widget.PopupMenu(this,button)
+            languages.forEachIndexed{index,label->
+                menu.menu.add(label).setOnMenuItemClickListener {
+                    language=index
+                    prefs.edit().putInt("language",index).apply()
+                    shift=false;capsLock=false;symbols=false;extended=false;draw()
+                    true
+                }
+            }
+            menu.show()
+        }
+        button.setOnTouchListener { _,event ->
+            when(event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    firstX=event.rawX;lastX=event.rawX
+                    downTime=SystemClock.uptimeMillis()
+                    moved=false;true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if(kotlin.math.abs(event.rawX-firstX)>d(14))moved=true
+                    if(moved) {
+                        val difference=event.rawX-lastX
+                        if(kotlin.math.abs(difference)>=d(15)) {
+                            val code=if(difference>0)KeyEvent.KEYCODE_DPAD_RIGHT
+                                else KeyEvent.KEYCODE_DPAD_LEFT
+                            val times=(kotlin.math.abs(difference)/d(15)).toInt().coerceIn(1,8)
+                            repeat(times) {
+                                currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN,code))
+                                currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,code))
+                            }
+                            lastX=event.rawX
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if(!moved && SystemClock.uptimeMillis()-downTime>=500) languageMenu()
+                    else if(!moved)press("SPACE")
+                    true
+                }
+                MotionEvent.ACTION_CANCEL ->true
+                else->false
+            }
+        }
+    }
+
     private fun installGlide(button:Button,label:String) {
         var startX=0f;var startY=0f
         var started=0L;var sliding=false
