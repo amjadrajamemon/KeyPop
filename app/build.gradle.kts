@@ -10,8 +10,8 @@ android {
         applicationId = "com.aetherkeys.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.0-visual-studio"
+        versionCode = 4
+        versionName = "0.3.0-parity-candidate"
     }
     buildTypes { release { isMinifyEnabled = false } }
     compileOptions {
@@ -19,4 +19,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+}
+
+
+dependencies {
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("androidx.core:core:1.15.0")
 }

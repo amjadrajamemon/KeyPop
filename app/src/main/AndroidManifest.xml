@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:icon="@drawable/ic_keypop_logo" android:roundIcon="@drawable/ic_keypop_logo" android:allowBackup="false" android:label="KeyPop" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <queries>
+        <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH"/></intent>
+    </queries>
+    <application android:usesCleartextTraffic="false" android:supportsRtl="true" android:icon="@drawable/ic_keypop_logo" android:roundIcon="@drawable/ic_keypop_logo" android:allowBackup="false" android:label="KeyPop" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name=".KeyPopVoiceActivity" android:exported="false"/>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
