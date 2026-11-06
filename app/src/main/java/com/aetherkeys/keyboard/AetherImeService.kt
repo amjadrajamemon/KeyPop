@@ -84,6 +84,9 @@ class AetherImeService : InputMethodService() {
     private var lastShiftPress=0L
     private var current:LinearLayout?=null
     private var floatingShell:FrameLayout?=null
+    private var liveBackground:KeyPopBackdropDrawable?=null
+    private var themeAnimator:android.animation.ValueAnimator?=null
+    private var lastThemeFrame=0L
     private val emojiRows=listOf(
         listOf("😀","😁","😂","😍","🥰","😊","😎","😭"),
         listOf("❤️","👍","👏","🙏","🔥","✨","🎉","✅"),
@@ -152,6 +155,7 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onDestroy() {
+        themeAnimator?.cancel();themeAnimator=null;liveBackground=null
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
         try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
         imagePreviewExecutor.shutdownNow()
@@ -169,6 +173,11 @@ class AetherImeService : InputMethodService() {
     override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
         super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
         refreshSuggestions()
+    }
+
+    override fun onFinishInputView(finishingInput:Boolean) {
+        themeAnimator?.pause()
+        super.onFinishInputView(finishingInput)
     }
 
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
@@ -207,7 +216,9 @@ class AetherImeService : InputMethodService() {
             setTextColor(if(heavy) Color.WHITE else s.ink)
             typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
             gravity=Gravity.CENTER
-            background=bg
+            background=android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf((s.accent and 0x00FFFFFF) or (0x55 shl 24)),
+                bg,null)
             minWidth=0; minimumWidth=0; minHeight=0; minimumHeight=0
             setPadding(0,0,0,0)
             elevation=d(if(s.shape==2) 0 else 2).toFloat()
@@ -250,12 +261,40 @@ class AetherImeService : InputMethodService() {
         root.layoutParams=params
         shell.requestLayout()
     }
+    private fun updateThemeAnimation() {
+        val enabled=prefs.getBoolean("animatedThemes",false) &&
+            android.animation.ValueAnimator.areAnimatorsEnabled()
+        if(!enabled) {
+            themeAnimator?.cancel();themeAnimator=null
+            liveBackground?.phase=0f
+            return
+        }
+        if(themeAnimator==null) {
+            themeAnimator=android.animation.ValueAnimator.ofFloat(0f,1f).apply {
+                duration=8000L
+                repeatCount=android.animation.ValueAnimator.INFINITE
+                repeatMode=android.animation.ValueAnimator.RESTART
+                addUpdateListener {
+                    val time=SystemClock.uptimeMillis()
+                    if(time-lastThemeFrame>=85L) {
+                        lastThemeFrame=time
+                        liveBackground?.phase=it.animatedValue as Float
+                    }
+                }
+                start()
+            }
+        } else if(themeAnimator?.isPaused==true)themeAnimator?.resume()
+    }
+
     private fun draw() {
         val root=current ?: return
         root.removeAllViews()
         keyViews.clear()
         val s=palette()
-        root.background=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
+        val background=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
+        liveBackground=background
+        root.background=background
+        updateThemeAnimation()
         root.setPadding(d(3),d(5),d(3),d(6))
         applyFloatingLayout()
         val top=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }

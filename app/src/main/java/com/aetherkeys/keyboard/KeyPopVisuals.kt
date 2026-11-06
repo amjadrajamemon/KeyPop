@@ -74,7 +74,19 @@ class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
                 else KeyPopSkins.all[selection]
         val w = width.toFloat()
         val h = height.toFloat()
-        KeyPopBackdropDrawable(selection,s).apply { setBounds(0,0,width,height) }.draw(canvas)
+        KeyPopBackdropDrawable(selection,s).apply {
+            if(selection==KeyPopSkins.index(context) &&
+                context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                    .getBoolean("animatedThemes",false) &&
+                android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                phase=(android.os.SystemClock.uptimeMillis()%8000L)/8000f
+            }
+            setBounds(0,0,width,height)
+        }.draw(canvas)
+        if(selection==KeyPopSkins.index(context) && isShown &&
+            context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                .getBoolean("animatedThemes",false))
+            postInvalidateDelayed(100L)
         paint.shader = null
         val topY = dp(10f)
         paint.color = s.accent
@@ -121,6 +133,10 @@ class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
 class KeyPopBackdropDrawable(private val index:Int,private val skin:KeyPopSkin):
     android.graphics.drawable.Drawable() {
     private val p=Paint(Paint.ANTI_ALIAS_FLAG)
+    var phase:Float=0f
+        set(value){field=value.coerceIn(0f,1f);invalidateSelf()}
+    private fun wave():Float=
+        (0.5 + kotlin.math.sin(phase*6.283185307179586).toFloat()*0.5).toFloat()
     private fun alpha(color:Int,a:Int)=(color and 0x00FFFFFF) or (a.coerceIn(0,255) shl 24)
     override fun draw(canvas:Canvas) {
         val rect=bounds
@@ -137,7 +153,7 @@ class KeyPopBackdropDrawable(private val index:Int,private val skin:KeyPopSkin):
                 for(i in 0..24) {
                     val x=((i*97)%101)/101f*w
                     val y=((i*41+9)%87)/87f*h
-                    p.color=alpha(accent,if(index==9)70 else 95)
+                    p.color=alpha(accent,(if(index==9)45 else 70)+(wave()*40).toInt())
                     canvas.drawCircle(x,y,if(i%5==0)3.2f else 1.3f,p)
                 }
                 p.style=Paint.Style.STROKE;p.strokeWidth=3f
@@ -175,7 +191,7 @@ class KeyPopBackdropDrawable(private val index:Int,private val skin:KeyPopSkin):
             4,11 -> { // aurora motion motifs, static and light
                 p.style=Paint.Style.STROKE;p.strokeWidth=4f
                 for(i in 0..3) {
-                    p.color=alpha(accent,28+i*12)
+                    p.color=alpha(accent,20+i*12+(wave()*18).toInt())
                     val path=android.graphics.Path().apply {
                         moveTo(-20f,h*(.23f+i*.16f))
                         cubicTo(w*.32f,h*(.13f+i*.16f),w*.61f,h*(.52f+i*.06f),w+20f,h*(.23f+i*.12f))

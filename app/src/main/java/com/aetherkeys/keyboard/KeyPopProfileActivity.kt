@@ -19,7 +19,7 @@ object KeyPopDesignProfile {
         "handMode" to 0..2,"englishLayout" to 0..4)
     private val boolOptions=setOf("numberRow","hints","haptics","sound",
         "wordDelete","doubleSpace","autoCap","splitKeyboard","floating",
-        "spaceCursor","highContrast")
+        "spaceCursor","highContrast","animatedThemes")
     fun export(context:Context):String {
         val p=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
         val settings=JSONObject()
