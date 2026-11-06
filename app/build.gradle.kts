@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 15
-        versionName = "0.9.4-runtime-verification" 
+        versionCode = 16
+        versionName = "1.0.0-offline-sindhi-candidate" 
     }
     splits {
         abi {
@@ -25,7 +25,7 @@ android {
     buildTypes {
         debug {
             // Coexist with previous alpha installations; no destructive uninstall required.
-            applicationIdSuffix = ".previewv094"
+            applicationIdSuffix = ".previewv100"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
