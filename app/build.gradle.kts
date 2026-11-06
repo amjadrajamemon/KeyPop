@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 16
-        versionName = "1.0.0-offline-sindhi-candidate" 
+        versionCode = 17
+        versionName = "1.0.1-rc2-keyboard-reliability" 
     }
     splits {
         abi {

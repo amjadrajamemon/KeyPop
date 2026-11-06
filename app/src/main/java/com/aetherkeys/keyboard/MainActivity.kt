@@ -563,7 +563,7 @@ class MainActivity : Activity() {
         }
         tryCard.addView(field)
         addCard(root,tryCard)
-        val foot=text("KEYPOP  •  RC2 PREVIEW\nCheck offline translations before relying on their linguistic accuracy.",11f,muted)
+        val foot=text("KEYPOP  •  v1.0.1 RC2 PREVIEW\nCheck offline translations before relying on their linguistic accuracy.",11f,muted)
         foot.gravity=Gravity.CENTER
         root.addView(foot)
         root.addView(gap(15))
