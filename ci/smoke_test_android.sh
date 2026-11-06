@@ -52,8 +52,10 @@ adb shell uiautomator dump /sdcard/keypop-packs-bottom.xml >/dev/null
 adb exec-out cat /sdcard/keypop-packs-bottom.xml > forensic-evidence/packs-bottom-ui.xml
 grep -q "SINDHI" forensic-evidence/packs-bottom-ui.xml
 echo "[5/7] Ensuring Android detects the InputMethodService"
-adb shell ime list -s > forensic-evidence/input-methods.txt
-grep -q "$PKG" forensic-evidence/input-methods.txt
+adb shell ime list -a -s > forensic-evidence/input-methods.txt
+cat forensic-evidence/input-methods.txt
+# Include disabled IMEs: immediately after installation they are not enabled by the user.
+grep -Fq "$PKG" forensic-evidence/input-methods.txt
 adb shell ime enable "$SERVICE"
 adb shell ime set "$SERVICE"
 echo "[6/7] Focus a real EditText and attempt to show KeyPop IME"
