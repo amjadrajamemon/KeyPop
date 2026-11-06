@@ -95,6 +95,10 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
+        // Choose the familiar teal style once on a clean installation only.
+        // Existing user selections and imported profiles are never overwritten.
+        if(!prefs.contains("keyboardPreset") && !prefs.contains("theme"))
+            KeyboardPresetCatalog.apply(this,KeyboardPresetCatalog.MATERIAL)
         window.statusBarColor=pageBg
         window.navigationBarColor=pageBg
         val shell=ScrollView(this).apply {
@@ -264,6 +268,7 @@ class MainActivity : Activity() {
             android.widget.Toast.makeText(this,"Applied: "+KeyPopSkins.all[pendingTheme].name,
                 android.widget.Toast.LENGTH_SHORT).show()
             livePreviews.forEach{it.invalidate()}
+            recreate()
         })
         studio.addView(gap(12))
         studio.addView(gallery)
@@ -336,6 +341,7 @@ class MainActivity : Activity() {
                     selected.name+" applied. Reopen the keyboard to see all changes.",
                     android.widget.Toast.LENGTH_LONG).show()
                 livePreviews.forEach{it.invalidate()}
+                recreate()
             }
         })
         presetsCard.addView(gap(10))
