@@ -56,7 +56,7 @@ object KeyboardPresetCatalog {
     }
     fun foot(id:Int, symbols:Boolean):List<String> {
         if(symbols)return listOf("ABC","🌐",",","SPACE",".","?","↵","⌫")
-        if(id==MATERIAL)return listOf("?123","☺,","🌐",",","SPACE",".","?","↵")
+        if(id==MATERIAL)return listOf("?123","☺,","🌐","SPACE",".","↵")
         return when(id){
             GESTURE ->listOf("?123",",","🌐","SPACE",".","?","↵","⌫")
             FACETED ->listOf("?123","🌐",",","SPACE",".","?","↵","⌫")

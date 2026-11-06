@@ -58,6 +58,7 @@ object KeyPopAlternates {
         "8" to listOf("⁸"),"9" to listOf("⁹"),"0" to listOf("⁰","°")
     )
     fun forKey(label:String,language:Int):List<String> {
+        if(label==".")return KeyPopPeriodPalette.forLanguage(language)
         if(label in nums)return nums.getValue(label)
         if(label.length>2)return emptyList()
         return if(language==1 || language==2)
@@ -66,4 +67,12 @@ object KeyPopAlternates {
     }
     fun hint(label:String,language:Int):String? =
         forKey(label,language).firstOrNull()
+}
+
+
+/** Common symbols for the hold-and-slide period key, independent of download packs. */
+object KeyPopPeriodPalette {
+    private val latin=listOf("?","!",",",":",";","@","#","/","…","-","(",")")
+    private val arabic=listOf("؟","،","؛","۔","?","!",":",";","@","/","…","-")
+    fun forLanguage(language:Int):List<String> = if(language==1||language==2)arabic else latin
 }

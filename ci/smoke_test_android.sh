@@ -32,13 +32,25 @@ grep -q "Keyboard Setup" forensic-evidence/home-ui.xml
 grep -q "Enable KeyPop keyboard" forensic-evidence/home-ui.xml
 grep -q "Language packs and model status" forensic-evidence/home-ui.xml
 echo "[4/7] Opening language pack manager and checking visibility"
-adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopModelManagerActivity" | tee forensic-evidence/packs-startup.txt
+python3 - <<'PY'
+import re,subprocess,xml.etree.ElementTree as ET
+root=ET.parse("forensic-evidence/home-ui.xml").getroot()
+nodes=[x for x in root.iter("node") if "Language packs and model status" in (x.get("text") or "")]
+assert nodes,"Missing language pack control on the launcher"
+coords=list(map(int,re.findall(r"\d+",nodes[0].get("bounds",""))))
+assert len(coords)==4
+subprocess.run(["adb","shell","input","tap",str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2)],check=True)
+PY
 sleep 3
 adb shell uiautomator dump /sdcard/keypop-packs.xml >/dev/null
 adb exec-out cat /sdcard/keypop-packs.xml > forensic-evidence/packs-ui.xml
 grep -q "Language Pack Manager" forensic-evidence/packs-ui.xml
 grep -q "Download / repair Urdu" forensic-evidence/packs-ui.xml
-grep -q "SINDHI" forensic-evidence/packs-ui.xml
+adb shell input swipe 520 1730 520 690 370
+sleep 1
+adb shell uiautomator dump /sdcard/keypop-packs-bottom.xml >/dev/null
+adb exec-out cat /sdcard/keypop-packs-bottom.xml > forensic-evidence/packs-bottom-ui.xml
+grep -q "SINDHI" forensic-evidence/packs-bottom-ui.xml
 echo "[5/7] Ensuring Android detects the InputMethodService"
 adb shell ime list -s > forensic-evidence/input-methods.txt
 grep -q "$PKG" forensic-evidence/input-methods.txt

@@ -48,10 +48,11 @@ class KeyPopCharacterStrip(private val context:Context,private val host:FrameLay
         cells.clear()
         choices.forEach{label->
             val cell=TextView(context).apply {
-                text=label;textSize=20f;setTextColor(this@KeyPopCharacterStrip.foreground)
+                text=label;textSize=if(choices.size>9)18f else 20f
+                setTextColor(this@KeyPopCharacterStrip.foreground)
                 gravity=Gravity.CENTER
                 includeFontPadding=false
-                contentDescription="Alternate "+label
+                contentDescription="Select symbol "+label
                 isClickable=false;isFocusable=false
             }
             root.addView(cell,LinearLayout.LayoutParams(0,-1,1f))

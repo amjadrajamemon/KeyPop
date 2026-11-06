@@ -772,8 +772,9 @@ class AetherImeService : InputMethodService() {
             else if(extended && language==2)sindhiExtended
             else KeyPopLayouts.active(this,language)
         val keyHeight=prefs.getInt("height",51).coerceIn(36,90)
-        if(!isNumeric && !symbols && prefs.getBoolean("numberRow",true))
-            addRow(root, listOf("1","2","3","4","5","6","7","8","9","0"),keyHeight-10)
+        // Dedicated 0–9 row exactly once, above the alphabetic rows.
+        if(KeyPopRowParity.hasNumberRow(prefs.getBoolean("numberRow",true),symbols,isNumeric))
+            addRow(root, KeyPopRowParity.digits,keyHeight-10)
         rows.forEachIndexed { i, row ->
             val keys=if(i==rows.lastIndex && !symbols && !isNumeric) listOf("⇧")+row+listOf("⌫") else row
             val customRow=if(!isNumeric && !symbols && !extended && !emojiSearch)i else -1
@@ -811,12 +812,15 @@ class AetherImeService : InputMethodService() {
             val weight=KeyboardPresetCatalog.keyWeight(preset.id,label)
             val heavy=label in listOf("↵","⇧") || (label=="SPACE" && palette().shape==3)
             val altLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
-            val hint=if(prefs.getBoolean("hints",true))KeyPopAlternates.hint(label,altLanguage) else null
             val material=preset.id==KeyboardPresetCatalog.MATERIAL && !symbols
-            val variants=KeyPopMaterialHints.candidates(label,altLanguage,material)
+            val variants=KeyPopRowParity.alternates(
+                KeyPopMaterialHints.candidates(label,altLanguage,material),
+                label,KeyPopRowParity.hasNumberRow(
+                    prefs.getBoolean("numberRow",true),symbols,isNumeric))
             val actualHint=if(prefs.getBoolean("hints",true))variants.firstOrNull() else null
-            val caption=if(!material && !symbols && hint!=null && label.length==1)
-                show+"\n"+hint else show
+            // A number row and a second numeric hint row create visual duplication.
+            val caption=if(!material && !symbols && actualHint!=null && label.length==1)
+                show+"\n"+actualHint else show
             val button=makeKey(caption,heavy,weight) { press(label) }
             if(material && label.length==1 && actualHint!=null && button is KeyPopHintKey) {
                 button.hintText=actualHint
