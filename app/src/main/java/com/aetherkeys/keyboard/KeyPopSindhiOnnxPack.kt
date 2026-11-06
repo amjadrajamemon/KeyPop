@@ -20,7 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 object KeyPopSindhiOnnxPack {
     data class Bundle(
         val id:String, val name:String, val repo:String,
-        val revision:String, val approximateMB:Int
+        val revision:String, val approximateMB:Int,
+        val sourceTag:String,val targetTag:String
     ) {
         val files=listOf("config.json","generation_config.json",
             "encoder_model.onnx","encoder_model.onnx.data",
@@ -31,9 +32,9 @@ object KeyPopSindhiOnnxPack {
             "/resolve/"+revision+"/"+file+"?download=true"
     }
     val englishToSindhi=Bundle("en-sd","English → Sindhi (Arabic)",
-        "hari31416/indictrans2-en-indic-dist-200M-ONNX-int8","1eaa43a3fb76f382f1b22c76e56f6ab4926ad68b",318)
+        "hari31416/indictrans2-en-indic-dist-200M-ONNX-int8","1eaa43a3fb76f382f1b22c76e56f6ab4926ad68b",318,"eng_Latn","snd_Arab")
     val sindhiToEnglish=Bundle("sd-en","Sindhi (Arabic) → English",
-        "hari31416/indictrans2-indic-en-dist-200M-ONNX-int8","a7ecdc0ba73148c6e1d051ca372332471d8aff4f",270)
+        "hari31416/indictrans2-indic-en-dist-200M-ONNX-int8","a7ecdc0ba73148c6e1d051ca372332471d8aff4f",270,"snd_Arab","eng_Latn")
     val bundles=listOf(englishToSindhi,sindhiToEnglish)
     private val main by lazy { Handler(Looper.getMainLooper()) }
     private val running=AtomicBoolean(false)
