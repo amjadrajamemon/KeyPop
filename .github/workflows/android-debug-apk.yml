@@ -1,7 +1,7 @@
 name: KeyPop Android debug APK
 on:
   push:
-    branches: [main, feature/v0.9-material-teal-first-run-model-packs, feature/v0.9.1-sindhi-startup-repair, feature/v0.9.2-forensic-launch-smoke, feature/v0.9.4-sindhi-onnx-engine, feature/v0.9.4-android-runtime-verification, feature/offline-sindhi-release-blocker]
+    branches: [main, feature/v0.9-material-teal-first-run-model-packs, feature/v0.9.1-sindhi-startup-repair, feature/v0.9.2-forensic-launch-smoke, feature/v1.0.0-rc1-sindhi-onnx-engine, feature/v1.0.0-rc1-android-runtime-verification, feature/offline-sindhi-release-blocker, feature/v1.0.0-offline-sindhi-consolidated]
   pull_request:
   workflow_dispatch:
 
@@ -37,51 +37,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v0.9.4-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.0-rc1-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v0.9.4-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v0.9.4-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.0-rc1-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.0-rc1-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.4-all-five-apks
+          name: KeyPop-v1.0.0-rc1-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.4-instrumentation
-          path: dist/KeyPop-v0.9.4-androidTest.apk
+          name: KeyPop-v1.0.0-rc1-instrumentation
+          path: dist/KeyPop-v1.0.0-rc1-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.4-ARM64
-          path: dist/KeyPop-v0.9.4-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.0-rc1-ARM64
+          path: dist/KeyPop-v1.0.0-rc1-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.4-ARM32
-          path: dist/KeyPop-v0.9.4-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.0-rc1-ARM32
+          path: dist/KeyPop-v1.0.0-rc1-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.4-x86
-          path: dist/KeyPop-v0.9.4-x86-debug.apk
+          name: KeyPop-v1.0.0-rc1-x86
+          path: dist/KeyPop-v1.0.0-rc1-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.4-x86_64
-          path: dist/KeyPop-v0.9.4-x86_64-debug.apk
+          name: KeyPop-v1.0.0-rc1-x86_64
+          path: dist/KeyPop-v1.0.0-rc1-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.4-Universal
-          path: dist/KeyPop-v0.9.4-universal-debug.apk
+          name: KeyPop-v1.0.0-rc1-Universal
+          path: dist/KeyPop-v1.0.0-rc1-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -89,16 +89,16 @@ jobs:
     name: Verify launcher, packs, and keyboard on an Android emulator
     needs: android
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v0.9.4-x86_64
+          name: KeyPop-v1.0.0-rc1-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v0.9.4-instrumentation
+          name: KeyPop-v1.0.0-rc1-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -118,7 +118,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.4-emulator-forensic-evidence
+          name: KeyPop-v1.0.0-rc1-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -129,14 +129,14 @@ jobs:
     # Release is intentionally blocked pending GH issue #13: real airplane-mode
     # Sindhi translation via tokenizer + full ONNX generation + accuracy checks.
     # A passing compile, emulator screen test or model download is insufficient.
-    if: ${{ false }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/v1.0.0-offline-sindhi-consolidated' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v0.9.4-all-five-apks
+          name: KeyPop-v1.0.0-rc1-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -145,7 +145,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v0.9.4-preview"
+          TAG="v1.0.0-rc1-preview"
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/*-debug.apk --repo "$GH_REPO" --clobber
           else
@@ -153,6 +153,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v0.9.4 Preview — Android Debug APKs" \
+              --title "KeyPop v1.0.0-rc1 Preview — Android Debug APKs" \
               --notes "PREVIEW DEBUG BUILDS, NOT FINISHED OR PRODUCTION RELEASE. Android instrumentation, unit tests, lint and emulator smoke must pass before publication. DOES NOT offer unrestricted offline Sindhi neural translation; only the Sindhi phrasebook and experimental ONNX model pack installer currently exist. Physical-device model downloads, speech and Gboard parity have not been verified. Do not enter real secrets. ARM64 suits most phones; Universal offers the widest compatibility."
           fi
