@@ -205,7 +205,7 @@ class MainActivity : Activity() {
         modelCard.addView(text("OFFLINE LANGUAGE ENGINE",12f,accent,true))
         modelCard.addView(gap(5))
         modelCard.addView(text("Download translation models before typing",20f,ink,true))
-        modelCard.addView(text("First-launch consent and a Language Pack Manager are available. English/Urdu ML Kit translation is downloaded on request; Android manages voice models.",12f,muted))
+        modelCard.addView(text("Install English/Urdu translation packs with consent, using Wi-Fi or mobile data. Sindhi basic phrases are built in; Google Translate offers its own separate offline Sindhi pack.",12f,muted))
         modelCard.addView(gap(9))
         modelCard.addView(action("Manage text and voice packs",true) {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
@@ -563,7 +563,7 @@ class MainActivity : Activity() {
         }
         tryCard.addView(field)
         addCard(root,tryCard)
-        val foot=text("KEYPOP  •  PERSONALIZATION ALPHA  •  v0.4.0\nBenchmarks and device validation remain required for parity.",11f,muted)
+        val foot=text("KEYPOP  •  v0.9.1 PREVIEW\nPhysical-device validation and full Sindhi engine integration are pending.",11f,muted)
         foot.gravity=Gravity.CENTER
         root.addView(foot)
         root.addView(gap(15))
@@ -574,13 +574,28 @@ class MainActivity : Activity() {
             "settings" ->navigate(controls,"Typing & Size")
             "translation" ->navigate(translate,"Translation")
             "languagePacks" ->navigate(modelCard,"Offline Packs")
-            else ->navigateHome()
+            else -> if(prefs.getBoolean("firstLaunchPacksV091",false))
+                navigateHome() else navigate(onboarding,"Keyboard Setup")
         }
-        if(!prefs.getBoolean("firstLaunchPacksV09",false)){
-            prefs.edit().putBoolean("firstLaunchPacksV09",true).apply()
+        // Never force an unverified model-management activity on top of the launcher.
+        // Let the user choose keyboard setup or a separate, consent-driven download screen.
+        if(!prefs.getBoolean("firstLaunchPacksV091",false)) {
+            prefs.edit().putBoolean("firstLaunchPacksV091",true).apply()
             shell.post {
-                startActivity(Intent(this,KeyPopModelManagerActivity::class.java)
-                    .putExtra("firstRun",true))
+                if(!isFinishing && !isDestroyed) {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Welcome to KeyPop")
+                        .setMessage("First enable KeyPop in Android keyboard settings and choose it as your default keyboard. You can also download optional English/Urdu translation models over Wi-Fi or mobile data. Basic Sindhi phrases already work offline; full Sindhi translation requires a separate compatible engine.")
+                        .setPositiveButton("Language packs") { _,_ ->
+                            startActivity(Intent(this,KeyPopModelManagerActivity::class.java)
+                                .putExtra("firstRun",true))
+                        }
+                        .setNegativeButton("Enable keyboard") { _,_ ->
+                            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+                        }
+                        .setNeutralButton("Later",null)
+                        .show()
+                }
             }
         }
     }

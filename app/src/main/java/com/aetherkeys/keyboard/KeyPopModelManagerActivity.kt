@@ -1,6 +1,8 @@
 package com.aetherkeys.keyboard
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -74,18 +76,33 @@ class KeyPopModelManagerActivity:Activity() {
             text="Urdu text translation";setTextColor(ink);isChecked=true
         }
         wifiOnly=CheckBox(this).apply{
-            text="Download on Wi-Fi only";setTextColor(ink);isChecked=true
+            text="Download on Wi-Fi only (uncheck for mobile data)";setTextColor(ink);isChecked=false
         }
         root.addView(english);root.addView(urdu);root.addView(wifiOnly)
         englishStatus=line("English: checking...",13f)
         urduStatus=line("Urdu: checking...",13f)
         root.addView(englishStatus);root.addView(urduStatus)
+        root.addView(line("Sindhi • سنڌي: basic phrasebook included with KeyPop (no download required). Full-sentence offline Sindhi translation is not currently available through the ML Kit engine.",13f))
         progress=ProgressBar(this).apply{isIndeterminate=true;visibility=View.GONE}
         root.addView(progress,LinearLayout.LayoutParams(-1,dp(6)))
         detail=line("No download requested yet.",12f)
         root.addView(detail)
         button("Download selected text language packs"){downloadSelected()}
         button("Refresh installed model status"){refreshModels()}
+        root.addView(line("SINDHI OFFLINE DOWNLOAD — SEPARATE APP",15f))
+        root.addView(line("Google Translate offers a downloadable Sindhi offline pack. This pack belongs to Google Translate and cannot be imported into KeyPop's ML Kit engine. Open Google Translate, select Sindhi, and use the download icon next to that language.",12f))
+        button("Open Google Translate to download Sindhi") {
+            try {
+                val launch=packageManager.getLaunchIntentForPackage(
+                    "com.google.android.apps.translate")
+                val fallback=Intent(Intent.ACTION_VIEW,Uri.parse(
+                    "https://play.google.com/store/apps/details?id=com.google.android.apps.translate"))
+                startActivity(launch ?: fallback)
+                detail.text="In Google Translate, select Sindhi and tap its download icon. This installs the pack in Google Translate, not KeyPop."
+            } catch(error:Exception) {
+                detail.text="Unable to open Google Translate: "+(error.localizedMessage?:"No compatible browser or store installed")
+            }
+        }
         if(!first) {
             button("Remove English text model"){
                 KeyPopLanguageModels.deleteText("en"){_,msg->detail.text=msg;refreshModels()}
@@ -125,7 +142,9 @@ class KeyPopModelManagerActivity:Activity() {
         }
         downloading=languages.size
         progress.visibility=View.VISIBLE
-        detail.text="Preparing "+downloading+" model download(s). The Google ML Kit SDK does not provide byte-level progress."
+        detail.text="Preparing "+downloading+" model download(s) using "+
+            (if(wifiOnly.isChecked)"Wi-Fi only" else "Wi-Fi or mobile data")+
+            ". Google ML Kit does not report byte-by-byte progress."
         languages.forEach{lang->
             KeyPopLanguageModels.downloadText(lang,wifiOnly.isChecked){ok,message->
                 if(isFinishing || isDestroyed)return@downloadText

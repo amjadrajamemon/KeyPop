@@ -37,9 +37,13 @@ object KeyPopLanguageModels {
             callback(null,"No ML Kit model is available for this language")
             return
         }
-        modelManager.isModelDownloaded(m)
-            .addOnSuccessListener { callback(it,if(it)"Installed • available offline" else "Not installed") }
-            .addOnFailureListener { callback(null,"Unable to check: "+(it.localizedMessage?:"unknown error")) }
+        try {
+            modelManager.isModelDownloaded(m)
+                .addOnSuccessListener { callback(it,if(it)"Installed • available offline" else "Not installed") }
+                .addOnFailureListener { callback(null,"Unable to check: "+(it.localizedMessage?:"unknown error")) }
+        } catch(error:Exception) {
+            callback(null,"Model manager unavailable: "+(error.localizedMessage?:"check Google Play services"))
+        }
     }
     fun downloadText(lang:String,wifiOnly:Boolean,callback:(Boolean,String)->Unit) {
         val m=if(knownText(lang))model(lang) else null
@@ -49,9 +53,16 @@ object KeyPopLanguageModels {
         }
         val builder=DownloadConditions.Builder()
         if(wifiOnly)builder.requireWifi()
-        modelManager.download(m,builder.build())
-            .addOnSuccessListener { callback(true,"Installed • ready to translate offline") }
-            .addOnFailureListener { callback(false,"Download failed: "+(it.localizedMessage?:"check network and storage")) }
+        try {
+            modelManager.download(m,builder.build())
+                .addOnSuccessListener { callback(true,"Installed • ready to translate offline") }
+                .addOnFailureListener {
+                    callback(false,"Download failed: "+(it.localizedMessage?:"unknown error")+
+                        ". Check connectivity, Google Play services, storage, and the Wi-Fi-only switch.")
+                }
+        } catch(error:Exception) {
+            callback(false,"Cannot start download: "+(error.localizedMessage?:"model manager unavailable"))
+        }
     }
     fun deleteText(lang:String,callback:(Boolean,String)->Unit) {
         val m=if(knownText(lang))model(lang) else null
