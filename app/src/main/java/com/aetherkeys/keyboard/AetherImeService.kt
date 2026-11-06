@@ -343,10 +343,17 @@ class AetherImeService : InputMethodService() {
                 currentInputConnection?.deleteSurroundingText(count,0)
                 true
             } else {
-                val alternate=alternate(label)
-                if(alternate!=null) button.setOnLongClickListener {
+                val extras=alternates(label)
+                if(extras.isNotEmpty()) button.setOnLongClickListener {
                     tapFeedback(button)
-                    currentInputConnection?.commitText(alternate,1)
+                    if(extras.size==1) currentInputConnection?.commitText(extras.first(),1)
+                    else {
+                        val popup=android.widget.PopupMenu(this,button)
+                        for(extra in extras) popup.menu.add(extra).setOnMenuItemClickListener {
+                            currentInputConnection?.commitText(extra,1);refreshSuggestions();true
+                        }
+                        popup.show()
+                    }
                     true
                 }
             }
@@ -356,11 +363,31 @@ class AetherImeService : InputMethodService() {
         }
         parent.addView(row)
     }
-    private fun alternate(label:String):String? {
+    private fun alternates(label:String):List<String> {
         val numeric="qwertyuiop".indexOf(label)
-        if(numeric>=0 && prefs.getBoolean("hints",true)) return if(numeric==9) "0" else (numeric+1).toString()
-        return mapOf("a" to "@","s" to "$","d" to "#","f" to "%","g" to "&",
-            "n" to "ñ","e" to "é","." to "…","," to ";").get(label)
+        val accents=mapOf(
+            "a" to listOf("@","á","à","â","ä"),
+            "e" to listOf("é","è","ê","ë"),
+            "i" to listOf("í","ì","î","ï"),
+            "o" to listOf("ó","ò","ô","ö"),
+            "u" to listOf("ú","ù","û","ü"),
+            "s" to listOf("$","ß"),"d" to listOf("#"),"f" to listOf("%"),
+            "n" to listOf("ñ"),"c" to listOf("ç"),
+            "." to listOf("…"),"," to listOf(";"))
+        val scripts=mapOf(
+            "ا" to listOf("آ","أ","إ"),"ت" to listOf("ٹ","ٿ","ٽ","ٺ"),
+            "د" to listOf("ڈ","ڌ","ڏ","ڊ","ڍ"),"ر" to listOf("ڑ","ڙ"),
+            "ن" to listOf("ں","ڻ"),"ک" to listOf("ڪ"),"ڪ" to listOf("ک"),
+            "ب" to listOf("ٻ","ڀ"),"ج" to listOf("ڄ","جھ","ڃ"),
+            "چ" to listOf("ڇ"),"ف" to listOf("ڦ"),"گ" to listOf("ڳ","گھ"),
+            "و" to listOf("ؤ"),"ہ" to listOf("ھ"),"ه" to listOf("ھ"),
+            "ی" to listOf("ئ","ے"),"ي" to listOf("ئ"))
+        if(numeric>=0 && language==0 && prefs.getBoolean("hints",true)) {
+            val digit=if(numeric==9)"0" else (numeric+1).toString()
+            return listOf(digit)+accents.getOrDefault(label,emptyList())
+        }
+        return if(language==0)accents.getOrDefault(label,emptyList())
+        else scripts.getOrDefault(label,emptyList())
     }
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
