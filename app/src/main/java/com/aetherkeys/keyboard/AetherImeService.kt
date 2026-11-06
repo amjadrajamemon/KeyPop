@@ -52,6 +52,7 @@ class AetherImeService : InputMethodService() {
     private var emojiOpen=false
     private var pinnedOnly=false
     private var cursorTools=false
+    private var extended=false
     private var capsLock=false
     private var lastShiftPress=0L
     private var current:LinearLayout?=null
@@ -87,6 +88,17 @@ class AetherImeService : InputMethodService() {
     private val symbolRows=listOf(listOf("1","2","3","4","5","6","7","8","9","0"),
         listOf("@","#","$","%","&","-","+","(",")","/"),
         listOf("*","\"","'",";",":","!","?","_","="))
+    private val extraSymbols=listOf(listOf("~","€","£","¥","•","√","π","÷","×","∆"),
+        listOf("{","}","[","]","<",">","©","®","™","✓"),
+        listOf("،","؛","؟","«","»","–","—","…","°"))
+    private val urduExtended=listOf(
+        listOf("آ","أ","إ","ث","ٹ","ڈ","ڑ","ژ","ذ","ظ"),
+        listOf("ض","غ","خ","ھ","ؤ","ئ","ة","ۃ","ً","ٰ"),
+        listOf("ِ","ُ","َ","ْ","ّ","،","؟","؛","ء","ٓ"))
+    private val sindhiExtended=listOf(
+        listOf("آ","ٻ","ڀ","ٿ","ٽ","ٺ","ڄ","جھ","ڃ","ڇ"),
+        listOf("ڌ","ڏ","ڊ","ڍ","ڙ","ژ","ڦ","ک","ڳ","گھ"),
+        listOf("ڻ","ؤ","ھ","ء","ئ","و","ي","ه","ا","ب"))
 
     override fun onCreate() {
         super.onCreate()
@@ -184,7 +196,10 @@ class AetherImeService : InputMethodService() {
         val isNumeric=numeric(currentInputEditorInfo)
         topButton("✦  "+languages[language],1.5f) { cycleLanguage() }
         if(!secure) topButton("▤ Clips",1f) { clipsOpen=!clipsOpen;emojiOpen=false;draw() }
-        topButton(if(symbols) "ABC" else "?#@",.75f) { symbols=!symbols;clipsOpen=false;emojiOpen=false;draw() }
+        topButton(if(symbols) "ABC" else "?#@",.75f) {
+            symbols=!symbols;extended=false;clipsOpen=false;emojiOpen=false;draw()
+        }
+        topButton(if(extended) "1/2" else "2/2",.53f) { extended=!extended;draw() }
         if(!secure && !isNumeric) {
             topButton("☺",.50f) { emojiOpen=!emojiOpen;clipsOpen=false;translatorOpen=false;draw() }
             topButton("⇄",.55f) {
@@ -255,7 +270,12 @@ class AetherImeService : InputMethodService() {
         root.addView(title,LinearLayout.LayoutParams(-1,d(25)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
-            else if(symbols) symbolRows else when(language) { 1->urdu;2->sindhi;else->english }
+            else if(symbols) { if(extended) extraSymbols else symbolRows }
+            else when(language) {
+                1-> if(extended) urduExtended else urdu
+                2-> if(extended) sindhiExtended else sindhi
+                else->english
+            }
         val keyHeight=prefs.getInt("height",51).coerceIn(36,90)
         if(!isNumeric && !symbols && prefs.getBoolean("numberRow",true))
             addRow(root, listOf("1","2","3","4","5","6","7","8","9","0"),keyHeight-10)
@@ -351,7 +371,7 @@ class AetherImeService : InputMethodService() {
     private fun cycleLanguage() {
         language=(language+1)%3
         prefs.edit().putInt("language",language).apply()
-        shift=false;capsLock=false;symbols=false;clipsOpen=false;emojiOpen=false;draw()
+        shift=false;capsLock=false;symbols=false;clipsOpen=false;emojiOpen=false;extended=false;draw()
     }
     private fun showTranslator(root:LinearLayout) {
         val style=palette()
