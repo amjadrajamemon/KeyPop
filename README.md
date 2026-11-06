@@ -1,3 +1,5 @@
+> **KeyPop v0.3.0 parity candidate (Android, draft PR #3):** The working v0.3 branch includes native typing, English/Urdu/Sindhi pages, 15 vector-rendered themes, a live settings studio, local suggestions, basic glide typing, encrypted text/image clipboard, authenticated credential vault, Android Autofill, voice via an installed Android speech service, English↔Urdu on-device translation and optional configured Sindhi HTTPS translation. The new debug APK uses a separate `com.aetherkeys.keyboard.preview` package to coexist with older alphas. These capabilities are **not yet certified as parity with Gboard/SwiftKey**. See [the release gate](docs/PARITY-VERIFICATION.md) and [issue #2](https://github.com/amjadrajamemon/KeyPop/issues/2) for gaps and tests.
+
 # AetherKeys — Android keyboard test project (v0.1.0-alpha)
 
 A repository-ready **native Kotlin Android Input Method Editor** for English, Urdu and Sindhi, with **10 bespoke vector theme worlds + 5 original familiar-style ergonomic layouts**, advanced retained clipboard, screenshot sharing, an encrypted login vault with Android Autofill, optional voice typing and Translate & Send.
