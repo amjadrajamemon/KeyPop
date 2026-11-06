@@ -57,7 +57,7 @@ class ClipStore(private val context: Context) {
     @Synchronized fun save(text: String) {
         if (text.isBlank() || text.length > 100000) return
         val all = list().filterNot { it.text == text }
-        persist((listOf(ClipItem(text, false, System.currentTimeMillis())) + all).take(3000))
+        persist(listOf(ClipItem(text, false, System.currentTimeMillis())) + all)
     }
     @Synchronized fun pin(text: String, pinned: Boolean) =
         persist(list().map { if (it.text == text) it.copy(pinned = pinned) else it })
