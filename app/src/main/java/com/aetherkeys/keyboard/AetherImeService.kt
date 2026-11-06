@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Build
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -32,9 +33,17 @@ class AetherImeService : InputMethodService() {
         super.onCreate()
         clipboard.addPrimaryClipChangedListener {
             val info = currentInputEditorInfo
-            val t = info?.inputType ?: 0
-            val sensitive = (t and 0x000000f0) == 0x00000080 ||
-                (t and 0x000000f0) == 0x00000090 || (t and 0x000000f0) == 0x000000e0
+            val type = info?.inputType
+            val klass = type?.and(InputType.TYPE_MASK_CLASS)
+            val variation = type?.and(InputType.TYPE_MASK_VARIATION)
+            val sensitive = info == null || klass == InputType.TYPE_NULL ||
+                ((info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) ||
+                (klass == InputType.TYPE_CLASS_TEXT &&
+                    (variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                     variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                     variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) ||
+                (klass == InputType.TYPE_CLASS_NUMBER &&
+                    variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
             if (!sensitive && prefs.getBoolean("history", true)) {
                 try {
                     val clip = clipboard.primaryClip
