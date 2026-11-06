@@ -5,16 +5,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeyPopSindhiOnnxPackTest {
-    @Test fun twoDifferentRealOfflineModelDirectionsAreDeclared() {
+    @Test fun threeModelsCoverFourTranslationDirections() {
         val packs=KeyPopSindhiOnnxPack.bundles
-        assertEquals(setOf("en-sd","sd-en"),packs.map{it.id}.toSet())
+        assertEquals(setOf("en-sd","sd-en","ur-sd"),packs.map{it.id}.toSet())
         assertEquals(318,packs[0].approximateMB)
         assertEquals(270,packs[1].approximateMB)
+        assertEquals(390,packs[2].approximateMB)
         assertTrue(packs.all{it.repo.startsWith("hari31416/indictrans2-")})
         assertEquals("eng_Latn",packs[0].sourceTag)
         assertEquals("snd_Arab",packs[0].targetTag)
         assertEquals("snd_Arab",packs[1].sourceTag)
         assertEquals("eng_Latn",packs[1].targetTag)
+        assertEquals("urd_Arab",packs[2].sourceTag)
+        assertEquals("snd_Arab",packs[2].targetTag)
     }
     @Test fun modelFilesContainDecoderWeightsAndTokenizers() {
         for (pack in KeyPopSindhiOnnxPack.bundles) {
