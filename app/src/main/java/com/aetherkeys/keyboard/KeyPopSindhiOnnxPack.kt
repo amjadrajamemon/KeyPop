@@ -31,9 +31,9 @@ object KeyPopSindhiOnnxPack {
             "/resolve/"+revision+"/"+file+"?download=true"
     }
     val englishToSindhi=Bundle("en-sd","English → Sindhi (Arabic)",
-        "hari31416/indictrans2-en-indic-dist-200M-ONNX-int8","1eaa43a",318)
+        "hari31416/indictrans2-en-indic-dist-200M-ONNX-int8","1eaa43a3fb76f382f1b22c76e56f6ab4926ad68b",318)
     val sindhiToEnglish=Bundle("sd-en","Sindhi (Arabic) → English",
-        "hari31416/indictrans2-indic-en-dist-200M-ONNX-int8","a7ecdc0",270)
+        "hari31416/indictrans2-indic-en-dist-200M-ONNX-int8","a7ecdc0ba73148c6e1d051ca372332471d8aff4f",270)
     val bundles=listOf(englishToSindhi,sindhiToEnglish)
     private val main by lazy { Handler(Looper.getMainLooper()) }
     private val running=AtomicBoolean(false)
