@@ -91,6 +91,7 @@ class AetherImeService : InputMethodService() {
     private var lastShiftPress=0L
     private var current:LinearLayout?=null
     private var floatingShell:FrameLayout?=null
+    private var characterStrip:KeyPopCharacterStrip?=null
     private var liveBackground:KeyPopBackdropDrawable?=null
     private var themeAnimator:android.animation.ValueAnimator?=null
     private var lastThemeFrame=0L
@@ -180,6 +181,7 @@ class AetherImeService : InputMethodService() {
         }
         current=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         val shell=floatingShell!!
+        characterStrip=KeyPopCharacterStrip(this,shell)
         shell.addView(current,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
         ViewCompat.setOnApplyWindowInsetsListener(shell) { view,insets ->
             val bottom=insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
@@ -448,6 +450,7 @@ class AetherImeService : InputMethodService() {
 
     private fun draw() {
         val root=current ?: return
+        characterStrip?.dismiss()
         root.removeAllViews()
         keyViews.clear()
         renderedRows.clear()
@@ -685,33 +688,24 @@ class AetherImeService : InputMethodService() {
             }
             val weight=KeyboardPresetCatalog.keyWeight(preset.id,label)
             val heavy=label in listOf("↵","⇧") || (label=="SPACE" && palette().shape==3)
-            val superscripts=listOf("¹","²","³","⁴","⁵","⁶","⁷","⁸","⁹","⁰")
-            val hintIndex="qwertyuiop".indexOf(label)
-            val caption=if(!symbols && language==0 && hintIndex>=0 && prefs.getBoolean("hints",true))
-                show+"\n"+superscripts[hintIndex] else show
+            val altLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
+            val hint=if(prefs.getBoolean("hints",true))KeyPopAlternates.hint(label,altLanguage) else null
+            val caption=if(!symbols && hint!=null && label.length==1)
+                show+"\n"+hint else show
             val button=makeKey(caption,heavy,weight) { press(label) }
             if(label=="⌫" && prefs.getBoolean("wordDelete",true)) button.setOnLongClickListener {
                 tapFeedback(button)
                 val before=currentInputConnection?.getTextBeforeCursor(200,0)?.toString().orEmpty()
-                val found=Regex("[\\p{L}\\p{N}]+\\s*$").find(before)
-                val count=if(found!=null) before.length-found.range.first else 1
-                currentInputConnection?.deleteSurroundingText(count,0)
+                val match=Regex("[\\p{L}\\p{N}]+\\s*$").find(before)
+                currentInputConnection?.deleteSurroundingText(
+                    if(match!=null)before.length-match.range.first else 1,0)
                 true
-            } else {
-                val extras=alternates(label)
-                if(extras.isNotEmpty()) button.setOnLongClickListener {
-                    tapFeedback(button)
-                    if(extras.size==1) currentInputConnection?.commitText(extras.first(),1)
-                    else {
-                        val popup=android.widget.PopupMenu(this,button)
-                        for(extra in extras) popup.menu.add(extra).setOnMenuItemClickListener {
-                            currentInputConnection?.commitText(extra,1);refreshSuggestions();true
-                        }
-                        popup.show()
-                    }
-                    true
-                }
             }
+            val variants=KeyPopAlternates.forKey(label,altLanguage)
+            val glidable=!symbols && language==0 && label.length==1 &&
+                label[0].isLetter() && prefs.getBoolean("glide",false)
+            if(variants.isNotEmpty() || glidable)
+                installCharacterGesture(button,label,variants,glidable)
             button.contentDescription=when(label) {
                 "⌫" -> "Backspace. Hold to delete the previous word"
                 "⇧" -> "Shift. Double tap to lock uppercase"
@@ -726,10 +720,6 @@ class AetherImeService : InputMethodService() {
             if(label=="SPACE" && prefs.getBoolean("spaceCursor",true))
                 installSpaceGestures(button)
             keyViews.add(button to label)
-            if(language==0 && !symbols && !numeric(currentInputEditorInfo) &&
-                prefs.getBoolean("glide",false) && label.length==1 && label[0].isLetter()) {
-                installGlide(button,label)
-            }
             val indexInLayout=if(layoutRow==2 && label !in setOf("⇧","⌫"))index-1
                 else if(label in setOf("⇧","⌫"))-1 else index
             val widthFactor=if(layoutRow>=0 && indexInLayout>=0)
@@ -794,81 +784,78 @@ class AetherImeService : InputMethodService() {
         }
     }
 
-    private fun installGlide(button:Button,label:String) {
-        var startX=0f;var startY=0f
-        var started=0L;var sliding=false
+    /** Shows alternates while held and permits sliding without releasing the key. */
+    private fun installCharacterGesture(button:Button,label:String,variants:List<String>,
+                                        glideEnabled:Boolean) {
+        var downX=0f;var downY=0f
+        var canceled=false;var popup=false;var gliding=false
         val trail=ArrayList<String>()
-        button.setOnTouchListener { _,event ->
+        val open=Runnable {
+            if(!canceled && !gliding && variants.isNotEmpty() && button.isAttachedToWindow) {
+                characterStrip?.show(button,variants,palette().accent,palette().ink,palette().surface)
+                popup=characterStrip?.isShowing==true
+                if(popup)tapFeedback(button)
+            }
+        }
+        button.setOnTouchListener { _,event->
             when(event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    startX=event.rawX;startY=event.rawY;started=SystemClock.uptimeMillis()
-                    sliding=false;trail.clear();trail.add(label);true
+                    canceled=false;popup=false;gliding=false
+                    downX=event.rawX;downY=event.rawY
+                    trail.clear();trail.add(label)
+                    button.isPressed=true
+                    button.postDelayed(open,390L)
+                    true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if(kotlin.math.abs(event.rawX-startX)+kotlin.math.abs(event.rawY-startY)>d(18))
-                        sliding=true
-                    if(sliding) {
-                        val box=Rect()
-                        for((key,letter) in keyViews) {
-                            if(letter.length==1 && letter[0].isLetter()
-                                && key.getGlobalVisibleRect(box)
-                                && box.contains(event.rawX.toInt(),event.rawY.toInt())) {
-                                if(trail.lastOrNull()!=letter)trail.add(letter)
-                                break
+                    if(popup) characterStrip?.slide(event.rawX)
+                    else {
+                        val delta=kotlin.math.abs(event.rawX-downX)+
+                            kotlin.math.abs(event.rawY-downY)
+                        if(delta>d(17)) {
+                            button.removeCallbacks(open)
+                            if(glideEnabled)gliding=true
+                        }
+                        if(gliding) {
+                            val rect=Rect()
+                            for((key,letter) in keyViews) {
+                                if(letter.length==1 && letter[0].isLetter()
+                                    && key.getGlobalVisibleRect(rect)
+                                    && rect.contains(event.rawX.toInt(),event.rawY.toInt())) {
+                                    if(trail.lastOrNull()!=letter)trail.add(letter)
+                                    break
+                                }
                             }
                         }
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    tapFeedback(button)
-                    if(sliding && trail.size>=3) {
-                        val guess=lexicon.glide(0,trail)
-                        if(guess!=null){
-                            currentInputConnection?.commitText(guess+" ",1)
-                            lexicon.learn(0,guess);refreshSuggestions()
+                    canceled=true;button.isPressed=false
+                    button.removeCallbacks(open)
+                    val selected=if(popup)characterStrip?.chosen() else null
+                    characterStrip?.dismiss()
+                    if(selected!=null) {
+                        currentInputConnection?.commitText(selected,1)
+                        refreshSuggestions()
+                    } else if(gliding && trail.size>=3) {
+                        val suggested=lexicon.glide(0,trail)
+                        if(suggested!=null) {
+                            currentInputConnection?.commitText(suggested+" ",1)
+                            lexicon.learn(0,suggested);refreshSuggestions()
                         } else press(label)
-                    } else if(!sliding && SystemClock.uptimeMillis()-started>500
-                        && alternates(label).isNotEmpty()) {
-                        val options=alternates(label)
-                        val menu=android.widget.PopupMenu(this,button)
-                        for(option in options)menu.menu.add(option).setOnMenuItemClickListener {
-                            currentInputConnection?.commitText(option,1);true
-                        }
-                        menu.show()
                     } else press(label)
+                    popup=false
                     true
                 }
-                MotionEvent.ACTION_CANCEL ->true
-                else->false
+                MotionEvent.ACTION_CANCEL ->{
+                    canceled=true;button.isPressed=false
+                    button.removeCallbacks(open);characterStrip?.dismiss()
+                    popup=false;true
+                }
+                else ->false
             }
         }
-    }
-    private fun alternates(label:String):List<String> {
-        val numeric="qwertyuiop".indexOf(label)
-        val accents=mapOf(
-            "a" to listOf("@","á","à","â","ä"),
-            "e" to listOf("é","è","ê","ë"),
-            "i" to listOf("í","ì","î","ï"),
-            "o" to listOf("ó","ò","ô","ö"),
-            "u" to listOf("ú","ù","û","ü"),
-            "s" to listOf("$","ß"),"d" to listOf("#"),"f" to listOf("%"),
-            "n" to listOf("ñ"),"c" to listOf("ç"),
-            "." to listOf("…"),"," to listOf(";"))
-        val scripts=mapOf(
-            "ا" to listOf("آ","أ","إ"),"ت" to listOf("ٹ","ٿ","ٽ","ٺ"),
-            "د" to listOf("ڈ","ڌ","ڏ","ڊ","ڍ"),"ر" to listOf("ڑ","ڙ"),
-            "ن" to listOf("ں","ڻ"),"ک" to listOf("ڪ"),"ڪ" to listOf("ک"),
-            "ب" to listOf("ٻ","ڀ"),"ج" to listOf("ڄ","جھ","ڃ"),
-            "چ" to listOf("ڇ"),"ف" to listOf("ڦ"),"گ" to listOf("ڳ","گھ"),
-            "و" to listOf("ؤ"),"ہ" to listOf("ھ"),"ه" to listOf("ھ"),
-            "ی" to listOf("ئ","ے"),"ي" to listOf("ئ"))
-        if(numeric>=0 && language==0 && prefs.getBoolean("hints",true)) {
-            val digit=if(numeric==9)"0" else (numeric+1).toString()
-            return listOf(digit)+accents.getOrDefault(label,emptyList())
-        }
-        return if(language==0)accents.getOrDefault(label,emptyList())
-        else scripts.getOrDefault(label,emptyList())
     }
     private fun translateBeforeSend() {
         val input=currentInputConnection ?:return
