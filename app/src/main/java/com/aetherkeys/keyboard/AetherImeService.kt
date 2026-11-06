@@ -341,6 +341,34 @@ class AetherImeService : InputMethodService() {
             }
         }
         panel.addView(handle,LinearLayout.LayoutParams(-1,d(45)).apply{topMargin=d(6)})
+        if(prefs.getBoolean("floating",false)) {
+            val move=chip("✥  DRAG TO MOVE FLOATING KEYBOARD") {}
+            move.contentDescription="Drag to reposition the floating keyboard"
+            var firstX=0f;var firstY=0f
+            var initialX=0;var initialY=0
+            move.setOnTouchListener { _,event ->
+                when(event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        firstX=event.rawX;firstY=event.rawY
+                        initialX=prefs.getInt("floatX",0)
+                        initialY=prefs.getInt("floatY",16)
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx=(event.rawX-firstX).toInt()
+                        val dy=(event.rawY-firstY)/resources.displayMetrics.density
+                        prefs.edit().putInt("floatX",(initialX+dx).coerceIn(-d(75),d(75)))
+                            .putInt("floatY",(initialY-dy.toInt()).coerceIn(0,90)).apply()
+                        applyFloatingLayout()
+                        true
+                    }
+                    MotionEvent.ACTION_UP ->true
+                    MotionEvent.ACTION_CANCEL ->true
+                    else ->false
+                }
+            }
+            panel.addView(move,LinearLayout.LayoutParams(-1,d(42)).apply{topMargin=d(4)})
+        }
         fun adjust(name:String,pref:String,min:Int,max:Int,initial:Int,onUpdate:()->Unit) {
             val caption=TextView(this).apply{
                 text=name+"  ·  "+initial
@@ -382,7 +410,11 @@ class AetherImeService : InputMethodService() {
             resizeOpen=false;draw()
         }
         action("Floating: "+(if(prefs.getBoolean("floating",false))"On" else "Off"),1.3f){
-            prefs.edit().putBoolean("floating",!prefs.getBoolean("floating",false)).apply()
+            val activate=!prefs.getBoolean("floating",false)
+            val e=prefs.edit().putBoolean("floating",activate)
+            if(activate && prefs.getInt("keyboardWidthPercent",100)==100)
+                e.putInt("keyboardWidthPercent",85)
+            e.apply()
             draw()
         }
         action("✓ Done",1f){resizeOpen=false;draw()}
