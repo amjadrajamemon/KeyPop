@@ -267,28 +267,123 @@ class AetherImeService : InputMethodService() {
     private fun applyFloatingLayout() {
         val root=current ?:return
         val shell=floatingShell ?:return
-        val active=prefs.getBoolean("floating",false)
+        val floating=prefs.getBoolean("floating",false)
+        val screenWidth=resources.displayMetrics.widthPixels
+        val percent=prefs.getInt("keyboardWidthPercent",100).coerceIn(65,100)
+        val width=(screenWidth*percent/100f).toInt().coerceAtLeast(d(220))
+            .coerceAtMost(screenWidth)
+        val x=if(floating)prefs.getInt("floatX",0).coerceIn(-d(75),d(75)) else 0
+        val left=((screenWidth-width)/2+x).coerceIn(0,(screenWidth-width).coerceAtLeast(0))
+        val lift=prefs.getInt("bottomLift",0).coerceIn(0,96)
         val params=(root.layoutParams as? FrameLayout.LayoutParams)
             ?:FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM)
-        if(active) {
-            val width=(resources.displayMetrics.widthPixels*.83f).toInt()
-            val offset=prefs.getInt("floatX",0).coerceIn(-d(50),d(50))
-            val left=((resources.displayMetrics.widthPixels-width)/2+offset)
-                .coerceIn(0,resources.displayMetrics.widthPixels-width)
-            params.width=width
-            params.leftMargin=left
-            params.bottomMargin=d(prefs.getInt("floatY",24).coerceIn(8,150))
-            params.gravity=Gravity.BOTTOM or Gravity.LEFT
-            shell.minimumHeight=minOf(d(490),(resources.displayMetrics.heightPixels*.70f).toInt())
-            root.elevation=d(15).toFloat()
-        } else {
-            params.width=-1;params.leftMargin=0;params.bottomMargin=0
-            params.gravity=Gravity.BOTTOM
-            shell.minimumHeight=0
-            root.elevation=0f
-        }
+        params.width=if(percent>=100 && !floating)-1 else width
+        params.leftMargin=if(percent>=100 && !floating)0 else left
+        params.bottomMargin=d(lift+if(floating)prefs.getInt("floatY",16).coerceIn(0,90) else 0)
+        params.gravity=Gravity.BOTTOM or Gravity.LEFT
+        shell.minimumHeight=if(floating)minOf(d(480),
+            (resources.displayMetrics.heightPixels*.7f).toInt()) else 0
+        root.elevation=if(floating)d(14).toFloat() else 0f
         root.layoutParams=params
         shell.requestLayout()
+    }
+    private fun refreshRowHeights() {
+        val height=prefs.getInt("height",51).coerceIn(36,90)
+        renderedRows.forEach { (row,offset)->
+            val px=d((height+offset).coerceAtLeast(30))
+            for(i in 0 until row.childCount) {
+                val v=row.getChildAt(i)
+                if(v !is Button)continue
+                val layout=v.layoutParams
+                if(layout.height!=px) {layout.height=px;v.layoutParams=layout}
+            }
+            row.requestLayout()
+        }
+        current?.requestLayout()
+        floatingShell?.requestLayout()
+    }
+    /** In-place resizing avoids detaching the gesture target during a drag. */
+    private fun showResizePanel(root:LinearLayout) {
+        val skin=palette()
+        val panel=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(d(8),d(8),d(8),d(8))
+            background=gradient(skin.surface,skin.background,12,skin.accent)
+        }
+        val title=TextView(this).apply{
+            text="SIZE & POSITION  ·  Drag the handle or use sliders"
+            textSize=12f;setTextColor(skin.ink)
+        }
+        panel.addView(title)
+        val handle=chip("↕  DRAG TO RESIZE KEY HEIGHT") {}
+        handle.contentDescription="Hold and drag vertically to resize the keyboard"
+        var downY=0f
+        var startHeight=51
+        handle.setOnTouchListener { _,event ->
+            when(event.actionMasked) {
+                MotionEvent.ACTION_DOWN ->{
+                    downY=event.rawY
+                    startHeight=prefs.getInt("height",51).coerceIn(36,90)
+                    true
+                }
+                MotionEvent.ACTION_MOVE ->{
+                    val next=(startHeight+(downY-event.rawY)/resources.displayMetrics.density/3f)
+                        .toInt().coerceIn(36,90)
+                    if(prefs.getInt("height",51)!=next){
+                        prefs.edit().putInt("height",next).apply()
+                        refreshRowHeights()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP ->{draw();true}
+                MotionEvent.ACTION_CANCEL ->true
+                else ->false
+            }
+        }
+        panel.addView(handle,LinearLayout.LayoutParams(-1,d(45)).apply{topMargin=d(6)})
+        fun adjust(name:String,pref:String,min:Int,max:Int,initial:Int,onUpdate:()->Unit) {
+            val caption=TextView(this).apply{
+                text=name+"  ·  "+initial
+                textSize=12f;setTextColor(skin.ink)
+            }
+            panel.addView(caption)
+            panel.addView(SeekBar(this).apply {
+                this.max=max-min
+                progress=(prefs.getInt(pref,initial).coerceIn(min,max)-min)
+                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s:SeekBar?,p:Int,fromUser:Boolean){
+                        if(fromUser){
+                            prefs.edit().putInt(pref,p+min).apply()
+                            caption.text=name+"  ·  "+(p+min)
+                            onUpdate()
+                        }
+                    }
+                    override fun onStartTrackingTouch(s:SeekBar?){}
+                    override fun onStopTrackingTouch(s:SeekBar?){draw()}
+                })
+            })
+        }
+        adjust("Key height (dp)","height",36,90,51){refreshRowHeights()}
+        adjust("Keyboard width (%)","keyboardWidthPercent",65,100,100){applyFloatingLayout()}
+        adjust("Above navigation bar (dp)","bottomLift",0,96,0){applyFloatingLayout()}
+        val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        fun action(label:String,weight:Float,fn:()->Unit){
+            actions.addView(chip(label,onTap=fn),LinearLayout.LayoutParams(0,d(40),weight).apply{
+                rightMargin=d(4)
+            })
+        }
+        action("Reset",1f){
+            prefs.edit().putInt("height",51).putInt("keyboardWidthPercent",100)
+                .putInt("bottomLift",0).putBoolean("floating",false).apply()
+            resizeOpen=false;draw()
+        }
+        action("Floating: "+(if(prefs.getBoolean("floating",false))"On" else "Off"),1.3f){
+            prefs.edit().putBoolean("floating",!prefs.getBoolean("floating",false)).apply()
+            draw()
+        }
+        action("✓ Done",1f){resizeOpen=false;draw()}
+        panel.addView(actions)
+        root.addView(panel)
     }
     private fun updateThemeAnimation() {
         val enabled=prefs.getBoolean("animatedThemes",false) &&
