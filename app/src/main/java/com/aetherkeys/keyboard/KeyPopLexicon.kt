@@ -49,7 +49,7 @@ class KeyPopLexicon(context:Context) {
 
     fun forget(lang:Int,word:String) {
         val current=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
-        store.edit().putStringSet("learned_"+lang,current-value.lowercase(Locale.ROOT)).apply()
+        store.edit().putStringSet("learned_"+lang,current-word.lowercase(Locale.ROOT)).apply()
     }
 
     fun clearLearned(lang:Int) {store.edit().remove("learned_"+lang).apply()}
