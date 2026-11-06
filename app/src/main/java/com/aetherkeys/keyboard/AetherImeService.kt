@@ -1441,14 +1441,15 @@ class AetherImeService : InputMethodService() {
     }
 
     /** Debounce both physical editor updates and KeyPop's own key presses. */
-    private fun scheduleLiveTranslation(waitMs:Long=650L) {
-        if(!translatorOpen || !liveTranslationEnabled ||
+    private fun scheduleLiveTranslation(waitMs:Long=650L,manual:Boolean=false) {
+        if(!translatorOpen || (!liveTranslationEnabled && !manual) ||
             sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo))return
         liveRevision++
         val revision=liveRevision
         liveHandler.removeCallbacksAndMessages(null)
         liveHandler.postDelayed({
-            if(revision!=liveRevision || !translatorOpen || !liveTranslationEnabled)return@postDelayed
+            if(revision!=liveRevision || !translatorOpen ||
+                (!liveTranslationEnabled && !manual))return@postDelayed
             val text=editorTranslationText()
             translateSource=text
             liveSourceView?.text=if(text.isBlank())"Type in the active app…"
@@ -1472,12 +1473,13 @@ class AetherImeService : InputMethodService() {
                 liveResultView?.text=translationStatus
                 return@postDelayed
             }
-            translationStatus=if(googleEasyMode)"Google Cloud translating…"
+            val requestedGoogleMode=googleEasyMode
+            translationStatus=if(requestedGoogleMode)"Google Cloud translating…"
                 else "Translating offline…"
             liveResultView?.text=translationStatus
             val callback:(Result<String>)->Unit={outcome->
-                if(revision==liveRevision && translatorOpen && googleEasyMode ==
-                    (if(googleEasyMode)true else false) && editorTranslationText()==text) {
+                if(revision==liveRevision && translatorOpen &&
+                    googleEasyMode==requestedGoogleMode && editorTranslationText()==text) {
                     outcome.onSuccess{
                         translateResult=it
                         translationStatus=""
@@ -1488,7 +1490,7 @@ class AetherImeService : InputMethodService() {
                     }
                 }
             }
-            if(googleEasyMode)
+            if(requestedGoogleMode)
                 KeyPopCloudTranslation.translate(this,codes[source],codes[translateTarget],text,callback)
             else
                 KeyPopTranslator.translate(this,codes[source],codes[translateTarget],text,
@@ -1618,7 +1620,9 @@ class AetherImeService : InputMethodService() {
                 Toast.makeText(this,"Translation copied",Toast.LENGTH_SHORT).show()
             }
         }
-        action("Refresh"){scheduleLiveTranslation(0)}
+        action(if(liveTranslationEnabled)"Refresh" else "Translate"){
+            scheduleLiveTranslation(0,manual=true)
+        }
         panel.addView(actions)
         if(googleEasyMode && (!KeyPopCloudTranslation.configured(this) ||
             !prefs.getBoolean("googleCloudConsent",false))) {
