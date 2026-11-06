@@ -175,8 +175,8 @@ class KeyPopVoiceActivity:Activity(),RecognitionListener {
         val prefs=getSharedPreferences("keypop",MODE_PRIVATE)
         KeyPopTranslator.translate(codes[source],codes[target],sourceText,
             prefs.getBoolean("remoteTranslate",false),
-            prefs.getString("translateEndpoint","").orEmpty()) { outcome->
-            if(isFinishing||isDestroyed)return@translate
+            prefs.getString("translateEndpoint","").orEmpty()) voiceResult@{ outcome->
+            if(isFinishing||isDestroyed)return@voiceResult
             outcome.onSuccess{
                 translated.setText(it);translatedReady=true
                 status.text="Translation is ready. Review before inserting/sending."

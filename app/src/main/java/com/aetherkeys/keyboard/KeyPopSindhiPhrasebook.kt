@@ -33,7 +33,9 @@ object KeyPopSindhiPhrasebook {
         Phrase("Please wait","مهرباني ڪري ترسو","براہ کرم انتظار کریں"),
         Phrase("Congratulations","مبارڪون","مبارک ہو")
     )
-    private fun cleaned(s:String)=s.lowercase().replace(Regex("[\\s.!؟،]+$"),"")
+    private fun cleaned(s:String)=s.lowercase()
+        .replace(Regex("\\s+([?.!؟۔،])"),"$1")
+        .replace(Regex("[\\s.!?؟۔،]+$"),"")
         .trim().replace(Regex("\\s+")," ")
     fun translate(source:String,target:String,text:String):String? {
         if(source==target)return text
