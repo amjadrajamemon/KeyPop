@@ -1,7 +1,7 @@
 name: KeyPop Android debug APK
 on:
   push:
-    branches: [main, feature/v0.9-material-teal-first-run-model-packs, feature/v0.9.2-sindhi-startup-repair, feature/v0.9.2-forensic-launch-smoke]
+    branches: [main, feature/v0.9-material-teal-first-run-model-packs, feature/v0.9.3-sindhi-startup-repair, feature/v0.9.3-forensic-launch-smoke, feature/v0.9.3-sindhi-onnx-engine]
   pull_request:
   workflow_dispatch:
 
@@ -37,44 +37,44 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v0.9.2-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v0.9.3-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v0.9.2-universal-debug.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v0.9.3-universal-debug.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.2-all-five-apks
+          name: KeyPop-v0.9.3-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.2-ARM64
-          path: dist/KeyPop-v0.9.2-arm64-v8a-debug.apk
+          name: KeyPop-v0.9.3-ARM64
+          path: dist/KeyPop-v0.9.3-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.2-ARM32
-          path: dist/KeyPop-v0.9.2-armeabi-v7a-debug.apk
+          name: KeyPop-v0.9.3-ARM32
+          path: dist/KeyPop-v0.9.3-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.2-x86
-          path: dist/KeyPop-v0.9.2-x86-debug.apk
+          name: KeyPop-v0.9.3-x86
+          path: dist/KeyPop-v0.9.3-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.2-x86_64
-          path: dist/KeyPop-v0.9.2-x86_64-debug.apk
+          name: KeyPop-v0.9.3-x86_64
+          path: dist/KeyPop-v0.9.3-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.2-Universal
-          path: dist/KeyPop-v0.9.2-universal-debug.apk
+          name: KeyPop-v0.9.3-Universal
+          path: dist/KeyPop-v0.9.3-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v0.9.2-x86_64
+          name: KeyPop-v0.9.3-x86_64
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -106,7 +106,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v0.9.2-emulator-forensic-evidence
+          name: KeyPop-v0.9.3-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -114,14 +114,14 @@ jobs:
   publish-preview:
     name: Publish five individually downloadable prerelease APK assets
     needs: [android, emulator-smoke]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/v0.9.2-sindhi-startup-repair' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/v0.9.3-sindhi-startup-repair' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v0.9.2-all-five-apks
+          name: KeyPop-v0.9.3-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -130,7 +130,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v0.9.2-preview"
+          TAG="v0.9.3-preview"
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/*.apk --repo "$GH_REPO" --clobber
           else
@@ -138,6 +138,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v0.9.2 Preview — Android Debug APKs" \
-              --notes "EXPERIMENTAL DEBUG TEST BUILDS. All five variants are separate, direct-download APK assets. Not a security-audited or Play Store-ready release. Do not enter real banking credentials. ARM64 suits most current Android phones; Universal is the widest-compatibility build. Feature parity with Gboard/SwiftKey has NOT been verified. Development source: v0.9.2 startup and Sindhi branch. First-launch language packs require user consent. Speech models depend on an Android provider; real-device parity tests pending."
+              --title "KeyPop v0.9.3 Preview — Android Debug APKs" \
+              --notes "EXPERIMENTAL DEBUG TEST BUILDS. All five variants are separate, direct-download APK assets. Not a security-audited or Play Store-ready release. Do not enter real banking credentials. ARM64 suits most current Android phones; Universal is the widest-compatibility build. Feature parity with Gboard/SwiftKey has NOT been verified. Development source: v0.9.3 startup and Sindhi branch. First-launch language packs require user consent. Speech models depend on an Android provider; real-device parity tests pending."
           fi
