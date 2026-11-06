@@ -16,7 +16,9 @@ import org.json.JSONObject
 object KeyPopDesignProfile {
     private val intOptions=mapOf("theme" to 0..14,"height" to 36..90,
         "round" to 3..40,"spacing" to 1..10,"font" to 12..24,
-        "handMode" to 0..2,"englishLayout" to 0..4)
+        "handMode" to 0..2,"englishLayout" to 0..4,
+        "keyboardPreset" to 0..5,"keyboardWidthPercent" to 65..100,
+        "bottomLift" to 0..96)
     private val boolOptions=setOf("numberRow","hints","haptics","sound",
         "wordDelete","doubleSpace","autoCap","splitKeyboard","floating",
         "spaceCursor","highContrast","animatedThemes")
