@@ -69,7 +69,7 @@ class KeyPopHomeActivity : Activity() {
         scroll.addView(column)
         setContentView(scroll)
 
-        column.addView(text("KEYPOP  ·  v1.0.3 RC4",29f,teal,true))
+        column.addView(text("KEYPOP  ·  v1.0.4 RC5",29f,teal,true))
         column.addView(text("Keyboard Setup",24f,ink,true))
         column.addView(text("English ⇄ اردو  •  سنڌي",17f,muted))
         column.addView(text("To type, enable KeyPop in Android settings and choose it as the active keyboard. Installing an APK does not activate it.",14f,muted))

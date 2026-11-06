@@ -419,6 +419,7 @@ class MainActivity : Activity() {
         translate=card()
         translate.addView(text("TRANSLATION ENGINE",12f,0xFF83CFF4.toInt(),true))
         translate.addView(text("English ⇄ Urdu · English ⇄ Sindhi · Urdu ⇄ Sindhi",14f,ink,true))
+        translate.addView(text("Easy Translate: two engines, six directions. KeyPop works offline once its language packs are installed; Google Cloud is online, paid and requires your own API key.",12f,muted))
         translate.addView(action("Google Translate ↗  Optional external translator") {
             startActivity(Intent(this,KeyPopGoogleTranslateActivity::class.java)
                 .putExtra("target",listOf("en","ur","sd")[prefs.getInt("autoTarget",1).coerceIn(0,2)]))
@@ -434,6 +435,43 @@ class MainActivity : Activity() {
         })
         translate.addView(gap(7))
         translate.addView(text("To translate what you are typing, open ⇄ on the keyboard and tap Translate. KeyPop reads the current selection or text before the cursor. Choose From (automatic or manual) and To. Install the Sindhi offline model packs first. Remote translation is off by default.",12f,muted))
+        translate.addView(gap(7))
+        translate.addView(text("GOOGLE CLOUD · OPTIONAL LIVE ENGINE",12f,accent,true))
+        translate.addView(text("Official Cloud Translation Basic v2 supports all three languages. To activate the in-keyboard Google mode, use your own Google Cloud API key with the Translation API enabled and billing configured. Your typed text is sent to Google only while you choose this mode. Every live request may incur charges.",12f,muted))
+        val googleKey=EditText(this).apply {
+            hint=if(KeyPopCloudTranslation.configured(this@MainActivity))
+                "Google Cloud key already saved · enter to replace" else "Paste your Google Cloud Translation API key"
+            inputType=android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true);setTextColor(ink);setHintTextColor(muted)
+            textSize=13f;background=background(0xFF27324B.toInt(),12,edge)
+            setPadding(d(12),d(8),d(12),d(8))
+        }
+        translate.addView(googleKey,LinearLayout.LayoutParams(-1,d(46)))
+        translate.addView(action("Save Google Cloud API key (encrypted on device)") {
+            runCatching {
+                KeyPopCloudTranslation.saveKey(this,googleKey.text.toString())
+                googleKey.text.clear()
+                googleKey.hint="Google Cloud key saved · enter to replace"
+            }.onSuccess {
+                android.widget.Toast.makeText(this,"Google Cloud credential saved",
+                    android.widget.Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                android.widget.Toast.makeText(this,"Could not save key: "+it.localizedMessage,
+                    android.widget.Toast.LENGTH_LONG).show()
+            }
+        })
+        toggle(translate,"Enable live Google Cloud requests",
+            "Opt in to online transmission of typed text; may incur Google Cloud charges",
+            "googleCloudConsent",false)
+        translate.addView(action("Remove Google Cloud API key") {
+            KeyPopCloudTranslation.clearKey(this)
+            prefs.edit().putBoolean("googleCloudConsent",false).apply()
+            googleKey.text.clear()
+            googleKey.hint="Paste your Google Cloud Translation API key"
+            android.widget.Toast.makeText(this,"Google Cloud credential removed",
+                android.widget.Toast.LENGTH_SHORT).show()
+        })
         toggle(translate,"Auto Translate on Send","Press the keyboard Send key to translate and insert automatically","autoTranslate",false)
         translate.addView(gap(5))
         val targetLabels=listOf("English","اردو","سنڌي")
@@ -569,7 +607,7 @@ class MainActivity : Activity() {
         }
         tryCard.addView(field)
         addCard(root,tryCard)
-        val foot=text("KEYPOP  •  v1.0.3 RC4 PREVIEW\nCheck offline translations before relying on their linguistic accuracy.",11f,muted)
+        val foot=text("KEYPOP  •  v1.0.4 RC5 PREVIEW\nCheck offline translations before relying on their linguistic accuracy.",11f,muted)
         foot.gravity=Gravity.CENTER
         root.addView(foot)
         root.addView(gap(15))

@@ -6,6 +6,8 @@ import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -65,6 +67,12 @@ class AetherImeService : InputMethodService() {
     private var translateResult=""
     private var translationStatus=""
     private var translateTarget=0
+    private var googleEasyMode=false
+    private var liveTranslationEnabled=true
+    private var liveRevision=0L
+    private val liveHandler=Handler(Looper.getMainLooper())
+    private var liveSourceView:TextView?=null
+    private var liveResultView:TextView?=null
     private val codes=listOf("en","ur","sd")
     private var voiceTargetPackage=""
     private var pendingSpeech:String?=null
@@ -181,6 +189,7 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onDestroy() {
+        stopLiveTranslation()
         themeAnimator?.cancel();themeAnimator=null;liveBackground=null
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
         try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
@@ -216,9 +225,11 @@ class AetherImeService : InputMethodService() {
     override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
         super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
         refreshSuggestions()
+        scheduleLiveTranslation()
     }
 
     override fun onFinishInputView(finishingInput:Boolean) {
+        stopLiveTranslation()
         themeAnimator?.pause()
         KeyPopDiagnostics.flush(this)
         super.onFinishInputView(finishingInput)
@@ -227,7 +238,9 @@ class AetherImeService : InputMethodService() {
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
         val viewStart=SystemClock.elapsedRealtimeNanos()
         super.onStartInputView(info,restarting)
+        stopLiveTranslation()
         clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false;writingOpen=false
+        googleEasyMode=false
         toolsOpen=false;resizeOpen=false
         shift=false;capsLock=false
         val pending=pendingSpeech
@@ -562,11 +575,13 @@ class AetherImeService : InputMethodService() {
                     translateSource=editorTranslationText()
                     translateSourceChoice=-1
                     translateResult="";translationStatus=""
+                    googleEasyMode=false
                     val detected=KeyPopTextLanguage.detect(translateSource,language)
                     translateTarget=prefs.getInt("autoTarget",if(detected==2)0 else 2).coerceIn(0,2)
                     if(translateTarget==detected)translateTarget=if(detected==2)0 else 2
                 }
                 draw()
+                if(translatorOpen) scheduleLiveTranslation(80)
             }
             iconAction("◈","Preview theme gallery without changing your active theme"){
                 startActivity(Intent(this,MainActivity::class.java)
@@ -730,11 +745,13 @@ class AetherImeService : InputMethodService() {
                             translateSource=editorTranslationText()
                             translateSourceChoice=-1
                             translateResult="";translationStatus=""
+                            googleEasyMode=false
                             val detected=KeyPopTextLanguage.detect(translateSource,language)
                             translateTarget=prefs.getInt("autoTarget",if(detected==2)0 else 2).coerceIn(0,2)
                             if(translateTarget==detected)translateTarget=if(detected==2)0 else 2
                         }
                         draw()
+                        if(translatorOpen) scheduleLiveTranslation(80)
                     },
                     "🎙 Voice" to {
                         voiceTargetPackage=currentInputEditorInfo?.packageName.orEmpty()
@@ -1326,6 +1343,7 @@ class AetherImeService : InputMethodService() {
                 else refreshSuggestions()
             }
         }
+        scheduleLiveTranslation()
     }
     private fun cycleLanguage() {
         language=(language+1)%3
@@ -1409,143 +1427,205 @@ class AetherImeService : InputMethodService() {
         root.addView(panel)
     }
 
-    /** Source is read at translation time, never from a stale toolbar snapshot. */
+    /** Text belongs to the active editor, not KeyPop's Settings Activity. */
     private fun editorTranslationText():String {
-        val input=currentInputConnection ?:return ""
-        return input.getSelectedText(0)?.toString()?.takeIf{it.isNotBlank()}
-            ?:input.getTextBeforeCursor(2400,0)?.toString().orEmpty()
+        val input=currentInputConnection?:return ""
+        return (input.getSelectedText(0)?.toString()?.takeIf{it.isNotBlank()}
+            ?:input.getTextBeforeCursor(2400,0)?.toString().orEmpty()).takeLast(1200)
+    }
+
+    private fun stopLiveTranslation() {
+        liveRevision++
+        liveHandler.removeCallbacksAndMessages(null)
+        liveSourceView=null;liveResultView=null
+    }
+
+    /** Debounce both physical editor updates and KeyPop's own key presses. */
+    private fun scheduleLiveTranslation(waitMs:Long=650L) {
+        if(!translatorOpen || !liveTranslationEnabled ||
+            sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo))return
+        liveRevision++
+        val revision=liveRevision
+        liveHandler.removeCallbacksAndMessages(null)
+        liveHandler.postDelayed({
+            if(revision!=liveRevision || !translatorOpen || !liveTranslationEnabled)return@postDelayed
+            val text=editorTranslationText()
+            translateSource=text
+            liveSourceView?.text=if(text.isBlank())"Type in the active app…"
+                else text.takeLast(180)
+            translateResult=""
+            if(text.isBlank()) {
+                translationStatus="Translation appears as you type."
+                liveResultView?.text=translationStatus
+                return@postDelayed
+            }
+            val source=if(translateSourceChoice<0)
+                KeyPopTextLanguage.detect(text,language) else translateSourceChoice
+            if(source==translateTarget) {
+                translationStatus="Choose a different target language."
+                liveResultView?.text=translationStatus
+                return@postDelayed
+            }
+            if(googleEasyMode && (!KeyPopCloudTranslation.configured(this) ||
+                !prefs.getBoolean("googleCloudConsent",false))) {
+                translationStatus="Google Cloud requires an API key and consent in Settings."
+                liveResultView?.text=translationStatus
+                return@postDelayed
+            }
+            translationStatus=if(googleEasyMode)"Google Cloud translating…"
+                else "Translating offline…"
+            liveResultView?.text=translationStatus
+            val callback:(Result<String>)->Unit={outcome->
+                if(revision==liveRevision && translatorOpen && googleEasyMode ==
+                    (if(googleEasyMode)true else false) && editorTranslationText()==text) {
+                    outcome.onSuccess{
+                        translateResult=it
+                        translationStatus=""
+                        draw()
+                    }.onFailure{
+                        translationStatus=it.localizedMessage?:"Translation unavailable"
+                        liveResultView?.text=translationStatus
+                    }
+                }
+            }
+            if(googleEasyMode)
+                KeyPopCloudTranslation.translate(this,codes[source],codes[translateTarget],text,callback)
+            else
+                KeyPopTranslator.translate(this,codes[source],codes[translateTarget],text,
+                    false,"",callback)
+        },waitMs)
     }
 
     private fun showTranslator(root:LinearLayout) {
         val style=palette()
-        val panel=LinearLayout(this).apply {
+        val panel=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
-            setPadding(d(8),d(7),d(8),d(5))
+            setPadding(d(9),d(8),d(9),d(7))
             background=gradient(style.surface,style.background,12)
         }
-        val original=TextView(this).apply{
-            textSize=11f;setTextColor(style.ink)
-            setPadding(0,d(2),0,d(4))
+        val title=TextView(this).apply{
+            text="EASY TRANSLATE  ·  LIVE"
+            textSize=11f;setTextColor(style.accent)
         }
-        fun sourceLabel() {
-            val detected=KeyPopTextLanguage.detect(translateSource,language)
-            val selected=if(translateSourceChoice<0)detected else translateSourceChoice
-            original.text="From "+languages[selected]+
-                (if(translateSourceChoice<0)" (auto)" else " (manual)")+" · "+
-                (if(translateSource.isBlank())"Type something in the active app, then tap Translate"
-                 else translateSource.trim().take(170))
-        }
-        sourceLabel()
-        panel.addView(original)
-        val resultView=TextView(this).apply {
-            text=if(translateResult.isBlank())translationStatus else translateResult
-            textSize=13f;setTextColor(style.ink)
-            setPadding(0,d(5),0,d(5))
-        }
+        panel.addView(title)
         val controls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        fun small(label:String,weight:Float=1f,onTap:()->Unit) {
-            controls.addView(chip(label,onTap=onTap).apply{
+        fun small(label:String,weight:Float=1f,onTap:()->Unit){
+            controls.addView(chip(label,onTap=onTap).apply {
                 textSize=11f;maxLines=1
-            },LinearLayout.LayoutParams(0,d(39),weight).apply{rightMargin=d(3)})
+            },LinearLayout.LayoutParams(0,d(38),weight).apply{rightMargin=d(3)})
         }
-        small(if(translateSourceChoice<0)"From: Auto" else "From: "+languages[translateSourceChoice],1.35f){
-            translateSourceChoice=if(translateSourceChoice==2)-1 else translateSourceChoice+1
-            translateResult="";translationStatus="";draw()
+        val detected=KeyPopTextLanguage.detect(translateSource,language)
+        val from=if(translateSourceChoice<0)detected else translateSourceChoice
+        small("From: "+languages[from],1.15f){
+            translateSourceChoice=KeyPopEasyTranslateDirections.nextSource(from,translateTarget)
+            translateResult="";draw();scheduleLiveTranslation(50)
         }
-        small("To: "+languages[translateTarget],1.1f){
-            translateTarget=(translateTarget+1)%3
-            translateResult="";translationStatus="";draw()
+        small("⇄",0.38f){
+            val oldFrom=from
+            translateSourceChoice=translateTarget
+            translateTarget=oldFrom
+            translateResult="";draw();scheduleLiveTranslation(50)
         }
-        small("Translate",1.35f){
-            translateSource=editorTranslationText()
-            translateResult=""
-            sourceLabel()
-            if(translateSource.isBlank()){
-                translationStatus="Type text in the active app first, then tap Translate."
-                resultView.text=translationStatus
-            }else{
-                val from=if(translateSourceChoice<0)
-                    KeyPopTextLanguage.detect(translateSource,language) else translateSourceChoice
-                if(from==translateTarget){
-                    translationStatus="Source and target are the same. Change From or To."
-                    resultView.text=translationStatus
-                }else{
-                    translationStatus="Translating the current typed text…"
-                    resultView.text=translationStatus
-                    val snapshot=translateSource
-                    KeyPopTranslator.translate(this,codes[from],codes[translateTarget],snapshot,
-                        prefs.getBoolean("remoteTranslate",false),
-                        prefs.getString("translateEndpoint","").orEmpty()){outcome->
-                        if(!translatorOpen||snapshot!=translateSource)return@translate
-                        outcome.onSuccess{
-                            translateResult=it;translationStatus="";draw()
-                        }.onFailure{
-                            translationStatus=it.message?:"Translation failed. Check the offline packs."
-                            resultView.text=translationStatus
-                        }
-                    }
-                }
-            }
+        small("To: "+languages[translateTarget],1.15f){
+            translateTarget=KeyPopEasyTranslateDirections.nextTarget(translateTarget,from)
+            translateResult="";draw();scheduleLiveTranslation(50)
         }
-        small("×",.42f){translatorOpen=false;draw()}
+        small("×",0.38f){translatorOpen=false;stopLiveTranslation();draw()}
         panel.addView(controls)
-        panel.addView(chip("Google Translate ↗  (optional, external)") {
-            if(!sensitive(currentInputEditorInfo)){
-                val fresh=editorTranslationText()
-                if(fresh.isBlank()){
-                    translationStatus="Type text in your app first."
-                    resultView.text=translationStatus
-                }else{
-                    startActivity(Intent(this,KeyPopGoogleTranslateActivity::class.java)
-                        .putExtra("text",fresh.take(2400))
-                        .putExtra("source",if(translateSourceChoice<0)"auto" else codes[translateSourceChoice])
-                        .putExtra("target",codes[translateTarget])
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }
-            }
-        },LinearLayout.LayoutParams(-1,d(36)).apply {topMargin=d(5)})
-        panel.addView(resultView)
-        if(translateResult.isNotBlank()){
-            val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-            fun action(label:String,run:()->Unit){
-                actions.addView(chip(label,onTap=run),
-                    LinearLayout.LayoutParams(0,d(38),1f).apply{rightMargin=d(3)})
-            }
-            action("Copy"){
-                clipboard.setPrimaryClip(ClipData.newPlainText("KeyPop translation",translateResult))
-                Toast.makeText(this,"Translation copied",Toast.LENGTH_SHORT).show()
-            }
-            fun insert():Boolean{
-                val input=currentInputConnection?:return false
+        val modes=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        fun mode(label:String,weight:Float=1f,onTap:()->Unit) {
+            modes.addView(chip(label,onTap=onTap).apply{textSize=11f;maxLines=1},
+                LinearLayout.LayoutParams(0,d(34),weight).apply{rightMargin=d(3)})
+        }
+        mode(if(!googleEasyMode)"✓ KeyPop offline" else "KeyPop offline"){
+            googleEasyMode=false;translateResult=""
+            draw();scheduleLiveTranslation(50)
+        }
+        mode(if(googleEasyMode)"✓ Google Cloud" else "Google Cloud"){
+            googleEasyMode=true;translateResult=""
+            draw();scheduleLiveTranslation(50)
+        }
+        mode(if(liveTranslationEnabled)"● Live" else "○ Live",0.7f) {
+            liveTranslationEnabled=!liveTranslationEnabled
+            if(!liveTranslationEnabled)stopLiveTranslation()
+            draw()
+            if(liveTranslationEnabled)scheduleLiveTranslation(60)
+        }
+        panel.addView(modes)
+        val sourceCard=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(d(9),d(7),d(9),d(7))
+            background=gradient(style.background,style.surface,9)
+        }
+        sourceCard.addView(TextView(this).apply{
+            text="SOURCE · "+languages[from]
+            textSize=10f;setTextColor(style.accent)
+        })
+        val inputText=TextView(this).apply {
+            text=if(translateSource.isBlank())"Type in the active app…"
+                else translateSource.takeLast(180)
+            textSize=12f;setTextColor(style.ink);maxLines=3
+        }
+        liveSourceView=inputText
+        sourceCard.addView(inputText)
+        panel.addView(sourceCard)
+        val resultCard=LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL
+            setPadding(d(9),d(7),d(9),d(7))
+            background=gradient(style.surface,style.background,9)
+        }
+        resultCard.addView(TextView(this).apply{
+            text="TRANSLATION · "+languages[translateTarget]
+            textSize=10f;setTextColor(style.accent)
+        })
+        val resultView=TextView(this).apply {
+            text=if(translateResult.isBlank())
+                translationStatus.ifBlank{"Live preview appears here"} else translateResult
+            textSize=13f;setTextColor(style.ink);maxLines=4
+        }
+        liveResultView=resultView
+        resultCard.addView(resultView)
+        panel.addView(resultCard)
+        val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        fun action(label:String,fn:()->Unit) {
+            actions.addView(chip(label,onTap=fn).apply{textSize=11f},
+                LinearLayout.LayoutParams(0,d(36),1f).apply{rightMargin=d(3)})
+        }
+        fun replaceInEditor(replace:Boolean):Boolean {
+            if(translateResult.isBlank())return false
+            val input=currentInputConnection?:return false
+            if(replace) {
                 val selected=input.getSelectedText(0)?.toString()
                 val before=input.getTextBeforeCursor(translateSource.length,0)?.toString()
-                if(selected!=translateSource && before!=translateSource){
-                    translationStatus="Editor text changed. Tap Translate again."
-                    translateResult="";draw()
+                if(selected!=translateSource && before!=translateSource) {
+                    translationStatus="Editor text changed. Recheck live preview."
+                    translateResult="";draw();scheduleLiveTranslation(50)
                     return false
                 }
                 input.beginBatchEdit()
                 if(selected!=translateSource)input.deleteSurroundingText(translateSource.length,0)
-                val inserted=input.commitText(translateResult,1)
+                val ok=input.commitText(translateResult,1)
                 input.endBatchEdit()
-                return inserted
+                return ok
             }
-            action("Replace"){if(insert()){translatorOpen=false;draw()}}
-            action("Send"){
-                if(insert()){
-                    translatorOpen=false;draw()
-                    val editorAction=(currentInputEditorInfo?.imeOptions?:0) and EditorInfo.IME_MASK_ACTION
-                    if(editorAction==EditorInfo.IME_ACTION_SEND)
-                        currentInputConnection?.performEditorAction(editorAction)
-                    else Toast.makeText(this,"Inserted. Tap Send in the app.",Toast.LENGTH_SHORT).show()
-                }
+            return input.commitText(translateResult,1)
+        }
+        action("Insert"){if(replaceInEditor(false)){translatorOpen=false;stopLiveTranslation();draw()}}
+        action("Replace"){if(replaceInEditor(true)){translatorOpen=false;stopLiveTranslation();draw()}}
+        action("Copy"){
+            if(translateResult.isNotBlank()) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("KeyPop translation",translateResult))
+                Toast.makeText(this,"Translation copied",Toast.LENGTH_SHORT).show()
             }
-            action("Share"){
-                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{
-                    type="text/plain";putExtra(Intent.EXTRA_TEXT,translateResult)
-                },"Share translation").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-            panel.addView(actions)
+        }
+        action("Refresh"){scheduleLiveTranslation(0)}
+        panel.addView(actions)
+        if(googleEasyMode && (!KeyPopCloudTranslation.configured(this) ||
+            !prefs.getBoolean("googleCloudConsent",false))) {
+            panel.addView(chip("Set up Google Cloud API key ↗"){
+                startActivity(Intent(this,MainActivity::class.java)
+                    .putExtra("openSection","translation").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },LinearLayout.LayoutParams(-1,d(36)))
         }
         root.addView(panel)
     }

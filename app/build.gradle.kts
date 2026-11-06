@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 19
-        versionName = "1.0.3-rc4-google-translate-option" 
+        versionCode = 20
+        versionName = "1.0.4-rc5-easy-live-translate" 
     }
     splits {
         abi {
