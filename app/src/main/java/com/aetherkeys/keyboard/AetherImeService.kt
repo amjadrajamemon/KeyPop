@@ -198,6 +198,10 @@ class AetherImeService : InputMethodService() {
         val secure=sensitive(currentInputEditorInfo)
         val isNumeric=numeric(currentInputEditorInfo)
         topButton("✦  "+languages[language],1.5f) { cycleLanguage() }
+        if(secure) topButton("Paste",.75f) {
+            val ok=currentInputConnection?.performContextMenuAction(android.R.id.paste) ?: false
+            if(!ok) Toast.makeText(this,"This field does not accept keyboard paste",Toast.LENGTH_SHORT).show()
+        }
         if(!secure) topButton("▤ Clips",1f) { clipsOpen=!clipsOpen;emojiOpen=false;draw() }
         topButton(if(symbols) "ABC" else "?#@",.75f) {
             symbols=!symbols;extended=false;clipsOpen=false;emojiOpen=false;draw()
@@ -411,7 +415,7 @@ class AetherImeService : InputMethodService() {
                 resultView.text=translationStatus
                 KeyPopTranslator.translate(codes[language],codes[translateTarget],translateSource,
                     prefs.getBoolean("remoteTranslate",false),prefs.getString("translateEndpoint","").orEmpty()) { outcome ->
-                    outcome.onSuccess { translateResult=it;resultView.text=it }
+                    outcome.onSuccess { translateResult=it;resultView.text=it;draw() }
                         .onFailure { translationStatus=it.message ?: "Translation unavailable";resultView.text=translationStatus }
                 }
             }
