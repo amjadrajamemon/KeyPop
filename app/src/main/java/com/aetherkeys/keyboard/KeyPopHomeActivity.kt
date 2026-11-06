@@ -1,6 +1,7 @@
 package com.aetherkeys.keyboard
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -94,13 +95,31 @@ class KeyPopHomeActivity : Activity() {
                 cornerRadius=dp(10).toFloat()
             }
         },LinearLayout.LayoutParams(-1,-2))
+        addButton(column,"Install complete offline Sindhi translation · ~978 MB") {
+            startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
+        }
         addButton(column,"Language packs and model status") {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
         }
         addButton(column,"Themes and advanced settings") {
             startActivity(Intent(this,MainActivity::class.java))
         }
-        column.addView(text("Sindhi typing and 30 common phrases are built in. Full offline Sindhi translation is not included: ML Kit does not provide a Sindhi model.",13f,muted))
+        column.addView(text("Offline Sindhi neural models download after your consent. Full sentence translation stays on your phone.",13f,muted))
+        val settings=getSharedPreferences("keypop",MODE_PRIVATE)
+        if(!settings.getBoolean("firstSindhiOfferV100",false)) {
+            settings.edit().putBoolean("firstSindhiOfferV100",true).apply()
+            column.post {
+                if(!isFinishing && !isDestroyed) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Install offline Sindhi translation?")
+                        .setMessage("English, Sindhi, and Urdu translation needs about 978 MB of downloadable models plus free working storage. Choose the one-tap installer now, or install later on Wi-Fi. Android cannot download these automatically during APK installation.")
+                        .setPositiveButton("Language packs") {_,_->
+                            startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
+                        }
+                        .setNegativeButton("Later",null).show()
+                }
+            }
+        }
     }
     override fun onResume() {
         super.onResume()
