@@ -19,11 +19,13 @@ class KeyPopV09MaterialAndModelsTest {
         val normal=KeyboardPresetCatalog.foot(KeyboardPresetCatalog.MATERIAL,false)
         assertEquals("?123",normal.first())
         assertTrue(normal.contains("☺,"))
-        assertTrue(normal.contains(","))
+        assertEquals(6,normal.size)
+        assertFalse("Comma belongs to emoji hold gesture, not a redundant footer key",normal.contains(","))
         assertTrue(normal.contains("🌐"))
         assertTrue(normal.contains("SPACE"))
         assertTrue(normal.contains("."))
-        assertTrue(normal.contains("?"))
+        assertFalse("Question mark belongs to period long-hold popup",normal.contains("?"))
+        assertTrue(KeyPopAlternates.forKey(".",0).contains("?"))
         assertTrue(normal.contains("↵"))
     }
     @Test fun materialSymbolHintsAndLongPressAreDecoupledFromVisualSkin() {
