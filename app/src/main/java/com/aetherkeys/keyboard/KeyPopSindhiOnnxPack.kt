@@ -82,7 +82,18 @@ object KeyPopSindhiOnnxPack {
     private fun fileDownload(bundle:Bundle,destDir:File,name:String,progress:(Long,Long?)->Unit) {
         require(name in bundle.files && name.none{it=='/' || it=='\\'})
         val file=File(destDir,name)
-        if(file.isFile && file.length()>0L)return
+        if(file.isFile && file.length()>0L) {
+            val receipt=File(destDir,name+".integrity")
+            val reusable=runCatching {
+                val data=JSONObject(receipt.readText())
+                data.getString("revision")==bundle.revision &&
+                    data.getString("sha256").equals(sha256(file),ignoreCase=true)
+            }.getOrDefault(false)
+            if(reusable)return
+            // Never accept an untracked or corrupted model file as a completed download.
+            if(!file.delete())error("Cannot remove unverified file "+name)
+            receipt.delete()
+        }
         val part=File(destDir,name+".part")
         var offset=if(part.isFile)part.length() else 0L
         fun connect():HttpURLConnection {
