@@ -30,15 +30,26 @@ object KeyPopSkins {
         KeyPopSkin("Retro Pixel", "Arcade classic", 0xFF161D30.toInt(), 0xFF1E3654.toInt(), 0xFF30536C.toInt(), 0xFFF3DA62.toInt(), 0xFFFFFFFF.toInt(), 4, true),
         KeyPopSkin("Zen Paper", "Quiet minimal", 0xFFF1F1ED.toInt(), 0xFFE5E7E3.toInt(), 0xFFFFFFFF.toInt(), 0xFF3B6F6A.toInt(), 0xFF263534.toInt(), 1),
         KeyPopSkin("AMOLED Infinity", "Pure black", Color.BLACK, 0xFF11111A.toInt(), 0xFF20202D.toInt(), 0xFF9F86FF.toInt(), Color.WHITE, 2, true),
-        KeyPopSkin("Classic Compact", "Familiar minimal", 0xFFDBE0E8.toInt(), 0xFFDBE0E8.toInt(), 0xFFFFFFFF.toInt(), 0xFF377AEF.toInt(), 0xFF1B2535.toInt(), 1),
-        KeyPopSkin("Flow Rounded", "Soft fluid keys", 0xFF17212C.toInt(), 0xFF263646.toInt(), 0xFF394C5C.toInt(), 0xFF76BDFF.toInt(), Color.WHITE, 0),
-        KeyPopSkin("Galaxy Precision", "Clean geometry", 0xFF20242B.toInt(), 0xFF343943.toInt(), 0xFF4D525C.toInt(), 0xFF84C7FF.toInt(), Color.WHITE, 2),
+        KeyPopSkin("Gboard-style · Material Light", "Original familiar compact keys", 0xFFDBE0E8.toInt(), 0xFFDBE0E8.toInt(), 0xFFFFFFFF.toInt(), 0xFF377AEF.toInt(), 0xFF1B2535.toInt(), 1),
+        KeyPopSkin("SwiftKey-style · Flow Dark", "Original rounded utility layout", 0xFF17212C.toInt(), 0xFF263646.toInt(), 0xFF394C5C.toInt(), 0xFF76BDFF.toInt(), Color.WHITE, 0),
+        KeyPopSkin("Samsung-style · One UI", "Original structured key grid", 0xFF20242B.toInt(), 0xFF343943.toInt(), 0xFF4D525C.toInt(), 0xFF84C7FF.toInt(), Color.WHITE, 2),
         KeyPopSkin("Speed Type", "Bold oversized", 0xFF101724.toInt(), 0xFF2B3651.toInt(), 0xFF465479.toInt(), 0xFFFE8E69.toInt(), Color.WHITE, 3),
         KeyPopSkin("Airy Comfort", "Spacious daylight", 0xFFE9EEF5.toInt(), 0xFFCBD5E3.toInt(), 0xFFFFFFFF.toInt(), 0xFF6687CB.toInt(), 0xFF23344E.toInt(), 0)
     )
     fun index(context: Context) = context.getSharedPreferences("keypop", Context.MODE_PRIVATE)
         .getInt("theme", 0).coerceIn(0, all.lastIndex)
-    fun active(context: Context) = all[index(context)]
+    fun active(context: Context): KeyPopSkin {
+        val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+        val original=all[index(context)]
+        val themed=if(prefs.contains("customAccent"))
+            original.copy(accent=prefs.getInt("customAccent",original.accent)) else original
+        if(!prefs.getBoolean("highContrast",false))return themed
+        // Contrast mode improves legibility without changing profile identity.
+        val bg=themed.background
+        val luminance=android.graphics.Color.luminance(bg)
+        val ink=if(luminance>0.45)Color.BLACK else Color.WHITE
+        return themed.copy(ink=ink,outline=true)
+    }
     fun radius(skin: KeyPopSkin, user: Int): Float = when (skin.shape) {
         0 -> user.toFloat() * 1.35f
         1 -> user.toFloat()
@@ -59,12 +70,23 @@ class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
     }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val s = KeyPopSkins.all[selection]
+        val s = if(selection==KeyPopSkins.index(context)) KeyPopSkins.active(context)
+                else KeyPopSkins.all[selection]
         val w = width.toFloat()
         val h = height.toFloat()
-        paint.shader = LinearGradient(0f, 0f, w, h, s.background, s.surface, Shader.TileMode.CLAMP)
-        paint.style = Paint.Style.FILL
-        canvas.drawRoundRect(RectF(0f, 0f, w, h), dp(16f), dp(16f), paint)
+        KeyPopBackdropDrawable(selection,s).apply {
+            if(selection==KeyPopSkins.index(context) &&
+                context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                    .getBoolean("animatedThemes",false) &&
+                android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                phase=(android.os.SystemClock.uptimeMillis()%8000L)/8000f
+            }
+            setBounds(0,0,width,height)
+        }.draw(canvas)
+        if(selection==KeyPopSkins.index(context) && isShown &&
+            context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                .getBoolean("animatedThemes",false))
+            postInvalidateDelayed(100L)
         paint.shader = null
         val topY = dp(10f)
         paint.color = s.accent
@@ -87,7 +109,8 @@ class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
                 val rect = RectF(x, y, x + kw, y + rowHeight - gap)
                 paint.color = s.key
                 paint.style = Paint.Style.FILL
-                canvas.drawRoundRect(rect, dp(KeyPopSkins.radius(s, 9)), dp(KeyPopSkins.radius(s, 9)), paint)
+                val round=KeyPopSkins.radius(s,context.getSharedPreferences("keypop",Context.MODE_PRIVATE).getInt("round",13))
+                canvas.drawRoundRect(rect,dp(round),dp(round),paint)
                 if (s.outline) {
                     paint.color = s.accent
                     paint.strokeWidth = dp(0.7f)
@@ -103,4 +126,111 @@ class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
             }
         }
     }
+}
+
+
+/** Resolution independent illustrated themes. Drawn once when the keyboard is invalidated. */
+class KeyPopBackdropDrawable(private val index:Int,private val skin:KeyPopSkin):
+    android.graphics.drawable.Drawable() {
+    private val p=Paint(Paint.ANTI_ALIAS_FLAG)
+    var phase:Float=0f
+        set(value){field=value.coerceIn(0f,1f);invalidateSelf()}
+    private fun wave():Float=
+        0.5f + kotlin.math.sin(phase.toDouble()*6.283185307179586).toFloat()*0.5f
+    private fun alpha(color:Int,a:Int)=(color and 0x00FFFFFF) or (a.coerceIn(0,255) shl 24)
+    override fun draw(canvas:Canvas) {
+        val rect=bounds
+        val w=rect.width().toFloat();val h=rect.height().toFloat()
+        if(w<=0f||h<=0f)return
+        canvas.save()
+        canvas.translate(rect.left.toFloat(),rect.top.toFloat())
+        p.style=Paint.Style.FILL
+        p.shader=LinearGradient(0f,0f,w,h,skin.background,skin.surface,Shader.TileMode.CLAMP)
+        canvas.drawRect(0f,0f,w,h,p);p.shader=null
+        val accent=skin.accent
+        when(index) {
+            0,9 -> { // Nebula and AMOLED cosmic stars
+                for(i in 0..24) {
+                    val x=((i*97)%101)/101f*w
+                    val y=((i*41+9)%87)/87f*h
+                    p.color=alpha(accent,(if(index==9)45 else 70)+(wave()*40).toInt())
+                    canvas.drawCircle(x,y,if(i%5==0)3.2f else 1.3f,p)
+                }
+                p.style=Paint.Style.STROKE;p.strokeWidth=3f
+                p.color=alpha(accent,125)
+                canvas.drawRoundRect(5f,5f,w-5f,h-5f,20f,20f,p)
+                p.style=Paint.Style.FILL
+            }
+            1,8,14 -> { // translucent frost/paper geometries
+                p.color=alpha(accent,18)
+                for(i in 0..10) {
+                    val x=i*w/10f
+                    canvas.drawRoundRect(x-16f,0f,x+14f,h,7f,7f,p)
+                }
+                p.color=alpha(accent,26)
+                canvas.drawCircle(w*.83f,h*.13f,h*.42f,p)
+            }
+            2,12 -> { // cyber matrix
+                p.style=Paint.Style.STROKE;p.strokeWidth=1f
+                p.color=alpha(accent,if(index==2)65 else 28)
+                val spacing=if(index==2)23f else 15f
+                var x=0f
+                while(x<w){canvas.drawLine(x,0f,x,h,p);x+=spacing}
+                var y=0f
+                while(y<h){canvas.drawLine(0f,y,w,y,p);y+=spacing}
+                p.style=Paint.Style.FILL
+            }
+            3,6 -> { // warm glow / orchid bloom
+                p.shader=android.graphics.RadialGradient(w*.78f,h*.12f,h*.8f,
+                    intArrayOf(alpha(accent,98),alpha(accent,0)),null,Shader.TileMode.CLAMP)
+                canvas.drawRect(0f,0f,w,h,p);p.shader=null
+                p.style=Paint.Style.STROKE;p.color=alpha(accent,65);p.strokeWidth=3f
+                for(i in 0..3) canvas.drawCircle(w*.72f,h*.3f,30f+i*26f,p)
+                p.style=Paint.Style.FILL
+            }
+            4,11 -> { // aurora motion motifs, static and light
+                p.style=Paint.Style.STROKE;p.strokeWidth=4f
+                for(i in 0..3) {
+                    p.color=alpha(accent,20+i*12+(wave()*18).toInt())
+                    val path=android.graphics.Path().apply {
+                        moveTo(-20f,h*(.23f+i*.16f))
+                        cubicTo(w*.32f,h*(.13f+i*.16f),w*.61f,h*(.52f+i*.06f),w+20f,h*(.23f+i*.12f))
+                    }
+                    canvas.drawPath(path,p)
+                }
+                p.style=Paint.Style.FILL
+            }
+            5 -> { // gold precision
+                p.style=Paint.Style.STROKE;p.color=alpha(accent,85);p.strokeWidth=2f
+                canvas.drawRoundRect(6f,6f,w-6f,h-6f,7f,7f,p)
+                canvas.drawLine(w*.78f,5f,w*.95f,h*.22f,p)
+                canvas.drawLine(w*.05f,h*.8f,w*.22f,h-5f,p)
+                p.style=Paint.Style.FILL
+            }
+            7 -> { // retro pixels
+                p.color=alpha(accent,55)
+                for(i in 0..12) for(j in 0..7) {
+                    if((i*3+j*7)%5==0) {
+                        val x=i*w/13f;val y=j*h/8f
+                        canvas.drawRect(x,y,x+7f,y+7f,p)
+                    }
+                }
+            }
+            13 -> { // speed lines
+                p.style=Paint.Style.STROKE;p.strokeWidth=3.5f
+                p.color=alpha(accent,52)
+                for(i in 0..8) {
+                    val x=i*w/8f
+                    canvas.drawLine(x,-5f,x+w*.13f,h+5f,p)
+                }
+                p.style=Paint.Style.FILL
+            }
+            else -> {}
+        }
+        canvas.restore()
+    }
+    override fun setAlpha(alpha:Int){p.alpha=alpha;invalidateSelf()}
+    override fun setColorFilter(filter:android.graphics.ColorFilter?){p.colorFilter=filter;invalidateSelf()}
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity():Int=android.graphics.PixelFormat.TRANSLUCENT
 }
