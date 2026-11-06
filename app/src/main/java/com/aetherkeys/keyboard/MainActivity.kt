@@ -27,6 +27,7 @@ class MainActivity : Activity() {
     private val edge = 0xFF33405C.toInt()
     private val accent = 0xFF8C82FF.toInt()
     private val prefs by lazy { getSharedPreferences("keypop", MODE_PRIVATE) }
+    private val livePreviews=ArrayList<KeyboardPreview>()
     private fun d(v:Int)=(v*resources.displayMetrics.density).toInt()
 
     private fun background(color:Int, radius:Int=18, border:Int?=null): GradientDrawable =
@@ -116,6 +117,7 @@ class MainActivity : Activity() {
         studio.addView(activeLabel)
         studio.addView(gap(8))
         val mainPreview=KeyboardPreview(this,prefs.getInt("theme",0))
+        livePreviews.add(mainPreview)
         studio.addView(mainPreview,LinearLayout.LayoutParams(-1,d(136)))
         studio.addView(gap(10))
         val gallery=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
@@ -124,6 +126,7 @@ class MainActivity : Activity() {
         fun choose(index:Int) {
             prefs.edit().putInt("theme",index).apply()
             mainPreview.selection=index
+            livePreviews.forEach{it.invalidate()}
             activeLabel.text=KeyPopSkins.all[index].name + "  ·  " + KeyPopSkins.all[index].subtitle
             tiles.forEachIndexed { i, tile ->
                 tile.background=background(if(i==index) 0xFF3E416B.toInt() else 0xFF1D2943.toInt(),
@@ -134,7 +137,9 @@ class MainActivity : Activity() {
             val tile=column(8)
             tile.addView(text(if(index<10) "PREMIUM "+(index+1) else "CLASSIC "+(index-9),10f,muted,true))
             tile.addView(text(skin.name,14f,ink,true))
-            tile.addView(KeyboardPreview(this,index),LinearLayout.LayoutParams(-1,d(126)))
+            val tilePreview=KeyboardPreview(this,index)
+            livePreviews.add(tilePreview)
+            tile.addView(tilePreview,LinearLayout.LayoutParams(-1,d(126)))
             tile.addView(text(skin.subtitle,11f,muted))
             tile.setOnClickListener { choose(index) }
             strip.addView(tile,LinearLayout.LayoutParams(d(222),-2).apply { rightMargin=d(10) })
@@ -144,6 +149,30 @@ class MainActivity : Activity() {
         studio.addView(gallery)
         studio.addView(gap(12))
         studio.addView(text("10 original premium skins  ·  5 familiar-style alternatives",11f,muted))
+        studio.addView(gap(12))
+        studio.addView(text("MAKE IT YOURS · KEY LIGHT ACCENT",11f,0xFF83CFF4.toInt(),true))
+        studio.addView(gap(6))
+        val accents=listOf(0xFF8C82FF.toInt(),0xFF00DBF3.toInt(),
+            0xFFFF71D6.toInt(),0xFFB5F980.toInt(),0xFFFFCB69.toInt(),
+            0xFFFF7066.toInt(),0xFF80A8FF.toInt(),0xFFF3F3FB.toInt())
+        val swatches=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
+        for(color in accents) {
+            val swatch=text("●",27f,color,true).apply {
+                gravity=Gravity.CENTER
+                background=background(0xFF27324B.toInt(),12,edge)
+                setOnClickListener {
+                    prefs.edit().putInt("customAccent",color).apply()
+                    livePreviews.forEach{it.invalidate()}
+                }
+            }
+            swatches.addView(swatch,LinearLayout.LayoutParams(0,d(43),1f).apply{rightMargin=d(5)})
+        }
+        studio.addView(swatches)
+        studio.addView(gap(6))
+        studio.addView(action("Reset accent to theme default") {
+            prefs.edit().remove("customAccent").apply()
+            livePreviews.forEach{it.invalidate()}
+        })
         addCard(root,studio)
         choose(prefs.getInt("theme",0).coerceIn(0,14))
 
@@ -305,7 +334,10 @@ class MainActivity : Activity() {
         bar.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s:SeekBar?, p:Int, user:Boolean) {
                 count.text=(p+low).toString()+unit
-                if(user) prefs.edit().putInt(key,p+low).apply()
+                if(user) {
+                    prefs.edit().putInt(key,p+low).apply()
+                    livePreviews.forEach{it.invalidate()}
+                }
             }
             override fun onStartTrackingTouch(s:SeekBar?) {}
             override fun onStopTrackingTouch(s:SeekBar?) {}
