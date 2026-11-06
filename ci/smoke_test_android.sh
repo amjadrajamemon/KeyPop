@@ -44,9 +44,9 @@ echo "[1/6] Install the application and Android instrumentation tests"
 adb install -r "$APK"
 adb install -r "$TEST_APK"
 adb logcat -c
-echo "[2/6] Assert real Android Activity views independent of system-launcher dialogs"
+echo "[2/6] Assert Android Activity views and privacy-safe Google Translate handoff intents"
 adb shell am instrument -w -r \
-  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest \
+  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
   | tee forensic-evidence/instrumentation.txt
 grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/instrumentation.txt
