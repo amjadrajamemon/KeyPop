@@ -124,10 +124,10 @@ class AetherImeService : InputMethodService() {
             try {
                 val clip=clipboard.primaryClip
                 if(clip!=null && clip.itemCount>0 && clip.description.hasMimeType("text/plain")) {
-                    if(Build.VERSION.SDK_INT>=33 &&
-                        clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true)
-                        return@OnPrimaryClipChangedListener
-                    clip.getItemAt(0).text?.toString()?.let { clipStore.save(it) }
+                    val markedSensitive=Build.VERSION.SDK_INT>=33 &&
+                        clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true
+                    if(!markedSensitive)
+                        clip.getItemAt(0).text?.toString()?.let { clipStore.save(it) }
                 }
             } catch (_:Exception) { /* Never break typing on inaccessible clipboard. */ }
         }
