@@ -30,6 +30,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.HorizontalScrollView
 import android.widget.TextView
+import android.widget.SeekBar
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.widget.Toast
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -47,6 +50,10 @@ class AetherImeService : InputMethodService() {
     private var shift=false
     private var symbols=false
     private var clipsOpen=false
+    private var toolsOpen=false
+    private var resizeOpen=false
+    private val renderedRows=ArrayList<Pair<LinearLayout,Int>>()
+    private var navSafeBottomPx=0
     private var translatorOpen=false
     private var writingOpen=false
     private var writingSource=""
@@ -148,6 +155,8 @@ class AetherImeService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         window.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        window.window?.navigationBarColor=0xFF101827.toInt()
+        if(Build.VERSION.SDK_INT>=29)window.window?.isNavigationBarContrastEnforced=true
         val filter=IntentFilter(KeyPopVoiceActivity.RESULT_ACTION)
         androidx.core.content.ContextCompat.registerReceiver(
             this,speechReceiver,filter,androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
@@ -164,11 +173,27 @@ class AetherImeService : InputMethodService() {
 
     override fun onCreateInputView():View {
         language=prefs.getInt("language",0).coerceIn(0,2)
-        floatingShell=FrameLayout(this).apply{setBackgroundColor(Color.TRANSPARENT)}
+        floatingShell=FrameLayout(this).apply{
+            setBackgroundColor(Color.TRANSPARENT)
+            // The navigation bar is a system-owned area. Keep the last key above it.
+            setPadding(0,0,0,d(12))
+        }
         current=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-        floatingShell!!.addView(current,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
+        val shell=floatingShell!!
+        shell.addView(current,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
+        ViewCompat.setOnApplyWindowInsetsListener(shell) { view,insets ->
+            val bottom=insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val safe=bottom.coerceAtLeast(d(12))
+            if(navSafeBottomPx!=safe) {
+                navSafeBottomPx=safe
+                view.setPadding(0,0,0,safe)
+                applyFloatingLayout()
+            }
+            insets
+        }
+        ViewCompat.requestApplyInsets(shell)
         draw()
-        return floatingShell!!
+        return shell
     }
     override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
         super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
@@ -185,6 +210,7 @@ class AetherImeService : InputMethodService() {
         val viewStart=SystemClock.elapsedRealtimeNanos()
         super.onStartInputView(info,restarting)
         clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false;writingOpen=false
+        toolsOpen=false;resizeOpen=false
         shift=false;capsLock=false
         val pending=pendingSpeech
         if(pending!=null && !sensitive(info) && info?.packageName==voiceTargetPackage) {
@@ -293,6 +319,7 @@ class AetherImeService : InputMethodService() {
         val root=current ?: return
         root.removeAllViews()
         keyViews.clear()
+        renderedRows.clear()
         val s=palette()
         val background=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
         liveBackground=background
