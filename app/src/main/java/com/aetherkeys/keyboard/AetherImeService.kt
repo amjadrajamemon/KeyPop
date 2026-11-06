@@ -28,6 +28,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.HorizontalScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.util.Locale
@@ -236,8 +237,9 @@ class AetherImeService : InputMethodService() {
         val top=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
         fun topButton(value:String,weight:Float=1f,callback:()->Unit):Button {
             val control=chip(value,weight,callback)
-            top.addView(control,LinearLayout.LayoutParams(0,d(36),weight).apply {
-                leftMargin=d(2); rightMargin=d(2)
+            val minWidth=if(value.length>8)106 else if(value.length>5)86 else 52
+            top.addView(control,LinearLayout.LayoutParams(d(minWidth),d(36)).apply {
+                leftMargin=d(2);rightMargin=d(2)
             })
             return control
         }
@@ -270,6 +272,12 @@ class AetherImeService : InputMethodService() {
                 startActivity(Intent(this,KeyPopVoiceActivity::class.java)
                     .putExtra("lang",lang).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
+        }
+        if(!secure && !isNumeric) topButton(if(prefs.getBoolean("autoTranslate",false))"AUTO ✓" else "AUTO ⇄",.7f) {
+            val enabled=!prefs.getBoolean("autoTranslate",false)
+            prefs.edit().putBoolean("autoTranslate",enabled).apply()
+            Toast.makeText(this,if(enabled)"Translate on Send enabled" else "Translate on Send disabled",Toast.LENGTH_SHORT).show()
+            draw()
         }
         topButton("↤↦",.65f) { cursorTools=!cursorTools;draw() }
         val floatControl=topButton(if(prefs.getBoolean("floating",false))"⠿" else "▣",.54f) {
@@ -317,7 +325,12 @@ class AetherImeService : InputMethodService() {
         topButton("⚙",.55f) {
             startActivity(Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
-        root.addView(top)
+        val toolbarScroll=HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled=false
+            isFillViewport=false
+            addView(top)
+        }
+        root.addView(toolbarScroll,LinearLayout.LayoutParams(-1,d(40)))
         suggestionBar=null
         if(clipsOpen && !secure) { drawClips(root); return }
         if(translatorOpen && !secure && !isNumeric) showTranslator(root)
@@ -520,6 +533,36 @@ class AetherImeService : InputMethodService() {
         return if(language==0)accents.getOrDefault(label,emptyList())
         else scripts.getOrDefault(label,emptyList())
     }
+    private fun translateBeforeSend() {
+        val input=currentInputConnection ?:return
+        val source=input.getTextBeforeCursor(1500,0)?.toString().orEmpty()
+        if(source.isBlank())return
+        val target=prefs.getInt("autoTarget",0).coerceIn(0,2)
+        val sourceLanguage=codes[language]
+        val targetLanguage=codes[target]
+        Toast.makeText(this,"Translating message…",Toast.LENGTH_SHORT).show()
+        KeyPopTranslator.translate(sourceLanguage,targetLanguage,source,
+            prefs.getBoolean("remoteTranslate",false),prefs.getString("translateEndpoint","").orEmpty()) { result ->
+            result.onSuccess { translated ->
+                val current=currentInputConnection ?:return@onSuccess
+                if(sensitive(currentInputEditorInfo))return@onSuccess
+                val stillCurrent=current.getTextBeforeCursor(source.length,0)?.toString().orEmpty()
+                if(stillCurrent!=source) {
+                    Toast.makeText(this,"Message changed; translation not inserted",Toast.LENGTH_SHORT).show()
+                    return@onSuccess
+                }
+                current.beginBatchEdit()
+                current.deleteSurroundingText(source.length,0)
+                current.commitText(translated,1)
+                current.endBatchEdit()
+                val action=(currentInputEditorInfo?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
+                if(action==EditorInfo.IME_ACTION_SEND) current.performEditorAction(action)
+                else Toast.makeText(this,"Translated and inserted. Tap Send in the app.",Toast.LENGTH_LONG).show()
+            }.onFailure {
+                Toast.makeText(this,it.message ?: "Translation unavailable; original text retained",Toast.LENGTH_LONG).show()
+            }
+        }
+    }
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
         val input=currentInputConnection ?:return
@@ -593,6 +636,11 @@ class AetherImeService : InputMethodService() {
             "?123" -> { symbols=true;draw() }
             "ABC" -> { symbols=false;draw() }
             "↵" -> {
+                if(prefs.getBoolean("autoTranslate",false) &&
+                    !sensitive(currentInputEditorInfo) && !numeric(currentInputEditorInfo)) {
+                    translateBeforeSend()
+                    return
+                }
                 val action=(currentInputEditorInfo?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
                 if(action!=EditorInfo.IME_ACTION_NONE && action!=EditorInfo.IME_ACTION_UNSPECIFIED)
                     currentInputConnection?.performEditorAction(action)
