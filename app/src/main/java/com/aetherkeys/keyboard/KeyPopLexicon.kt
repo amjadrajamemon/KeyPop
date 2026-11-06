@@ -36,7 +36,26 @@ class KeyPopLexicon(context:Context) {
         val base=when(lang){1->urdu;2->sindhi;else->english}
         return base+store.getStringSet("learned_"+lang,emptySet()).orEmpty()
     }
+    fun learned(lang:Int):List<String> =
+        store.getStringSet("learned_"+lang,emptySet()).orEmpty().sorted()
+
+    fun addManual(lang:Int,word:String):Boolean {
+        val value=word.trim().lowercase(Locale.ROOT)
+        if(value.length !in 2..32 || value.any{!it.isLetter()})return false
+        val previous=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+        store.edit().putStringSet("learned_"+lang,(previous+value).take(3000).toSet()).apply()
+        return true
+    }
+
+    fun forget(lang:Int,word:String) {
+        val current=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+        store.edit().putStringSet("learned_"+lang,current-value.lowercase(Locale.ROOT)).apply()
+    }
+
+    fun clearLearned(lang:Int) {store.edit().remove("learned_"+lang).apply()}
+
     fun learn(lang:Int,word:String) {
+        if(!store.getBoolean("learningEnabled",false))return
         val value=word.trim().lowercase(Locale.ROOT)
         if(value.length !in 2..32 || value.any{!it.isLetter()})return
         val old=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
