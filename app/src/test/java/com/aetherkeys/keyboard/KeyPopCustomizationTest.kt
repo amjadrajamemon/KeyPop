@@ -15,6 +15,13 @@ class KeyPopCustomizationTest {
         assertFalse(KeyPopLayouts.validKey(""))
         assertFalse(KeyPopLayouts.validKey("\n"))
         assertFalse(KeyPopLayouts.validKey("abcde"))
+        assertFalse(KeyPopLayouts.validKey("⌫"))
+        assertFalse(KeyPopLayouts.validKey("⇧"))
+        assertFalse(KeyPopLayouts.validKey("↵"))
+        assertFalse(KeyPopLayouts.validKey("🌐"))
+        assertFalse(KeyPopLayouts.validKey("SPACE"))
+        assertTrue(KeyPopLayouts.validKey("ٺ"))
+        assertTrue(KeyPopLayouts.validKey("ڑ"))
     }
     @Test fun searchableEmojiCatalogHasUsefulRange() {
         assertTrue(KeyPopEmoji.entries.size >= 150)
