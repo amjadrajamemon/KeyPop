@@ -241,12 +241,25 @@ class AetherImeService : InputMethodService() {
                 else -> 1f
             }
             val heavy=label in listOf("↵","⇧") || (label=="SPACE" && palette().shape==3)
-            val button=makeKey(show,heavy,weight) { press(label) }
-            val alternate=alternate(label)
-            if(alternate!=null) button.setOnLongClickListener {
+            val superscripts=listOf("¹","²","³","⁴","⁵","⁶","⁷","⁸","⁹","⁰")
+            val hintIndex="qwertyuiop".indexOf(label)
+            val caption=if(!symbols && language==0 && hintIndex>=0 && prefs.getBoolean("hints",true))
+                show+"\n"+superscripts[hintIndex] else show
+            val button=makeKey(caption,heavy,weight) { press(label) }
+            if(label=="⌫" && prefs.getBoolean("wordDelete",true)) button.setOnLongClickListener {
                 tapFeedback(button)
-                currentInputConnection?.commitText(alternate,1)
+                val before=currentInputConnection?.getTextBeforeCursor(200,0)?.toString().orEmpty()
+                val found=Regex("[\\p{L}\\p{N}]+\\s*$").find(before)
+                val count=if(found!=null) before.length-found.range.first else 1
+                currentInputConnection?.deleteSurroundingText(count,0)
                 true
+            } else {
+                val alternate=alternate(label)
+                if(alternate!=null) button.setOnLongClickListener {
+                    tapFeedback(button)
+                    currentInputConnection?.commitText(alternate,1)
+                    true
+                }
             }
             row.addView(button,LinearLayout.LayoutParams(0,d(height),weight).apply {
                 leftMargin=d(gap/2); rightMargin=d(gap/2); topMargin=d(2); bottomMargin=d(2)
@@ -258,12 +271,21 @@ class AetherImeService : InputMethodService() {
         val numeric="qwertyuiop".indexOf(label)
         if(numeric>=0 && prefs.getBoolean("hints",true)) return if(numeric==9) "0" else (numeric+1).toString()
         return mapOf("a" to "@","s" to "$","d" to "#","f" to "%","g" to "&",
-            "n" to "ñ","e" to "é","." to "…","," to ";","⌫" to "").get(label)
+            "n" to "ñ","e" to "é","." to "…","," to ";").get(label)
     }
     private fun press(value:String) {
         when(value) {
-            "⌫" -> currentInputConnection?.deleteSurroundingText(1,0)
-            "⇧" -> { if(language==0) shift=!shift; draw() }
+            "⌫" -> currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
+            "⇧" -> {
+                if(language==0) {
+                    val now=System.currentTimeMillis()
+                    if(now-lastShiftPress<420) { capsLock=!capsLock;shift=capsLock }
+                    else if(capsLock) {capsLock=false;shift=false}
+                    else shift=!shift
+                    lastShiftPress=now
+                }
+                draw()
+            }
             "SPACE" -> currentInputConnection?.commitText(" ",1)
             "🌐" -> cycleLanguage()
             "?123" -> { symbols=true;draw() }
@@ -277,24 +299,33 @@ class AetherImeService : InputMethodService() {
             else -> {
                 currentInputConnection?.commitText(
                     if(shift && language==0) value.uppercase(Locale.ROOT) else value,1)
-                if(shift && language==0) { shift=false;draw() }
+                if(shift && language==0 && !capsLock) { shift=false;draw() }
             }
         }
     }
     private fun cycleLanguage() {
         language=(language+1)%3
         prefs.edit().putInt("language",language).apply()
-        shift=false;symbols=false;clipsOpen=false;draw()
+        shift=false;capsLock=false;symbols=false;clipsOpen=false;emojiOpen=false;draw()
     }
     private fun drawClips(root:LinearLayout) {
         val s=palette()
         val title=TextView(this).apply {
-            text="ENCRYPTED CLIPBOARD  ·  TAP TO PASTE  ·  HOLD TO PIN"
+            text="ENCRYPTED CLIPBOARD  ·  NEWEST FIRST  ·  HOLD TO PIN"
             textSize=10f;setTextColor(s.ink);setPadding(d(9),d(10),0,d(9))
         }
         root.addView(title)
+        val options=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+        options.addView(chip(if(pinnedOnly) "📌 Pinned" else "All clips") {
+            pinnedOnly=!pinnedOnly;draw()
+        },LinearLayout.LayoutParams(0,d(35),1f))
+        options.addView(chip("Search / manage") {
+            startActivity(Intent(this,MainActivity::class.java)
+                .putExtra("openClips",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        },LinearLayout.LayoutParams(0,d(35),1.7f))
+        root.addView(options)
         val items=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-        val listed=clipStore.list()
+        val listed=clipStore.search("",pinnedOnly)
         if(listed.isEmpty()) items.addView(TextView(this).apply {
             text="Nothing copied yet. Your saved text will appear here."
             setTextColor(s.ink);setPadding(d(9),d(20),d(9),d(20))
@@ -309,8 +340,10 @@ class AetherImeService : InputMethodService() {
         root.addView(ScrollView(this).apply { addView(items) },LinearLayout.LayoutParams(-1,d(215)))
         val actions=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
         val back=makeKey("←  Keyboard") { clipsOpen=false;draw() }
-        val erase=makeKey("Hold to clear") { Toast.makeText(this,"Hold to clear all history",Toast.LENGTH_SHORT).show() }
-        erase.setOnLongClickListener { clipStore.clear();draw();true }
+        val erase=makeKey("Hold: clear unpinned") {
+            Toast.makeText(this,"Hold to remove unpinned clips",Toast.LENGTH_SHORT).show()
+        }
+        erase.setOnLongClickListener { clipStore.clearUnpinned();draw();true }
         actions.addView(back,LinearLayout.LayoutParams(0,d(43),1f).apply{rightMargin=d(4)})
         actions.addView(erase,LinearLayout.LayoutParams(0,d(43),1f).apply{leftMargin=d(4)})
         root.addView(actions)
