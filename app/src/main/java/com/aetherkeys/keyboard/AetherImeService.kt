@@ -431,12 +431,15 @@ class AetherImeService : InputMethodService() {
             addRow(root, listOf("1","2","3","4","5","6","7","8","9","0"),keyHeight-10)
         rows.forEachIndexed { i, row ->
             val keys=if(i==rows.lastIndex && !symbols && !isNumeric) listOf("⇧")+row+listOf("⌫") else row
-            addRow(root,keys,keyHeight)
+            val customRow=if(!isNumeric && !symbols && !extended && !emojiSearch)i else -1
+            val customLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
+            addRow(root,keys,keyHeight,layoutRow=customRow,layoutLanguage=customLanguage)
         }
         if(isNumeric) addRow(root,listOf("-","@","↵"),keyHeight, true)
         else addRow(root,listOf(if(symbols) "ABC" else "?123", "🌐", ",","SPACE",".","↵","⌫"),keyHeight, true)
     }
-    private fun addRow(parent:LinearLayout,labels:List<String>,height:Int,footer:Boolean=false) {
+    private fun addRow(parent:LinearLayout,labels:List<String>,height:Int,footer:Boolean=false,
+                       layoutRow:Int=-1,layoutLanguage:Int=language) {
         val row=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER }
         val gap=prefs.getInt("spacing",4).coerceIn(1,10)
         when(prefs.getInt("handMode",0)) {
@@ -505,7 +508,11 @@ class AetherImeService : InputMethodService() {
                 prefs.getBoolean("glide",false) && label.length==1 && label[0].isLetter()) {
                 installGlide(button,label)
             }
-            row.addView(button,LinearLayout.LayoutParams(0,d(height),weight).apply {
+            val indexInLayout=if(layoutRow==2 && label !in setOf("⇧","⌫"))index-1
+                else if(label in setOf("⇧","⌫"))-1 else index
+            val widthFactor=if(layoutRow>=0 && indexInLayout>=0)
+                KeyPopKeyGeometry.width(this,layoutLanguage,layoutRow,indexInLayout)/100f else 1f
+            row.addView(button,LinearLayout.LayoutParams(0,d(height),weight*widthFactor).apply {
                 leftMargin=d(gap/2); rightMargin=d(gap/2); topMargin=d(2); bottomMargin=d(2)
             })
         }

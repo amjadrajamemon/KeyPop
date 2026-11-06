@@ -30,6 +30,7 @@ object KeyPopDesignProfile {
             val v=p.getString("customLayout_"+i,null)
             if(v!=null)settings.put("customLayout_"+i,JSONArray(v))
         }
+        KeyPopKeyGeometry.keys(context).forEach{(k,v)->settings.put(k,v)}
         return JSONObject().put("format","KeyPopDesign").put("version",1)
             .put("appearance",settings).toString(2)
     }
@@ -52,6 +53,10 @@ object KeyPopDesignProfile {
                 }
                 k=="customAccent"->{
                     require(v is Int){"Invalid accent"}
+                    result[k]=v
+                }
+                k.matches(Regex("keyWidth_[012]_[012]_[0-9]"))->{
+                    require(v is Int && v in 65..175){"Invalid key width"}
                     result[k]=v
                 }
                 k.startsWith("customLayout_") && k in (0..2).map{"customLayout_"+it}->{

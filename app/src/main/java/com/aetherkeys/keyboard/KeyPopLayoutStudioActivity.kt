@@ -78,9 +78,26 @@ class KeyPopLayoutStudioActivity:Activity() {
         }
         val label=chosen?.let {
             "Selected: "+KeyPopLayouts.active(this,lang)[it.first][it.second]+
-                " · tap another key to swap"
-        }?:"Tap a key, then another to swap them. Hold a key to edit its character."
+                " · width "+KeyPopKeyGeometry.width(this,lang,it.first,it.second)+
+                "% · tap another key to swap"
+        }?:"Tap a key to select, then another to swap. Hold to edit a character."
         add(text(label,13f,dim),12)
+        val sizeControls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        sizeControls.addView(b("− Narrower") {
+            chosen?.let { (r,c)->
+                val old=KeyPopKeyGeometry.width(this,lang,r,c)
+                KeyPopKeyGeometry.setWidth(this,lang,r,c,(old-10).coerceAtLeast(65))
+                render()
+            }
+        },LinearLayout.LayoutParams(0,dp(42),1f).apply{rightMargin=dp(5)})
+        sizeControls.addView(b("＋ Wider") {
+            chosen?.let { (r,c)->
+                val old=KeyPopKeyGeometry.width(this,lang,r,c)
+                KeyPopKeyGeometry.setWidth(this,lang,r,c,(old+10).coerceAtMost(175))
+                render()
+            }
+        },LinearLayout.LayoutParams(0,dp(42),1f))
+        add(sizeControls,12)
         val board=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL;setPadding(dp(5),dp(12),dp(5),dp(10))
             background=bg(0xFF18213B.toInt(),18,0xFF394968.toInt())
@@ -102,7 +119,8 @@ class KeyPopLayoutStudioActivity:Activity() {
                         ". Long press to edit."
                     setOnLongClickListener{edit(r,c,key);true}
                 }
-                row.addView(tile,LinearLayout.LayoutParams(0,dp(52),1f).apply{
+                val weight=KeyPopKeyGeometry.width(this,lang,r,c)/100f
+                row.addView(tile,LinearLayout.LayoutParams(0,dp(52),weight).apply{
                     leftMargin=dp(1);rightMargin=dp(1);bottomMargin=dp(4)
                 })
             }
@@ -120,11 +138,13 @@ class KeyPopLayoutStudioActivity:Activity() {
             AlertDialog.Builder(this).setTitle("Reset custom layout?")
                 .setMessage("Restore original characters for "+KeyPopLayouts.languages[lang]+"?")
                 .setNegativeButton("Cancel",null)
-                .setPositiveButton("Reset"){_,_->KeyPopLayouts.reset(this,lang);chosen=null;render()}
+                .setPositiveButton("Reset"){_,_->KeyPopLayouts.reset(this,lang)
+                    KeyPopKeyGeometry.reset(this,lang)
+                    chosen=null;render()}
                 .show()
         },LinearLayout.LayoutParams(0,dp(46),1f))
         add(row,13)
-        add(text("Special function keys remain fixed, protecting Space, Shift, Backspace and Enter. Changes appear when the keyboard next opens.",12f,dim),16)
+        add(text("Select a key and use Wider/Narrower to adjust its touch width, or hold it to edit its symbol. Special function keys stay protected.",12f,dim),16)
         add(b("Done"){finish()})
     }
     private fun edit(r:Int,c:Int,old:String) {
