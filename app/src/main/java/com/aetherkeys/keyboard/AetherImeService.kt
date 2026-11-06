@@ -1076,7 +1076,7 @@ class AetherImeService : InputMethodService() {
             return
         }
         Toast.makeText(this,"Translating message…",Toast.LENGTH_SHORT).show()
-        KeyPopTranslator.translate(sourceLanguage,targetLanguage,source,
+        KeyPopTranslator.translate(this,sourceLanguage,targetLanguage,source,
             prefs.getBoolean("remoteTranslate",false),prefs.getString("translateEndpoint","").orEmpty()) { result ->
             result.onSuccess { translated ->
                 val current=currentInputConnection ?:return@onSuccess
@@ -1435,7 +1435,7 @@ class AetherImeService : InputMethodService() {
             } else {
                 translationStatus="Translating… (first use may download a language model)"
                 resultView.text=translationStatus
-                KeyPopTranslator.translate(codes[language],codes[translateTarget],translateSource,
+                KeyPopTranslator.translate(this,codes[language],codes[translateTarget],translateSource,
                     prefs.getBoolean("remoteTranslate",false),prefs.getString("translateEndpoint","").orEmpty()) { outcome ->
                     outcome.onSuccess { translateResult=it;resultView.text=it;draw() }
                         .onFailure { translationStatus=it.message ?: "Translation unavailable";resultView.text=translationStatus }
