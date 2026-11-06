@@ -99,6 +99,16 @@ class KeyPopModelManagerActivity:Activity() {
         button("Experimental: prepare Sindhi → English model files (about 270 MB)") {
             confirmSindhi(KeyPopSindhiOnnxPack.sindhiToEnglish)
         }
+        button("Test downloaded English → Sindhi ONNX encoder") {
+            KeyPopSindhiOnnxProbe.inspect(this,KeyPopSindhiOnnxPack.englishToSindhi) { result->
+                if(!isFinishing&&!isDestroyed)status.text=result.message
+            }
+        }
+        button("Test downloaded Sindhi → English ONNX encoder") {
+            KeyPopSindhiOnnxProbe.inspect(this,KeyPopSindhiOnnxPack.sindhiToEnglish) { result->
+                if(!isFinishing&&!isDestroyed)status.text=result.message
+            }
+        }
         button("Delete experimental Sindhi model files") {
             AlertDialog.Builder(this)
                 .setTitle("Remove downloaded ONNX files?")
