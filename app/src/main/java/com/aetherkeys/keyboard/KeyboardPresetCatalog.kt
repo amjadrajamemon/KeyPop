@@ -23,11 +23,11 @@ object KeyboardPresetCatalog {
     val all=listOf(
         KeyboardErgonomics(0,"KeyPop Custom","Keep your own settings and design","Original KeyPop",
             0,51,4,13,17,true,true),
-        KeyboardErgonomics(1,"Material Familiar","Compact shortcut bar, rounded keys and balanced spacing",
+        KeyboardErgonomics(1,"Gboard-style · Material","Compact toolbar, Google-like key proportions and familiar suggestions",
             "Gboard-inspired",10,49,4,16,17,false,true),
-        KeyboardErgonomics(2,"Swift Flow","Large rounded keys, roomy spacebar and suggestions",
+        KeyboardErgonomics(2,"SwiftKey-style · Flow","Roomier punctuation keys, round edges and suggestion-first layout",
             "Microsoft SwiftKey-inspired",11,56,3,19,18,false,true),
-        KeyboardErgonomics(3,"One UI Grid","Integrated number row and disciplined square key grid",
+        KeyboardErgonomics(3,"Samsung-style · One UI","Structured key grid, dedicated number row and utility row",
             "Samsung Keyboard-inspired",12,52,3,7,17,true,true),
         KeyboardErgonomics(4,"Gesture Minimal","Larger letter targets and simplified bottom row",
             "Fleksy-inspired",13,61,5,11,19,false,false),
@@ -55,12 +55,12 @@ object KeyboardPresetCatalog {
         return editor.commit()
     }
     fun foot(id:Int, symbols:Boolean):List<String> {
-        if(symbols)return listOf("ABC","🌐",",","SPACE",".","↵","⌫")
+        if(symbols)return listOf("ABC","🌐",",","SPACE",".","?","↵","⌫")
         return when(id){
-            GESTURE ->listOf("?123","🌐","SPACE","↵","⌫")
-            FACETED ->listOf("?123","🌐",",","SPACE","↵","⌫")
-            ONE_UI ->listOf("?123",",","🌐","SPACE",".","↵","⌫")
-            else ->listOf("?123","🌐",",","SPACE",".","↵","⌫")
+            GESTURE ->listOf("?123",",","🌐","SPACE",".","?","↵","⌫")
+            FACETED ->listOf("?123","🌐",",","SPACE",".","?","↵","⌫")
+            ONE_UI ->listOf("?123",",","🌐","SPACE",".","?","↵","⌫")
+            else ->listOf("?123","🌐",",","SPACE",".","?","↵","⌫")
         }
     }
     fun keyWeight(id:Int,label:String):Float = when(label){
