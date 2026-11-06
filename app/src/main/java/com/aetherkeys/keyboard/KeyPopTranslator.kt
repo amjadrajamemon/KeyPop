@@ -3,7 +3,6 @@ package com.aetherkeys.keyboard
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
@@ -45,12 +44,24 @@ object KeyPopTranslator {
             !KeyPopOfflineSindhiEngine.supports(source,target)) {
             val engine=Translation.getClient(TranslatorOptions.Builder()
                 .setSourceLanguage(from).setTargetLanguage(to).build())
-            engine.downloadModelIfNeeded(DownloadConditions.Builder().build())
-                .addOnSuccessListener {
-                    engine.translate(text).addOnSuccessListener { result ->
-                        engine.close();done(Result.success(result))
-                    }.addOnFailureListener { error ->engine.close();done(Result.failure(error)) }
-                }.addOnFailureListener { error ->engine.close();done(Result.failure(error)) }
+            // Installed models must translate immediately in airplane mode.
+            // Calling downloadModelIfNeeded() on every request can defer the
+            // completion callback while waiting for connectivity, despite
+            // both language packs already being installed. The language-pack
+            // manager owns explicit model downloads and consent.
+            engine.translate(text)
+                .addOnSuccessListener { result ->
+                    engine.close()
+                    done(Result.success(result))
+                }.addOnFailureListener { error ->
+                    engine.close()
+                    val explanation=if(error is com.google.mlkit.common.MlKitException &&
+                        error.errorCode==com.google.mlkit.common.MlKitException.NOT_FOUND)
+                        IllegalStateException("Offline model missing for "+source+" → "+target+
+                            ". Open KeyPop → Language Packs and install English + Urdu.",error)
+                    else error
+                    done(Result.failure(explanation))
+                }
             return
         }
         if(!remoteEnabled || !endpoint.startsWith("https://")) {
