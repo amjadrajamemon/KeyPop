@@ -404,9 +404,10 @@ class AetherImeService : InputMethodService() {
         root.addView(title,LinearLayout.LayoutParams(-1,d(25)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
-            else if(emojiSearch || (language!=0 && prefs.getBoolean("romanMode",false)))
-                KeyPopLayouts.active(this,0)
+            else if(emojiSearch)KeyPopLayouts.active(this,0)
             else if(symbols) { if(extended) extraSymbols else symbolRows }
+            else if(language!=0 && prefs.getBoolean("romanMode",false))
+                KeyPopLayouts.active(this,0)
             else if(extended && language==1)urduExtended
             else if(extended && language==2)sindhiExtended
             else KeyPopLayouts.active(this,language)
