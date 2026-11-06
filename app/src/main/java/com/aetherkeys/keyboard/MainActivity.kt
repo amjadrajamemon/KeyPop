@@ -71,7 +71,7 @@ class MainActivity : Activity() {
         window.statusBarColor=0xFF0A1124.toInt()
         window.navigationBarColor=0xFF0A1124.toInt()
         val shell=ScrollView(this).apply {
-            fillViewport=true
+            isFillViewport=true
             setBackgroundColor(0xFF0A1124.toInt())
             isVerticalScrollBarEnabled=false
         }
