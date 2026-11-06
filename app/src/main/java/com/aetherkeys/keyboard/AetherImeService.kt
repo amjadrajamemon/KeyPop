@@ -420,9 +420,9 @@ class AetherImeService : InputMethodService() {
         keyViews.clear()
         renderedRows.clear()
         val s=palette()
-        val background=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
-        liveBackground=background
-        root.background=background
+        val keyboardBackdrop=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
+        liveBackground=keyboardBackdrop
+        root.background=keyboardBackdrop
         updateThemeAnimation()
         root.setPadding(d(3),d(5),d(3),d(6))
         applyFloatingLayout()
