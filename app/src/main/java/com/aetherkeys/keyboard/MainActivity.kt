@@ -200,6 +200,15 @@ class MainActivity : Activity() {
         controls.addView(text("KEYBOARD CUSTOMIZER",12f,0xFF83CFF4.toInt(),true))
         controls.addView(gap(4))
         controls.addView(text("Fine-tune every key",22f,ink,true))
+        controls.addView(gap(9))
+        controls.addView(action("✎ Layout Lab — move, swap and remap keys",true) {
+            startActivity(Intent(this,KeyPopLayoutStudioActivity::class.java))
+        })
+        controls.addView(gap(7))
+        controls.addView(action("✦ Personal Dictionary — add and manage words") {
+            startActivity(Intent(this,KeyPopDictionaryActivity::class.java))
+        })
+        controls.addView(gap(8))
         controls.addView(text("Adjust live keyboard behavior. Changes apply the next time the keyboard is opened or refreshed.",12f,muted))
         controls.addView(gap(12))
         slider(controls,"Key height", "height", 36,90,51,"dp")
@@ -207,6 +216,7 @@ class MainActivity : Activity() {
         slider(controls,"Key spacing", "spacing", 1,10,4,"dp")
         slider(controls,"Key label size", "font", 12,24,17,"sp")
         toggle(controls,"Always show number row","Quick access to 0–9 above the letters","numberRow",true)
+        toggle(controls,"Roman Urdu / Sindhi typing","Use English letters; convert common words into native script on Space","romanMode",false)
         toggle(controls,"Predictive word suggestions","Local suggestions learn words only outside sensitive fields","suggestions",true)
         toggle(controls,"Autocorrection","Optional basic autocorrect based on the local dictionary","autoCorrect",false)
         toggle(controls,"Double-space punctuation","Two spaces insert a period and one space","doubleSpace",true)
@@ -357,7 +367,7 @@ class MainActivity : Activity() {
         }
         tryCard.addView(field)
         addCard(root,tryCard)
-        val foot=text("KEYPOP  •  ANDROID TEST CANDIDATE  •  v0.3.0\nFeature parity requires benchmark and device validation.",11f,muted)
+        val foot=text("KEYPOP  •  PERSONALIZATION ALPHA  •  v0.4.0\nBenchmarks and device validation remain required for parity.",11f,muted)
         foot.gravity=Gravity.CENTER
         root.addView(foot)
         root.addView(gap(15))
