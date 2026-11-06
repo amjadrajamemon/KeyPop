@@ -304,6 +304,30 @@ class AetherImeService : InputMethodService() {
         current?.requestLayout()
         floatingShell?.requestLayout()
     }
+    /** In-place key styling updates while the slider remains attached to its view. */
+    private fun refreshKeyAppearance() {
+        val skin=palette()
+        val radius=KeyPopSkins.radius(skin,prefs.getInt("round",13)).toInt().coerceIn(1,40)
+        val font=prefs.getInt("font",17).coerceIn(12,24).toFloat()
+        val space=d(prefs.getInt("spacing",4).coerceIn(1,10)/2)
+        keyViews.forEach { (key,label)->
+            val heavy=label=="↵" || label=="⇧" ||
+                (label=="SPACE" && skin.shape==3)
+            val bg=if(heavy) gradient(skin.accent,skin.surface,radius,skin.accent)
+                else gradient(skin.key,skin.surface,radius,
+                    if(skin.outline)skin.accent else null)
+            key.background=android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(
+                    (skin.accent and 0x00FFFFFF) or (0x55 shl 24)),bg,null)
+            key.textSize=if(key.text.toString().length>3)12f else font
+            val layout=key.layoutParams as? LinearLayout.LayoutParams
+            if(layout!=null) {
+                layout.leftMargin=space;layout.rightMargin=space
+                key.layoutParams=layout
+            }
+        }
+        current?.requestLayout()
+    }
     /** In-place resizing avoids detaching the gesture target during a drag. */
     private fun showResizePanel(root:LinearLayout) {
         val skin=palette()
@@ -395,7 +419,18 @@ class AetherImeService : InputMethodService() {
         }
         adjust("Key height (dp)","height",36,90,51){refreshRowHeights()}
         adjust("Keyboard width (%)","keyboardWidthPercent",65,100,100){applyFloatingLayout()}
+        adjust("Key spacing (dp)","spacing",1,10,4){refreshKeyAppearance()}
+        adjust("Key label size (sp)","font",12,24,17){refreshKeyAppearance()}
+        adjust("Key corners (dp)","round",3,40,13){refreshKeyAppearance()}
         adjust("Above navigation bar (dp)","bottomLift",0,96,0){applyFloatingLayout()}
+        val numberSwitch=chip(if(prefs.getBoolean("numberRow",true))
+            "1 2 3  ·  Number row: ON  (tap to hide)"
+            else "1 2 3  ·  Number row: OFF  (tap to show)") {
+            prefs.edit().putBoolean("numberRow",!prefs.getBoolean("numberRow",true)).apply()
+            draw()
+        }
+        numberSwitch.contentDescription="Toggle dedicated number row"
+        panel.addView(numberSwitch,LinearLayout.LayoutParams(-1,d(42)))
         if(prefs.getBoolean("floating",false)){
             adjust("Floating left/right","floatX",-d(75),d(75),0){applyFloatingLayout()}
             adjust("Floating lift (dp)","floatY",0,90,16){applyFloatingLayout()}
@@ -408,7 +443,9 @@ class AetherImeService : InputMethodService() {
         }
         action("Reset",1f){
             prefs.edit().putInt("height",51).putInt("keyboardWidthPercent",100)
-                .putInt("bottomLift",0).putBoolean("floating",false).apply()
+                .putInt("bottomLift",0).putInt("spacing",4).putInt("font",17)
+                .putInt("round",13).putBoolean("numberRow",true)
+                .putBoolean("floating",false).apply()
             resizeOpen=false;draw()
         }
         action("Floating: "+(if(prefs.getBoolean("floating",false))"On" else "Off"),1.3f){
