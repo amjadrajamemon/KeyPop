@@ -162,7 +162,89 @@ class MainActivity : Activity() {
         toggle(controls,"Haptic feedback","Small vibration when a key is pressed","haptics",false)
         toggle(controls,"Keyboard sound","Subtle key click sound","sound",false)
         toggle(controls,"Clipboard history","Encrypted local text history; clear it on demand","history",true)
+        toggle(controls,"Long-press Backspace deletes a word","Hold delete to remove the preceding word","wordDelete",true)
         addCard(root,controls)
+
+        val translate=card()
+        translate.addView(text("TRANSLATION ENGINE",12f,0xFF83CFF4.toInt(),true))
+        translate.addView(gap(6))
+        translate.addView(text("Write, translate, send",21f,ink,true))
+        translate.addView(text("English ↔ Urdu uses downloaded on-device translation models. Sindhi requires your own HTTPS provider; nothing is sent remotely until you enable it and initiate translation.",12f,muted))
+        toggle(translate,"Allow remote Sindhi translation","Off by default; the configured provider receives messages you submit","remoteTranslate",false)
+        val endpoint=EditText(this).apply {
+            hint="Optional HTTPS translation endpoint"
+            inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true);setTextColor(ink);setHintTextColor(muted);textSize=13f
+            background=background(0xFF27324B.toInt(),12,edge)
+            setPadding(d(12),d(8),d(12),d(8))
+            setText(prefs.getString("translateEndpoint","").orEmpty())
+        }
+        translate.addView(endpoint,LinearLayout.LayoutParams(-1,d(46)))
+        translate.addView(gap(8))
+        translate.addView(action("Save translation provider") {
+            val value=endpoint.text.toString().trim()
+            if(value.isEmpty() || value.startsWith("https://")) {
+                prefs.edit().putString("translateEndpoint",value).apply()
+                android.widget.Toast.makeText(this,"Provider saved",android.widget.Toast.LENGTH_SHORT).show()
+            } else android.widget.Toast.makeText(this,"HTTPS is required",android.widget.Toast.LENGTH_SHORT).show()
+        })
+        addCard(root,translate)
+
+        val clipsCard=card()
+        clipsCard.addView(text("CLIPBOARD STUDIO",12f,0xFF83CFF4.toInt(),true))
+        clipsCard.addView(gap(4))
+        clipsCard.addView(text("Search, pin and manage clips",21f,ink,true))
+        clipsCard.addView(text("Text is encrypted locally and remains until removed. Password-field clipboard collection is disabled.",12f,muted))
+        clipsCard.addView(gap(10))
+        val search=EditText(this).apply {
+            hint="Search saved text…";setSingleLine(true)
+            setTextColor(ink);setHintTextColor(muted);textSize=15f
+            background=background(0xFF27324B.toInt(),12,edge)
+            setPadding(d(12),d(9),d(12),d(9))
+        }
+        clipsCard.addView(search)
+        clipsCard.addView(gap(8))
+        val results=column()
+        clipsCard.addView(results)
+        val clipStore=ClipStore(this)
+        fun renderClips() {
+            results.removeAllViews()
+            val items=clipStore.search(search.text.toString())
+            results.addView(text("Saved clips: "+items.size+"  ·  newest first",11f,muted))
+            items.take(40).forEach { item ->
+                val line=column(8).apply { background=background(0xFF25314C.toInt(),12,edge) }
+                line.addView(text((if(item.pinned) "📌  " else "")+item.text.take(180),13f,ink))
+                val actions=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+                actions.addView(action(if(item.pinned) "Unpin" else "Pin") {
+                    clipStore.pin(item.text,!item.pinned);renderClips()
+                },LinearLayout.LayoutParams(0,d(38),1f).apply{rightMargin=d(5)})
+                actions.addView(action("Delete") {
+                    clipStore.delete(item.text);renderClips()
+                },LinearLayout.LayoutParams(0,d(38),1f))
+                line.addView(actions)
+                results.addView(line,LinearLayout.LayoutParams(-1,-2).apply{topMargin=d(7)})
+            }
+        }
+        search.addTextChangedListener(object:android.text.TextWatcher {
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){renderClips()}
+            override fun afterTextChanged(s:android.text.Editable?){}
+        })
+        clipsCard.addView(gap(8))
+        clipsCard.addView(action("Remove all unpinned clips") {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Clear unpinned clipboard?")
+                .setMessage("Pinned clips will stay saved. Deleted clips cannot be restored.")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Delete") { _,_ -> clipStore.clearUnpinned();renderClips() }
+                .show()
+        })
+        addCard(root,clipsCard)
+        renderClips()
+        if(intent.getBooleanExtra("openClips",false)) shell.post {
+            shell.smoothScrollTo(0,clipsCard.top)
+            search.requestFocus()
+        }
 
         val tryCard=card()
         tryCard.addView(text("TEST THE EXPERIENCE",12f,0xFF83CFF4.toInt(),true))
@@ -180,7 +262,7 @@ class MainActivity : Activity() {
         }
         tryCard.addView(field)
         addCard(root,tryCard)
-        val foot=text("KEYPOP  •  ANDROID ALPHA  •  v0.2.0\nNew studio preview ≠ complete Gboard feature parity.",11f,muted)
+        val foot=text("KEYPOP  •  ANDROID TEST CANDIDATE  •  v0.3.0\nFeature parity requires benchmark and device validation.",11f,muted)
         foot.gravity=Gravity.CENTER
         root.addView(foot)
         root.addView(gap(15))
