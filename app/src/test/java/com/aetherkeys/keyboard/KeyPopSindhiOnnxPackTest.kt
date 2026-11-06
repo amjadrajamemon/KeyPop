@@ -11,6 +11,10 @@ class KeyPopSindhiOnnxPackTest {
         assertEquals(318,packs[0].approximateMB)
         assertEquals(270,packs[1].approximateMB)
         assertTrue(packs.all{it.repo.startsWith("hari31416/indictrans2-")})
+        assertEquals("eng_Latn",packs[0].sourceTag)
+        assertEquals("snd_Arab",packs[0].targetTag)
+        assertEquals("snd_Arab",packs[1].sourceTag)
+        assertEquals("eng_Latn",packs[1].targetTag)
     }
     @Test fun modelFilesContainDecoderWeightsAndTokenizers() {
         for (pack in KeyPopSindhiOnnxPack.bundles) {
