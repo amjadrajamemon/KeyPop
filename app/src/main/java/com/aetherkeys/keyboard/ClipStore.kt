@@ -52,7 +52,7 @@ class ClipStore(private val context: Context) {
             val o = arr.optJSONObject(i) ?: continue
             out.add(ClipItem(o.optString("text"), o.optBoolean("pinned"), o.optLong("time")))
         }
-        return out.sortedWith(compareByDescending<ClipItem> { it.pinned }.thenByDescending { it.time })
+        return out.sortedByDescending { it.time }
     }
     @Synchronized fun save(text: String) {
         if (text.isBlank() || text.length > 100000) return
@@ -61,5 +61,9 @@ class ClipStore(private val context: Context) {
     }
     @Synchronized fun pin(text: String, pinned: Boolean) =
         persist(list().map { if (it.text == text) it.copy(pinned = pinned) else it })
+    @Synchronized fun delete(text: String) = persist(list().filterNot { it.text == text })
+    @Synchronized fun clearUnpinned() = persist(list().filter { it.pinned })
+    @Synchronized fun search(query: String, pinnedOnly: Boolean = false): List<ClipItem> =
+        list().filter { (!pinnedOnly || it.pinned) && it.text.contains(query, ignoreCase = true) }
     @Synchronized fun clear() = persist(emptyList())
 }
