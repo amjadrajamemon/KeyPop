@@ -25,6 +25,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputContentInfo
 import android.view.inputmethod.InputConnection
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -65,6 +66,7 @@ class AetherImeService : InputMethodService() {
     private var capsLock=false
     private var lastShiftPress=0L
     private var current:LinearLayout?=null
+    private var floatingShell:FrameLayout?=null
     private val emojiRows=listOf(
         listOf("😀","😁","😂","😍","🥰","😊","😎","😭"),
         listOf("❤️","👍","👏","🙏","🔥","✨","🎉","✅"),
@@ -137,9 +139,11 @@ class AetherImeService : InputMethodService() {
 
     override fun onCreateInputView():View {
         language=prefs.getInt("language",0).coerceIn(0,2)
-        current=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        floatingShell=FrameLayout(this).apply{setBackgroundColor(Color.TRANSPARENT)}
+        current=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+        floatingShell!!.addView(current,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
         draw()
-        return current!!
+        return floatingShell!!
     }
     override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
         super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
@@ -194,6 +198,32 @@ class AetherImeService : InputMethodService() {
             setOnClickListener { tapFeedback(this); onTap() }
         }
     }
+    private fun applyFloatingLayout() {
+        val root=current ?:return
+        val shell=floatingShell ?:return
+        val active=prefs.getBoolean("floating",false)
+        val params=(root.layoutParams as? FrameLayout.LayoutParams)
+            ?:FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM)
+        if(active) {
+            val width=(resources.displayMetrics.widthPixels*.83f).toInt()
+            val offset=prefs.getInt("floatX",0).coerceIn(-d(50),d(50))
+            val left=((resources.displayMetrics.widthPixels-width)/2+offset)
+                .coerceIn(0,resources.displayMetrics.widthPixels-width)
+            params.width=width
+            params.leftMargin=left
+            params.bottomMargin=d(prefs.getInt("floatY",24).coerceIn(8,150))
+            params.gravity=Gravity.BOTTOM or Gravity.LEFT
+            shell.minimumHeight=minOf(d(490),(resources.displayMetrics.heightPixels*.70f).toInt())
+            root.elevation=d(15).toFloat()
+        } else {
+            params.width=-1;params.leftMargin=0;params.bottomMargin=0
+            params.gravity=Gravity.BOTTOM
+            shell.minimumHeight=0
+            root.elevation=0f
+        }
+        root.layoutParams=params
+        shell.requestLayout()
+    }
     private fun draw() {
         val root=current ?: return
         root.removeAllViews()
@@ -201,11 +231,14 @@ class AetherImeService : InputMethodService() {
         val s=palette()
         root.background=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
         root.setPadding(d(3),d(5),d(3),d(6))
+        applyFloatingLayout()
         val top=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
-        fun topButton(value:String,weight:Float=1f,callback:()->Unit) {
-            top.addView(chip(value,weight,callback),LinearLayout.LayoutParams(0,d(36),weight).apply {
+        fun topButton(value:String,weight:Float=1f,callback:()->Unit):Button {
+            val control=chip(value,weight,callback)
+            top.addView(control,LinearLayout.LayoutParams(0,d(36),weight).apply {
                 leftMargin=d(2); rightMargin=d(2)
             })
+            return control
         }
         val secure=sensitive(currentInputEditorInfo)
         val isNumeric=numeric(currentInputEditorInfo)
@@ -238,6 +271,43 @@ class AetherImeService : InputMethodService() {
             }
         }
         topButton("↤↦",.65f) { cursorTools=!cursorTools;draw() }
+        val floatControl=topButton(if(prefs.getBoolean("floating",false))"⠿" else "▣",.54f) {
+            prefs.edit().putBoolean("floating",!prefs.getBoolean("floating",false)).apply()
+            draw()
+        }
+        if(prefs.getBoolean("floating",false)) {
+            var initialX=0f;var initialY=0f
+            var baseX=0;var baseY=0;var dragged=false
+            floatControl.setOnTouchListener { _,event ->
+                when(event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        initialX=event.rawX;initialY=event.rawY;dragged=false
+                        baseX=prefs.getInt("floatX",0);baseY=prefs.getInt("floatY",24)
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val deltaX=(event.rawX-initialX).toInt()
+                        val deltaY=(event.rawY-initialY).toInt()
+                        if(kotlin.math.abs(deltaX)+kotlin.math.abs(deltaY)>d(8))dragged=true
+                        if(dragged) {
+                            prefs.edit().putInt("floatX",(baseX+deltaX).coerceIn(-d(50),d(50)))
+                                .putInt("floatY",(baseY-deltaY).coerceIn(8,150)).apply()
+                            applyFloatingLayout()
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if(!dragged) {
+                            prefs.edit().putBoolean("floating",false).apply()
+                            draw()
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL ->true
+                    else->false
+                }
+            }
+        }
         topButton(when(prefs.getInt("handMode",0)) {1->"◧";2->"◨";else->"↔"},.55f) {
             val next=(prefs.getInt("handMode",0)+1)%3
             prefs.edit().putInt("handMode",next).apply();draw()
