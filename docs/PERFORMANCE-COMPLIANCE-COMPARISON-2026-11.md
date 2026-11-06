@@ -29,8 +29,8 @@ KeyPop is **not yet demonstrably faster or better** than Gboard, SwiftKey, Samsu
 Fleksy is included as a fifth evaluation candidate, not as a source of verified per-feature superiority claims.
 
 ## Measured results versus hypotheses
-- **Measured previous debug APK:** KeyPop 0.1.1 APK = 872,504 bytes (0.83 MiB); measured from the earlier compiled APK. A debug APK file size alone is not an apples-to-apples performance comparison.
-- **Not measured:** current APK size, memory/PSS, startup time, keyboard render latency, touch-to-commit p50/p95, battery, typing errors, crashes, device compatibility, and competitor baselines.
+- **Measured debug APK sizes:** KeyPop 0.1.1 = 872,504 bytes (0.83 MiB), KeyPop 0.2.0 = 888,801 bytes (0.85 MiB), a 16,297-byte increase. These are actual compiled APK file measurements, not apples-to-apples competitor performance comparisons.
+- **Not measured:** memory/PSS, startup time, keyboard render latency, touch-to-commit p50/p95, battery, typing errors, crashes, device compatibility, and competitor baselines.
 - **Do not publish percentage wins, faster/lighter badges or rankings** without comparable device testing.
 
 ## Benchmark protocol required for proof
