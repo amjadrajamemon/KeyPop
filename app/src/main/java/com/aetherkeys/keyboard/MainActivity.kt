@@ -201,6 +201,10 @@ class MainActivity : Activity() {
         controls.addView(gap(4))
         controls.addView(text("Fine-tune every key",22f,ink,true))
         controls.addView(gap(9))
+        controls.addView(action("⇄  Design Backup — import/export your custom theme") {
+            startActivity(Intent(this,KeyPopProfileActivity::class.java))
+        })
+        controls.addView(gap(7))
         controls.addView(action("✎ Layout Lab — move, swap and remap keys",true) {
             startActivity(Intent(this,KeyPopLayoutStudioActivity::class.java))
         })
