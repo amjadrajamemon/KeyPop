@@ -1,6 +1,7 @@
 package com.aetherkeys.keyboard
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -27,6 +28,7 @@ class KeyPopModelManagerActivity:Activity() {
     private lateinit var statusUr:TextView
     private lateinit var progress:ProgressBar
     private lateinit var status:TextView
+    private lateinit var sindhiStatus:TextView
     private var running=0
     private fun dp(x:Int)=(x*resources.displayMetrics.density).toInt()
     private fun label(t:String,size:Float=15f,color:Int=textColor)=TextView(this).apply{
@@ -87,7 +89,30 @@ class KeyPopModelManagerActivity:Activity() {
         column.addView(status)
 
         column.addView(label("SINDHI / سنڌي / SD",18f,teal))
-        column.addView(label("Sindhi keyboard typing: available immediately. 30 common phrase translations: available offline. Full unrestricted Sindhi translation: unavailable in this APK because ML Kit has no Sindhi model. No misleading download button is shown.",14f,muted))
+        column.addView(label("30 Sindhi phrases work offline now. Full Sindhi translation is NOT operational. Experimental IndicTrans2 ONNX language-model files can be installed separately for engineering verification, but these files cannot translate until tokenization, decoder inference, and script processing are implemented.",14f,muted))
+        sindhiStatus=label("Checking experimental Sindhi model-file status…",13f,muted)
+        column.addView(sindhiStatus)
+        button("Check Sindhi experimental pack files") {refreshSindhi()}
+        button("Experimental: prepare English → Sindhi model files (about 318 MB)") {
+            confirmSindhi(KeyPopSindhiOnnxPack.englishToSindhi)
+        }
+        button("Experimental: prepare Sindhi → English model files (about 270 MB)") {
+            confirmSindhi(KeyPopSindhiOnnxPack.sindhiToEnglish)
+        }
+        button("Delete experimental Sindhi model files") {
+            AlertDialog.Builder(this)
+                .setTitle("Remove downloaded ONNX files?")
+                .setMessage("This removes both experimental model bundles. The existing Sindhi keyboard and phrasebook remain available.")
+                .setPositiveButton("Remove") {_,_->
+                    val removed=KeyPopSindhiOnnxPack.bundles.all {
+                        KeyPopSindhiOnnxPack.delete(this,it)
+                    }
+                    status.text=if(removed)"Experimental model files removed" else
+                        "Some files could not be removed; stop ongoing downloads first"
+                    refreshSindhi()
+                }
+                .setNegativeButton("Cancel",null).show()
+        }
         column.addView(label("Android speech services might offer Urdu or Sindhi dictation, but models are supplied by your device's provider, not by KeyPop.",13f,muted))
         button("Check offline voice service"){
             status.text=runCatching { KeyPopLanguageModels.voiceAvailability(this) }
@@ -100,7 +125,34 @@ class KeyPopModelManagerActivity:Activity() {
             } }.onFailure { status.text="Provider request failed: "+it.localizedMessage }
         }
         button("Close Language Pack Manager"){finish()}
-        // This screen is visible before querying model availability; no hidden startup work.
+        // No hidden download during startup; all model transfers require consent.
+        refreshSindhi()
+    }
+    private fun refreshSindhi() {
+        if(!::sindhiStatus.isInitialized)return
+        sindhiStatus.text=KeyPopSindhiOnnxPack.bundles.joinToString("\n") {
+            it.name+": "+KeyPopSindhiOnnxPack.status(this,it)
+        }+"\nFull Sindhi translation is not active in this development branch."
+    }
+    private fun confirmSindhi(bundle:KeyPopSindhiOnnxPack.Bundle) {
+        AlertDialog.Builder(this)
+            .setTitle("Experimental Sindhi model files")
+            .setMessage("Download approximately "+bundle.approximateMB+
+                " MB to app-private storage over your current network? These are genuine ONNX translation model files, but KeyPop's neural Sindhi tokenizer/decoder is NOT yet operational. Downloading will NOT enable full Sindhi translation. Do not proceed unless testing the model-file installer.")
+            .setPositiveButton("Download test files") {_,_->
+                val started=KeyPopSindhiOnnxPack.download(this,bundle) {update->
+                    if(isFinishing||isDestroyed)return@download
+                    val fraction=if(update.total!=null && update.total>0L)
+                        (100.0*update.bytes/update.total).toInt().coerceIn(0,100)
+                            .toString()+"%" else "progress unavailable"
+                    status.text=update.message+" · "+fraction
+                    if(update.complete)refreshSindhi()
+                }
+                if(!started)status.text="One model download is already running"
+                else status.text="Requesting "+bundle.name+" files (experimental)"
+            }
+            .setNegativeButton("Cancel",null)
+            .show()
     }
     private fun check() {
         status.text="Checking installed text models…"
