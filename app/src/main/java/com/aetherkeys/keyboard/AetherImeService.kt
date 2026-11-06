@@ -523,6 +523,62 @@ class AetherImeService : InputMethodService() {
         val preset=KeyboardPresetCatalog.selected(this)
         val secure=sensitive(currentInputEditorInfo)
         val isNumeric=numeric(currentInputEditorInfo)
+        val materialToolbar=preset.id==KeyboardPresetCatalog.MATERIAL && !secure && !isNumeric
+        if(materialToolbar) {
+            val top=LinearLayout(this).apply {
+                orientation=LinearLayout.HORIZONTAL
+                gravity=Gravity.CENTER_VERTICAL
+                setPadding(d(3),d(1),d(3),d(1))
+            }
+            fun iconAction(glyph:String,description:String,fn:()->Unit) {
+                val button=chip(glyph,onTap=fn)
+                button.contentDescription=description
+                button.textSize=if(glyph=="GIF")13f else 21f
+                top.addView(button,LinearLayout.LayoutParams(0,d(45),1f).apply {
+                    leftMargin=d(2);rightMargin=d(2)
+                })
+            }
+            iconAction("▦","Open feature grid and resize tools"){
+                toolsOpen=!toolsOpen;resizeOpen=false;draw()
+            }
+            iconAction("▤","Open clipboard history"){
+                clipsOpen=!clipsOpen;emojiOpen=false;toolsOpen=false;resizeOpen=false;draw()
+            }
+            iconAction("GIF","Open GIF and sticker shelf"){
+                startActivity(Intent(this,KeyPopMediaStudioActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            iconAction("⚙","Open organized keyboard settings"){
+                startActivity(Intent(this,MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            iconAction("⇄","Translate text"){
+                translatorOpen=!translatorOpen;writingOpen=false;emojiOpen=false
+                clipsOpen=false;toolsOpen=false;resizeOpen=false
+                if(translatorOpen) {
+                    translateSource=currentInputConnection?.getSelectedText(0)?.toString()
+                        ?: currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
+                    translateResult="";translationStatus=""
+                    translateTarget=prefs.getInt("autoTarget",1).coerceIn(0,2)
+                }
+                draw()
+            }
+            iconAction("◈","Preview theme gallery without changing your active theme"){
+                startActivity(Intent(this,MainActivity::class.java)
+                    .putExtra("openSection","themes")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            iconAction("🎙","Open voice translation"){
+                voiceTargetPackage=currentInputEditorInfo?.packageName.orEmpty()
+                pendingSpeech=null;pendingSpeechSend=false
+                val code=when(language){1->"ur-PK";2->"sd-PK";else->"en-US"}
+                startActivity(Intent(this,KeyPopVoiceActivity::class.java)
+                    .putExtra("lang",code)
+                    .putExtra("target",prefs.getInt("autoTarget",1))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            root.addView(top,LinearLayout.LayoutParams(-1,d(49)))
+        } else {
         val toolbar=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL
             gravity=Gravity.CENTER_VERTICAL
@@ -558,6 +614,7 @@ class AetherImeService : InputMethodService() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         root.addView(toolbar,LinearLayout.LayoutParams(-1,d(44)))
+        }
         if(toolsOpen) {
             val panel=LinearLayout(this).apply {
                 orientation=LinearLayout.VERTICAL
@@ -578,6 +635,7 @@ class AetherImeService : InputMethodService() {
                 panel.addView(row)
             }
             menuRow(
+                "Resize / Move" to {resizeOpen=true;toolsOpen=false;draw()},
                 "Language" to {cycleLanguage()},
                 (if(symbols)"Letters" else "Symbols") to {
                     symbols=!symbols;extended=false;toolsOpen=false;draw()
@@ -764,6 +822,11 @@ class AetherImeService : InputMethodService() {
             if(material && label.length==1 && actualHint!=null && button is KeyPopHintKey) {
                 button.hintText=actualHint
                 button.hintColor=palette().ink
+            }
+            if(label=="☺,")button.setOnLongClickListener{
+                currentInputConnection?.commitText(",",1)
+                refreshSuggestions()
+                true
             }
             if(label=="⌫" && prefs.getBoolean("wordDelete",true)) button.setOnLongClickListener {
                 tapFeedback(button)
