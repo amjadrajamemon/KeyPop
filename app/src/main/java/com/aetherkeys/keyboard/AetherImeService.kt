@@ -187,7 +187,7 @@ class AetherImeService : InputMethodService() {
         val root=current ?: return
         root.removeAllViews()
         val s=palette()
-        root.background=gradient(s.background,s.surface,0)
+        root.background=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
         root.setPadding(d(3),d(5),d(3),d(6))
         val top=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
         fun topButton(value:String,weight:Float=1f,callback:()->Unit) {
