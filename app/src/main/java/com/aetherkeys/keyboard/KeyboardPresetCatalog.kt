@@ -23,8 +23,8 @@ object KeyboardPresetCatalog {
     val all=listOf(
         KeyboardErgonomics(0,"KeyPop Custom","Keep your own settings and design","Original KeyPop",
             0,51,4,13,17,true,true),
-        KeyboardErgonomics(1,"Gboard-style · Material","Compact toolbar, Google-like key proportions and familiar suggestions",
-            "Gboard-inspired",10,49,4,16,17,false,true),
+        KeyboardErgonomics(1,"Gboard-style · Material Teal Glass","Compact seven-action toolbar, hints, numbers and dark-teal geometry",
+            "Gboard screenshot-inspired, original KeyPop design",10,42,3,11,19,true,true),
         KeyboardErgonomics(2,"SwiftKey-style · Flow","Roomier punctuation keys, round edges and suggestion-first layout",
             "Microsoft SwiftKey-inspired",11,56,3,19,18,false,true),
         KeyboardErgonomics(3,"Samsung-style · One UI","Structured key grid, dedicated number row and utility row",
@@ -56,6 +56,7 @@ object KeyboardPresetCatalog {
     }
     fun foot(id:Int, symbols:Boolean):List<String> {
         if(symbols)return listOf("ABC","🌐",",","SPACE",".","?","↵","⌫")
+        if(id==MATERIAL)return listOf("?123","☺,","🌐","SPACE",".","?","↵")
         return when(id){
             GESTURE ->listOf("?123",",","🌐","SPACE",".","?","↵","⌫")
             FACETED ->listOf("?123","🌐",",","SPACE",".","?","↵","⌫")
@@ -64,8 +65,12 @@ object KeyboardPresetCatalog {
         }
     }
     fun keyWeight(id:Int,label:String):Float = when(label){
-        "SPACE" -> when(id) { FLOW->5.4f;GESTURE->5.8f;FACETED->5f;else->4.3f }
-        "?123","ABC" -> if(id==GESTURE)1.1f else 1.4f
+        "SPACE" -> when(id) { MATERIAL->5.1f;FLOW->5.4f;GESTURE->5.8f;FACETED->5f;else->4.3f }
+        "?123","ABC" -> if(id==GESTURE)1.1f else if(id==MATERIAL)1.5f else 1.4f
+        "☺," ->1.12f
+        "↵" ->if(id==MATERIAL)1.38f else 1f
+        "." ->if(id==MATERIAL)0.8f else 1f
+        "?" ->if(id==MATERIAL)0.7f else 1f
         "🌐" ->1.2f
         else ->if(id==GESTURE)1.12f else 1f
     }

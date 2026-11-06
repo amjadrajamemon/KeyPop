@@ -30,9 +30,9 @@ object KeyPopSkins {
         KeyPopSkin("Retro Pixel", "Arcade classic", 0xFF161D30.toInt(), 0xFF1E3654.toInt(), 0xFF30536C.toInt(), 0xFFF3DA62.toInt(), 0xFFFFFFFF.toInt(), 4, true),
         KeyPopSkin("Zen Paper", "Quiet minimal", 0xFFF1F1ED.toInt(), 0xFFE5E7E3.toInt(), 0xFFFFFFFF.toInt(), 0xFF3B6F6A.toInt(), 0xFF263534.toInt(), 1),
         KeyPopSkin("AMOLED Infinity", "Pure black", Color.BLACK, 0xFF11111A.toInt(), 0xFF20202D.toInt(), 0xFF9F86FF.toInt(), Color.WHITE, 2, true),
-        KeyPopSkin("Gboard-style · Material Light", "Original familiar compact keys", 0xFFDBE0E8.toInt(), 0xFFDBE0E8.toInt(), 0xFFFFFFFF.toInt(), 0xFF377AEF.toInt(), 0xFF1B2535.toInt(), 1),
-        KeyPopSkin("SwiftKey-style · Flow Dark", "Original rounded utility layout", 0xFF17212C.toInt(), 0xFF263646.toInt(), 0xFF394C5C.toInt(), 0xFF76BDFF.toInt(), Color.WHITE, 0),
-        KeyPopSkin("Samsung-style · One UI", "Original structured key grid", 0xFF20242B.toInt(), 0xFF343943.toInt(), 0xFF4D525C.toInt(), 0xFF84C7FF.toInt(), Color.WHITE, 2),
+        KeyPopSkin("Gboard-style · Material Teal Glass", "Dark teal high definition keycaps", 0xFF003D39.toInt(), 0xFF0B514A.toInt(), 0xFF29625F.toInt(), 0xFF079E91.toInt(), 0xFFF4FFFD.toInt(), 1),
+        KeyPopSkin("SwiftKey-style · Flow Crystal", "Deep blue luminous glass", 0xFF0E1E32.toInt(), 0xFF203E5A.toInt(), 0xFF3E607C.toInt(), 0xFF59C6FF.toInt(), Color.WHITE, 0),
+        KeyPopSkin("Samsung-style · One UI Glass", "Structured graphite glass keys", 0xFF151A22.toInt(), 0xFF293646.toInt(), 0xFF475769.toInt(), 0xFF9ED1FE.toInt(), Color.WHITE, 2),
         KeyPopSkin("Speed Type", "Bold oversized", 0xFF101724.toInt(), 0xFF2B3651.toInt(), 0xFF465479.toInt(), 0xFFFE8E69.toInt(), Color.WHITE, 3),
         KeyPopSkin("Airy Comfort", "Spacious daylight", 0xFFE9EEF5.toInt(), 0xFFCBD5E3.toInt(), 0xFFFFFFFF.toInt(), 0xFF6687CB.toInt(), 0xFF23344E.toInt(), 0)
     )
@@ -149,6 +149,16 @@ class KeyPopBackdropDrawable(private val index:Int,private val skin:KeyPopSkin):
         canvas.drawRect(0f,0f,w,h,p);p.shader=null
         val accent=skin.accent
         when(index) {
+            10 -> {
+                p.shader=android.graphics.RadialGradient(w*.5f,0f,h*1.3f,
+                    intArrayOf(alpha(0xFF5DE7D3.toInt(),45),alpha(accent,0)),
+                    null,Shader.TileMode.CLAMP)
+                canvas.drawRect(0f,0f,w,h,p);p.shader=null
+                p.style=Paint.Style.STROKE;p.strokeWidth=1.5f
+                p.color=alpha(0xFFB8FFF0.toInt(),35)
+                canvas.drawLine(0f,1f,w,1f,p)
+                p.style=Paint.Style.FILL
+            }
             0,9 -> { // Nebula and AMOLED cosmic stars
                 for(i in 0..24) {
                     val x=((i*97)%101)/101f*w
