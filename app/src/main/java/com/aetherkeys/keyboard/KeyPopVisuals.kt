@@ -136,7 +136,7 @@ class KeyPopBackdropDrawable(private val index:Int,private val skin:KeyPopSkin):
     var phase:Float=0f
         set(value){field=value.coerceIn(0f,1f);invalidateSelf()}
     private fun wave():Float=
-        (0.5 + kotlin.math.sin(phase*6.283185307179586).toFloat()*0.5).toFloat()
+        0.5f + kotlin.math.sin(phase.toDouble()*6.283185307179586).toFloat()*0.5f
     private fun alpha(color:Int,a:Int)=(color and 0x00FFFFFF) or (a.coerceIn(0,255) shl 24)
     override fun draw(canvas:Canvas) {
         val rect=bounds
