@@ -55,6 +55,28 @@ class KeyPopRuntimeSmokeTest {
             }
         }
     }
+    @Test fun settingsDashboardShowsCategoriesAndTranslation() {
+        ActivityScenario.launch(MainActivity::class.java).use{scenario->
+            scenario.onActivity{activity->
+                fun find(root:View,label:String):TextView?{
+                    if(root is TextView && root.text?.toString()==label && root.isShown)return root
+                    if(root is ViewGroup)for(index in 0 until root.childCount){
+                        val item=find(root.getChildAt(index),label)
+                        if(item!=null)return item
+                    }
+                    return null
+                }
+                for(label in listOf("Keyboard Setup","Offline Packs","Themes","Translation"))
+                    assertTrue("Missing visible settings section: "+label,
+                        find(activity.window.decorView,label)!=null)
+                val translation=find(activity.window.decorView,"Translation")
+                assertTrue("Translation section does not open",translation?.hasOnClickListeners()==true)
+                translation?.performClick()
+                assertTrue("Translation settings screen was blank",
+                    find(activity.window.decorView,"TRANSLATION ENGINE")!=null)
+            }
+        }
+    }
     @Test fun androidRecognizesKeyPopKeyboardService() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val imm=context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager

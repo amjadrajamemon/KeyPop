@@ -61,6 +61,7 @@ class AetherImeService : InputMethodService() {
     private var writingPreview=""
     private var writingMode="Formal"
     private var translateSource=""
+    private var translateSourceChoice=-1
     private var translateResult=""
     private var translationStatus=""
     private var translateTarget=0
@@ -551,16 +552,19 @@ class AetherImeService : InputMethodService() {
             }
             iconAction("⚙","Open organized keyboard settings"){
                 startActivity(Intent(this,MainActivity::class.java)
+                    .putExtra("openSection","settingsHome")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             iconAction("⇄","Translate text"){
                 translatorOpen=!translatorOpen;writingOpen=false;emojiOpen=false
                 clipsOpen=false;toolsOpen=false;resizeOpen=false
                 if(translatorOpen) {
-                    translateSource=currentInputConnection?.getSelectedText(0)?.toString()
-                        ?: currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
+                    translateSource=editorTranslationText()
+                    translateSourceChoice=-1
                     translateResult="";translationStatus=""
-                    translateTarget=prefs.getInt("autoTarget",1).coerceIn(0,2)
+                    val detected=KeyPopTextLanguage.detect(translateSource,language)
+                    translateTarget=prefs.getInt("autoTarget",if(detected==2)0 else 2).coerceIn(0,2)
+                    if(translateTarget==detected)translateTarget=if(detected==2)0 else 2
                 }
                 draw()
             }
@@ -611,6 +615,7 @@ class AetherImeService : InputMethodService() {
         }
         shortcut("⚙ Settings",1.1f) {
             startActivity(Intent(this,MainActivity::class.java)
+                .putExtra("openSection","settingsHome")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         root.addView(toolbar,LinearLayout.LayoutParams(-1,d(44)))
@@ -722,10 +727,12 @@ class AetherImeService : InputMethodService() {
                         toolsOpen=false
                         if(!secure&&!isNumeric) {
                             translatorOpen=true;writingOpen=false;emojiOpen=false;clipsOpen=false
-                            translateSource=currentInputConnection?.getSelectedText(0)?.toString()
-                                ?:currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
+                            translateSource=editorTranslationText()
+                            translateSourceChoice=-1
                             translateResult="";translationStatus=""
-                            translateTarget=if(language==0)1 else 0
+                            val detected=KeyPopTextLanguage.detect(translateSource,language)
+                            translateTarget=prefs.getInt("autoTarget",if(detected==2)0 else 2).coerceIn(0,2)
+                            if(translateTarget==detected)translateTarget=if(detected==2)0 else 2
                         }
                         draw()
                     },
@@ -1402,81 +1409,124 @@ class AetherImeService : InputMethodService() {
         root.addView(panel)
     }
 
+    /** Source is read at translation time, never from a stale toolbar snapshot. */
+    private fun editorTranslationText():String {
+        val input=currentInputConnection ?:return ""
+        return input.getSelectedText(0)?.toString()?.takeIf{it.isNotBlank()}
+            ?:input.getTextBeforeCursor(2400,0)?.toString().orEmpty()
+    }
+
     private fun showTranslator(root:LinearLayout) {
         val style=palette()
         val panel=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
-            setPadding(d(9),d(8),d(9),d(5))
+            setPadding(d(8),d(7),d(8),d(5))
             background=gradient(style.surface,style.background,12)
         }
-        val original=TextView(this).apply {
-            text="SOURCE · "+languages[language]+"\n"+
-                (if(translateSource.isBlank()) "Select text or type a message first" else translateSource.take(180))
+        val original=TextView(this).apply{
             textSize=11f;setTextColor(style.ink)
+            setPadding(0,d(2),0,d(4))
         }
+        fun sourceLabel() {
+            val detected=KeyPopTextLanguage.detect(translateSource,language)
+            val selected=if(translateSourceChoice<0)detected else translateSourceChoice
+            original.text="From "+languages[selected]+
+                (if(translateSourceChoice<0)" (auto)" else " (manual)")+" · "+
+                (if(translateSource.isBlank())"Type something in the active app, then tap Translate"
+                 else translateSource.trim().take(170))
+        }
+        sourceLabel()
         panel.addView(original)
         val resultView=TextView(this).apply {
-            text=if(translateResult.isBlank()) translationStatus else translateResult
+            text=if(translateResult.isBlank())translationStatus else translateResult
             textSize=13f;setTextColor(style.ink)
-            setPadding(0,d(6),0,d(6))
+            setPadding(0,d(5),0,d(5))
         }
-        val controls=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+        val controls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
         fun small(label:String,weight:Float=1f,onTap:()->Unit) {
-            controls.addView(chip(label,onTap=onTap),
-                LinearLayout.LayoutParams(0,d(38),weight).apply { rightMargin=d(3) })
+            controls.addView(chip(label,onTap=onTap).apply{
+                textSize=11f;maxLines=1
+            },LinearLayout.LayoutParams(0,d(39),weight).apply{rightMargin=d(3)})
         }
-        small("To "+languages[translateTarget]) {
-            translateTarget=(translateTarget+1)%3;translateResult="";translationStatus=""
-            draw()
+        small(if(translateSourceChoice<0)"From: Auto" else "From: "+languages[translateSourceChoice],1.35f){
+            translateSourceChoice=if(translateSourceChoice==2)-1 else translateSourceChoice+1
+            translateResult="";translationStatus="";draw()
         }
-        small("Translate",1.3f) {
-            if(translateSource.isBlank()) {
-                translationStatus="Select or type a message first";resultView.text=translationStatus
-            } else {
-                translationStatus="Translating… (first use may download a language model)"
+        small("To: "+languages[translateTarget],1.1f){
+            translateTarget=(translateTarget+1)%3
+            translateResult="";translationStatus="";draw()
+        }
+        small("Translate",1.35f){
+            translateSource=editorTranslationText()
+            translateResult=""
+            sourceLabel()
+            if(translateSource.isBlank()){
+                translationStatus="Type text in the active app first, then tap Translate."
                 resultView.text=translationStatus
-                KeyPopTranslator.translate(this,codes[language],codes[translateTarget],translateSource,
-                    prefs.getBoolean("remoteTranslate",false),prefs.getString("translateEndpoint","").orEmpty()) { outcome ->
-                    outcome.onSuccess { translateResult=it;resultView.text=it;draw() }
-                        .onFailure { translationStatus=it.message ?: "Translation unavailable";resultView.text=translationStatus }
+            }else{
+                val from=if(translateSourceChoice<0)
+                    KeyPopTextLanguage.detect(translateSource,language) else translateSourceChoice
+                if(from==translateTarget){
+                    translationStatus="Source and target are the same. Change From or To."
+                    resultView.text=translationStatus
+                }else{
+                    translationStatus="Translating the current typed text…"
+                    resultView.text=translationStatus
+                    val snapshot=translateSource
+                    KeyPopTranslator.translate(this,codes[from],codes[translateTarget],snapshot,
+                        prefs.getBoolean("remoteTranslate",false),
+                        prefs.getString("translateEndpoint","").orEmpty()){outcome->
+                        if(!translatorOpen||snapshot!=translateSource)return@translate
+                        outcome.onSuccess{
+                            translateResult=it;translationStatus="";draw()
+                        }.onFailure{
+                            translationStatus=it.message?:"Translation failed. Check the offline packs."
+                            resultView.text=translationStatus
+                        }
+                    }
                 }
             }
         }
-        small("×") {translatorOpen=false;draw()}
+        small("×",.42f){translatorOpen=false;draw()}
         panel.addView(controls)
         panel.addView(resultView)
-        if(translateResult.isNotBlank()) {
-            val actions=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
-            fun translatedAction(label:String,fn:()->Unit) {
-                actions.addView(chip(label,onTap=fn),LinearLayout.LayoutParams(0,d(38),1f).apply{rightMargin=d(3)})
+        if(translateResult.isNotBlank()){
+            val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            fun action(label:String,run:()->Unit){
+                actions.addView(chip(label,onTap=run),
+                    LinearLayout.LayoutParams(0,d(38),1f).apply{rightMargin=d(3)})
             }
-            translatedAction("Copy") {
+            action("Copy"){
                 clipboard.setPrimaryClip(ClipData.newPlainText("KeyPop translation",translateResult))
+                Toast.makeText(this,"Translation copied",Toast.LENGTH_SHORT).show()
             }
-            fun insert():Boolean {
-                val input=currentInputConnection ?: return false
-                val selected=input.getSelectedText(0)
+            fun insert():Boolean{
+                val input=currentInputConnection?:return false
+                val selected=input.getSelectedText(0)?.toString()
+                val before=input.getTextBeforeCursor(translateSource.length,0)?.toString()
+                if(selected!=translateSource && before!=translateSource){
+                    translationStatus="Editor text changed. Tap Translate again."
+                    translateResult="";draw()
+                    return false
+                }
                 input.beginBatchEdit()
-                if(selected.isNullOrEmpty()) {
-                    val previous=input.getTextBeforeCursor(translateSource.length,0)?.toString().orEmpty()
-                    if(previous==translateSource) input.deleteSurroundingText(translateSource.length,0)
-                }
-                val ok=input.commitText(translateResult,1)
+                if(selected!=translateSource)input.deleteSurroundingText(translateSource.length,0)
+                val inserted=input.commitText(translateResult,1)
                 input.endBatchEdit()
-                return ok
+                return inserted
             }
-            translatedAction("Insert") { if(insert()){translatorOpen=false;draw()} }
-            translatedAction("Send") {
-                if(insert()) {
+            action("Replace"){if(insert()){translatorOpen=false;draw()}}
+            action("Send"){
+                if(insert()){
                     translatorOpen=false;draw()
-                    val action=(currentInputEditorInfo?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
-                    if(action==EditorInfo.IME_ACTION_SEND) {
-                        currentInputConnection?.performEditorAction(action)
-                    } else Toast.makeText(this,"Inserted. Use the app's Send button.",Toast.LENGTH_SHORT).show()
+                    val editorAction=(currentInputEditorInfo?.imeOptions?:0) and EditorInfo.IME_MASK_ACTION
+                    if(editorAction==EditorInfo.IME_ACTION_SEND)
+                        currentInputConnection?.performEditorAction(editorAction)
+                    else Toast.makeText(this,"Inserted. Tap Send in the app.",Toast.LENGTH_SHORT).show()
                 }
             }
-            translatedAction("Share") {
-                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            action("Share"){
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{
                     type="text/plain";putExtra(Intent.EXTRA_TEXT,translateResult)
                 },"Share translation").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }

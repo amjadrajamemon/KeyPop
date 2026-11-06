@@ -205,7 +205,7 @@ class MainActivity : Activity() {
         modelCard.addView(text("OFFLINE LANGUAGE ENGINE",12f,accent,true))
         modelCard.addView(gap(5))
         modelCard.addView(text("Download translation models before typing",20f,ink,true))
-        modelCard.addView(text("Install English/Urdu translation packs with consent, using Wi-Fi or mobile data. Sindhi basic phrases are built in; Google Translate offers its own separate offline Sindhi pack.",12f,muted))
+        modelCard.addView(text("Install the English ↔ Sindhi and Urdu ↔ Sindhi offline model packs once. The language manager shows file progress and download notifications.",12f,muted))
         modelCard.addView(gap(9))
         modelCard.addView(action("Manage text and voice packs",true) {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
@@ -427,7 +427,7 @@ class MainActivity : Activity() {
                 .putExtra("target",prefs.getInt("autoTarget",1)))
         })
         translate.addView(gap(7))
-        translate.addView(text("Common phrases work without downloads. Full offline Sindhi sentences require separately installed IndicTrans2 models (English ↔ Sindhi and Urdu ↔ Sindhi). English/Urdu models use ML Kit. Remote translation is optional and off by default.",12f,muted))
+        translate.addView(text("To translate what you are typing, open ⇄ on the keyboard and tap Translate. KeyPop reads the current selection or text before the cursor. Choose From (automatic or manual) and To. Install the Sindhi offline model packs first. Remote translation is off by default.",12f,muted))
         toggle(translate,"Auto Translate on Send","Press the keyboard Send key to translate and insert automatically","autoTranslate",false)
         translate.addView(gap(5))
         val targetLabels=listOf("English","اردو","سنڌي")
@@ -563,7 +563,7 @@ class MainActivity : Activity() {
         }
         tryCard.addView(field)
         addCard(root,tryCard)
-        val foot=text("KEYPOP  •  v0.9.1 PREVIEW\nPhysical-device validation and full Sindhi engine integration are pending.",11f,muted)
+        val foot=text("KEYPOP  •  RC2 PREVIEW\nCheck offline translations before relying on their linguistic accuracy.",11f,muted)
         foot.gravity=Gravity.CENTER
         root.addView(foot)
         root.addView(gap(15))
@@ -575,8 +575,7 @@ class MainActivity : Activity() {
             "translation" ->navigate(translate,"Translation")
             "security" ->navigate(vaultCard,"Security")
             "languagePacks" ->navigate(modelCard,"Offline Packs")
-            else -> if(prefs.getBoolean("firstLaunchPacksV091",false))
-                navigateHome() else navigate(onboarding,"Keyboard Setup")
+            else -> navigateHome()
         }
         // Never force an unverified model-management activity on top of the launcher.
         // Let the user choose keyboard setup or a separate, consent-driven download screen.

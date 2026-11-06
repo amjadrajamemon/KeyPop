@@ -101,7 +101,7 @@ class KeyPopHomeActivity : Activity() {
         addButton(column,"Language packs and model status") {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
         }
-        addButton(column,"Themes and advanced settings") {
+        addButton(column,"Settings · Themes · Layouts · Translation") {
             startActivity(Intent(this,MainActivity::class.java))
         }
         column.addView(text("Offline Sindhi neural models download after your consent. Full sentence translation stays on your phone.",13f,muted))
