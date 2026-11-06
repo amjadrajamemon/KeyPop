@@ -48,6 +48,10 @@ class AetherImeService : InputMethodService() {
     private var symbols=false
     private var clipsOpen=false
     private var translatorOpen=false
+    private var writingOpen=false
+    private var writingSource=""
+    private var writingPreview=""
+    private var writingMode="Formal"
     private var translateSource=""
     private var translateResult=""
     private var translationStatus=""
@@ -169,7 +173,7 @@ class AetherImeService : InputMethodService() {
 
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
         super.onStartInputView(info,restarting)
-        clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false
+        clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false;writingOpen=false
         shift=false;capsLock=false
         val pending=pendingSpeech
         if(pending!=null && !sensitive(info) && info?.packageName==voiceTargetPackage) {
@@ -283,8 +287,18 @@ class AetherImeService : InputMethodService() {
         topButton(if(extended) "1/2" else "2/2",.53f) { extended=!extended;draw() }
         if(!secure && !isNumeric) {
             topButton("☺",.50f) { emojiOpen=!emojiOpen;clipsOpen=false;translatorOpen=false;draw() }
+            topButton("✍",.58f) {
+                writingOpen=!writingOpen
+                translatorOpen=false;emojiOpen=false;clipsOpen=false
+                if(writingOpen) {
+                    writingSource=currentInputConnection?.getSelectedText(0)?.toString()
+                        ?: currentInputConnection?.getTextBeforeCursor(800,0)?.toString().orEmpty()
+                    writingPreview="";writingMode="Formal"
+                }
+                draw()
+            }
             topButton("⇄",.55f) {
-                translatorOpen=!translatorOpen;emojiOpen=false;clipsOpen=false
+                translatorOpen=!translatorOpen;emojiOpen=false;clipsOpen=false;writingOpen=false
                 if(translatorOpen) {
                     translateSource=currentInputConnection?.getSelectedText(0)?.toString()
                         ?: currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
@@ -361,6 +375,7 @@ class AetherImeService : InputMethodService() {
         root.addView(toolbarScroll,LinearLayout.LayoutParams(-1,d(40)))
         suggestionBar=null
         if(clipsOpen && !secure) { drawClips(root); return }
+        if(writingOpen && !secure && !isNumeric) showWritingPanel(root)
         if(translatorOpen && !secure && !isNumeric) showTranslator(root)
         if(emojiOpen && !secure && !isNumeric) {
             showEmojiPanel(root)
@@ -843,6 +858,83 @@ class AetherImeService : InputMethodService() {
         prefs.edit().putInt("language",language).apply()
         shift=false;capsLock=false;symbols=false;clipsOpen=false;emojiOpen=false;extended=false;draw()
     }
+    private fun showWritingPanel(root:LinearLayout) {
+        val skin=palette()
+        val panel=LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL
+            setPadding(d(8),d(7),d(8),d(7))
+            background=gradient(skin.surface,skin.background,12)
+        }
+        panel.addView(TextView(this).apply{
+            text="PRIVATE WRITING TOOLS  ·  Offline · Rule-based"
+            textSize=11f;setTextColor(skin.accent)
+        })
+        panel.addView(TextView(this).apply{
+            text=if(writingSource.isBlank())"Select or type text in the app first."
+                else "Original: "+writingSource.take(140)
+            textSize=12f;setTextColor(skin.ink)
+            setPadding(0,d(4),0,d(5))
+        })
+        val modes=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        listOf("Formal","Polite","Concise","Punctuate").forEach { mode->
+            modes.addView(chip(if(writingMode==mode)"✓ "+mode else mode) {
+                writingMode=mode
+                writingPreview=KeyPopWritingTools.rewrite(writingSource,mode,language)
+                draw()
+            },LinearLayout.LayoutParams(0,d(37),1f).apply{rightMargin=d(3)})
+        }
+        panel.addView(modes)
+        if(writingPreview.isBlank() && writingSource.isNotBlank())
+            writingPreview=KeyPopWritingTools.rewrite(writingSource,writingMode,language)
+        panel.addView(TextView(this).apply{
+            text=if(writingPreview.isBlank())"No preview yet" else writingPreview.take(300)
+            textSize=13f;setTextColor(skin.ink);setPadding(d(3),d(7),d(3),d(8))
+        })
+        val buttons=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        fun action(label:String,fn:()->Unit) {
+            buttons.addView(chip(label,onTap=fn),
+                LinearLayout.LayoutParams(0,d(36),1f).apply{rightMargin=d(3)})
+        }
+        action("Replace") {
+            val input=currentInputConnection
+            if(input!=null && writingPreview.isNotBlank() && !sensitive(currentInputEditorInfo)) {
+                val selected=input.getSelectedText(0)?.toString()
+                val before=input.getTextBeforeCursor(writingSource.length,0)?.toString()
+                if(selected==writingSource || before==writingSource) {
+                    input.beginBatchEdit()
+                    if(selected!=writingSource)input.deleteSurroundingText(writingSource.length,0)
+                    input.commitText(writingPreview,1)
+                    input.endBatchEdit()
+                    writingOpen=false;draw()
+                } else Toast.makeText(this,"Text changed: reopen writing tools",Toast.LENGTH_SHORT).show()
+            }
+        }
+        action("Copy") {
+            if(writingPreview.isNotBlank())
+                clipboard.setPrimaryClip(ClipData.newPlainText("KeyPop rewrite",writingPreview))
+        }
+        action("Close") {writingOpen=false;draw()}
+        panel.addView(buttons)
+        if(prefs.getBoolean("smartReplies",true)) {
+            panel.addView(TextView(this).apply{
+                text="QUICK REPLIES · Tap to insert"
+                textSize=10f;setTextColor(skin.accent)
+                setPadding(0,d(7),0,d(3))
+            })
+            val replies=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            KeyPopTypingIntelligence.contextualReplies(language,writingSource).take(3).forEach { reply ->
+                replies.addView(chip(reply.take(24)) {
+                    if(!sensitive(currentInputEditorInfo)) {
+                        currentInputConnection?.commitText(reply,1)
+                        writingOpen=false;draw()
+                    }
+                },LinearLayout.LayoutParams(0,d(43),1f).apply{rightMargin=d(3)})
+            }
+            panel.addView(replies)
+        }
+        root.addView(panel)
+    }
+
     private fun showTranslator(root:LinearLayout) {
         val style=palette()
         val panel=LinearLayout(this).apply {
