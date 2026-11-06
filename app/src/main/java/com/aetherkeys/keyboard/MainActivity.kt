@@ -216,6 +216,7 @@ class MainActivity : Activity() {
         slider(controls,"Key spacing", "spacing", 1,10,4,"dp")
         slider(controls,"Key label size", "font", 12,24,17,"sp")
         toggle(controls,"Always show number row","Quick access to 0–9 above the letters","numberRow",true)
+        toggle(controls,"Roman Urdu / Sindhi typing","Use English letters; convert common words into native script on Space","romanMode",false)
         toggle(controls,"Predictive word suggestions","Local suggestions learn words only outside sensitive fields","suggestions",true)
         toggle(controls,"Autocorrection","Optional basic autocorrect based on the local dictionary","autoCorrect",false)
         toggle(controls,"Double-space punctuation","Two spaces insert a period and one space","doubleSpace",true)

@@ -266,6 +266,12 @@ class AetherImeService : InputMethodService() {
         val secure=sensitive(currentInputEditorInfo)
         val isNumeric=numeric(currentInputEditorInfo)
         topButton("✦  "+languages[language],1.5f) { cycleLanguage() }
+        if(language!=0 && !secure && !isNumeric)
+            topButton(if(prefs.getBoolean("romanMode",false))"Roman ✓" else "a→ا",.85f) {
+                val enabled=!prefs.getBoolean("romanMode",false)
+                prefs.edit().putBoolean("romanMode",enabled).apply()
+                draw()
+            }
         if(secure) topButton("Paste",.75f) {
             val ok=currentInputConnection?.performContextMenuAction(android.R.id.paste) ?: false
             if(!ok) Toast.makeText(this,"This field does not accept keyboard paste",Toast.LENGTH_SHORT).show()
@@ -398,7 +404,8 @@ class AetherImeService : InputMethodService() {
         root.addView(title,LinearLayout.LayoutParams(-1,d(25)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
-            else if(emojiSearch)KeyPopLayouts.active(this,0)
+            else if(emojiSearch || (language!=0 && prefs.getBoolean("romanMode",false)))
+                KeyPopLayouts.active(this,0)
             else if(symbols) { if(extended) extraSymbols else symbolRows }
             else if(extended && language==1)urduExtended
             else if(extended && language==2)sindhiExtended
@@ -696,6 +703,20 @@ class AetherImeService : InputMethodService() {
             }
             "SPACE" -> {
                 if(!sensitive(currentInputEditorInfo)) {
+                    if(language!=0 && prefs.getBoolean("romanMode",false)) {
+                        val roman=currentInputConnection?.getTextBeforeCursor(60,0)?.toString()
+                            .orEmpty()
+                        val word=Regex("[A-Za-z]+$").find(roman)?.value
+                        if(word!=null) {
+                            val converted=KeyPopRoman.convert(language,word)
+                            if(converted!=word) {
+                                currentInputConnection?.beginBatchEdit()
+                                currentInputConnection?.deleteSurroundingText(word.length,0)
+                                currentInputConnection?.commitText(converted,1)
+                                currentInputConnection?.endBatchEdit()
+                            }
+                        }
+                    }
                     if(prefs.getBoolean("doubleSpace",true)) {
                         val last=currentInputConnection?.getTextBeforeCursor(2,0)?.toString().orEmpty()
                         if(last.length==2 && last.last()==' ' && last.first().isLetter()) {
