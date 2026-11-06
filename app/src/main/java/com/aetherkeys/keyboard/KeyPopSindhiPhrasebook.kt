@@ -38,7 +38,8 @@ object KeyPopSindhiPhrasebook {
     fun translate(source:String,target:String,text:String):String? {
         if(source==target)return text
         if(source !in setOf("en","sd","ur") || target !in setOf("en","sd","ur"))return null
-        if(source!="sd" && target!="sd")return null
+        // Also supports English ↔ Urdu for bundled common phrases.
+        // Unknown sentences are never fabricated as translations.
         val normalized=cleaned(text)
         val phrase=phrases.firstOrNull{
             cleaned(when(source){"sd"->it.sd;"ur"->it.ur;else->it.en})==normalized

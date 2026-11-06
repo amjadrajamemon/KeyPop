@@ -745,6 +745,8 @@ class AetherImeService : InputMethodService() {
                 LinearLayout.LayoutParams(d(28),d(height)))
             val show=when {
                 label=="SPACE" -> if(language==0) "English" else languages[language]
+                label=="↵" && prefs.getBoolean("autoTranslate",false) &&
+                    !sensitive(currentInputEditorInfo) -> "⇄ Send"
                 shift && (language==0 || prefs.getBoolean("romanMode",false)) &&
                     label.length==1 && label[0].isLetter() -> label.uppercase(Locale.ROOT)
                 else -> label
@@ -924,9 +926,15 @@ class AetherImeService : InputMethodService() {
         val input=currentInputConnection ?:return
         val source=input.getTextBeforeCursor(1500,0)?.toString().orEmpty()
         if(source.isBlank())return
-        val target=prefs.getInt("autoTarget",0).coerceIn(0,2)
-        val sourceLanguage=codes[language]
+        val target=prefs.getInt("autoTarget",if(language==0)1 else 0).coerceIn(0,2)
+        val detected=KeyPopTextLanguage.detect(source,language)
+        val sourceLanguage=codes[detected]
         val targetLanguage=codes[target]
+        if(sourceLanguage==targetLanguage) {
+            Toast.makeText(this,"Select a different translation target in Settings",
+                Toast.LENGTH_LONG).show()
+            return
+        }
         Toast.makeText(this,"Translating message…",Toast.LENGTH_SHORT).show()
         KeyPopTranslator.translate(sourceLanguage,targetLanguage,source,
             prefs.getBoolean("remoteTranslate",false),prefs.getString("translateEndpoint","").orEmpty()) { result ->

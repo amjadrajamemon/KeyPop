@@ -324,13 +324,13 @@ class MainActivity : Activity() {
         translate.addView(text("TRANSLATION ENGINE",12f,0xFF83CFF4.toInt(),true))
         translate.addView(gap(6))
         translate.addView(text("Write, translate, send",21f,ink,true))
-        translate.addView(text("English ↔ Urdu uses downloaded on-device translation models. Sindhi requires your own HTTPS provider; nothing is sent remotely until you enable it and initiate translation.",12f,muted))
+        translate.addView(text("Common English/Urdu/Sindhi phrases are built into KeyPop and work offline. Other English/Urdu text uses a downloaded on-device ML Kit model. Unrestricted Sindhi still needs a separately configured provider; remote sending is off by default.",12f,muted))
         toggle(translate,"Auto Translate on Send","Press the keyboard Send key to translate and insert automatically","autoTranslate",false)
         translate.addView(gap(5))
         val targetLabels=listOf("English","اردو","سنڌي")
         val targetTitle=text("",13f,muted,true)
         translate.addView(targetTitle)
-        fun showTarget(){targetTitle.text="Automatic translation target: "+targetLabels[prefs.getInt("autoTarget",0).coerceIn(0,2)]}
+        fun showTarget(){targetTitle.text="Automatic translation target: "+targetLabels[prefs.getInt("autoTarget",1).coerceIn(0,2)]}
         showTarget()
         val targetRow=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
         targetLabels.forEachIndexed{index,label->
