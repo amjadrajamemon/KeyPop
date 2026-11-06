@@ -153,16 +153,51 @@ class AetherImeService : InputMethodService() {
                 leftMargin=d(2); rightMargin=d(2)
             })
         }
+        val secure=sensitive(currentInputEditorInfo)
+        val isNumeric=numeric(currentInputEditorInfo)
         topButton("✦  "+languages[language],1.5f) { cycleLanguage() }
-        topButton("▤ Clips",1.05f) { clipsOpen=!clipsOpen; draw() }
-        topButton(if(symbols) "ABC" else "?#@",.82f) { symbols=!symbols;clipsOpen=false;draw() }
-        topButton(if(compact) "↔" else "◫",.58f) { compact=!compact;draw() }
+        if(!secure) topButton("▤ Clips",1f) { clipsOpen=!clipsOpen;emojiOpen=false;draw() }
+        topButton(if(symbols) "ABC" else "?#@",.75f) { symbols=!symbols;clipsOpen=false;emojiOpen=false;draw() }
+        if(!secure && !isNumeric) topButton("☺",.55f) { emojiOpen=!emojiOpen;clipsOpen=false;draw() }
+        topButton("↤↦",.65f) { cursorTools=!cursorTools;draw() }
+        topButton(when(prefs.getInt("handMode",0)) {1->"◧";2->"◨";else->"↔"},.55f) {
+            val next=(prefs.getInt("handMode",0)+1)%3
+            prefs.edit().putInt("handMode",next).apply();draw()
+        }
         topButton("◈",.55f) { prefs.edit().putInt("theme",(KeyPopSkins.index(this)+1)%15).apply();draw() }
         topButton("⚙",.55f) {
             startActivity(Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         root.addView(top)
-        if(clipsOpen) { drawClips(root); return }
+        if(clipsOpen && !secure) { drawClips(root); return }
+        if(emojiOpen && !secure && !isNumeric) {
+            root.addView(TextView(this).apply {
+                text="EMOJI  •  TAP TO INSERT";setTextColor(palette().accent);textSize=11f
+                setPadding(d(8),d(9),0,d(9))
+            })
+            emojiRows.forEach { addRow(root,it,48) }
+            return
+        }
+        if(cursorTools) {
+            val tools=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+            fun editChip(label:String,action:()->Unit) {
+                tools.addView(chip(label) { action() }, LinearLayout.LayoutParams(0,d(36),1f).apply {
+                    leftMargin=d(2);rightMargin=d(2)
+                })
+            }
+            fun arrow(code:Int) {
+                currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN,code))
+                currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,code))
+            }
+            editChip("←") { arrow(KeyEvent.KEYCODE_DPAD_LEFT) }
+            editChip("→") { arrow(KeyEvent.KEYCODE_DPAD_RIGHT) }
+            editChip("Select all") { currentInputConnection?.performContextMenuAction(android.R.id.selectAll) }
+            if(!secure) {
+                editChip("Copy") { currentInputConnection?.performContextMenuAction(android.R.id.copy) }
+                editChip("Paste") { currentInputConnection?.performContextMenuAction(android.R.id.paste) }
+            }
+            root.addView(tools)
+        }
         val title=TextView(this).apply {
             text=if(symbols) "SYMBOLS   •   TAP ABC TO RETURN"
                  else if(language==0) "✧  KEYPOP  •  TYPE YOUR WAY"
@@ -173,19 +208,26 @@ class AetherImeService : InputMethodService() {
             setPadding(d(10),0,0,0)
         }
         root.addView(title,LinearLayout.LayoutParams(-1,d(25)))
-        val rows=if(symbols) symbolRows else when(language) { 1->urdu;2->sindhi;else->english }
+        val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
+            listOf("7","8","9"),listOf(".","0","⌫"))
+            else if(symbols) symbolRows else when(language) { 1->urdu;2->sindhi;else->english }
         val keyHeight=prefs.getInt("height",51).coerceIn(36,90)
-        if(!symbols && prefs.getBoolean("numberRow",true)) addRow(root, listOf("1","2","3","4","5","6","7","8","9","0"),keyHeight-10)
+        if(!isNumeric && !symbols && prefs.getBoolean("numberRow",true))
+            addRow(root, listOf("1","2","3","4","5","6","7","8","9","0"),keyHeight-10)
         rows.forEachIndexed { i, row ->
-            val keys=if(i==rows.lastIndex && !symbols) listOf("⇧")+row+listOf("⌫") else row
+            val keys=if(i==rows.lastIndex && !symbols && !isNumeric) listOf("⇧")+row+listOf("⌫") else row
             addRow(root,keys,keyHeight)
         }
-        addRow(root,listOf(if(symbols) "ABC" else "?123", "🌐", ",","SPACE",".","↵","⌫"),keyHeight, true)
+        if(isNumeric) addRow(root,listOf("-","@","↵"),keyHeight, true)
+        else addRow(root,listOf(if(symbols) "ABC" else "?123", "🌐", ",","SPACE",".","↵","⌫"),keyHeight, true)
     }
     private fun addRow(parent:LinearLayout,labels:List<String>,height:Int,footer:Boolean=false) {
         val row=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER }
         val gap=prefs.getInt("spacing",4).coerceIn(1,10)
-        if(compact) row.setPadding(d(28),0,d(3),0)
+        when(prefs.getInt("handMode",0)) {
+            1 -> row.setPadding(0,0,d(72),0)
+            2 -> row.setPadding(d(72),0,0,0)
+        }
         labels.forEach { label ->
             val show=when {
                 label=="SPACE" -> if(language==0) "English" else languages[language]
