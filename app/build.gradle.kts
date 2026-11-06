@@ -11,7 +11,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 6
-        versionName = "0.4.1-personalization-preview"
+        versionName = "0.4.1-personalization"
     }
     splits {
         abi {
