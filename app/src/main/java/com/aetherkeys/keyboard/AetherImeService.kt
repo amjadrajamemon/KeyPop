@@ -67,7 +67,7 @@ class AetherImeService : InputMethodService() {
             }
         }
     }
-    private var emojiCategory="Recent"
+    private var emojiCategory="Faces"
     private var emojiSearch=false
     private var emojiQuery=""
     private var emojiOpen=false

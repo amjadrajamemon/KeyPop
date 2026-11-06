@@ -204,6 +204,10 @@ class MainActivity : Activity() {
         controls.addView(action("✎ Layout Lab — move, swap and remap keys",true) {
             startActivity(Intent(this,KeyPopLayoutStudioActivity::class.java))
         })
+        controls.addView(gap(7))
+        controls.addView(action("✦ Personal Dictionary — add and manage words") {
+            startActivity(Intent(this,KeyPopDictionaryActivity::class.java))
+        })
         controls.addView(gap(8))
         controls.addView(text("Adjust live keyboard behavior. Changes apply the next time the keyboard is opened or refreshed.",12f,muted))
         controls.addView(gap(12))
@@ -362,7 +366,7 @@ class MainActivity : Activity() {
         }
         tryCard.addView(field)
         addCard(root,tryCard)
-        val foot=text("KEYPOP  •  ANDROID TEST CANDIDATE  •  v0.3.0\nFeature parity requires benchmark and device validation.",11f,muted)
+        val foot=text("KEYPOP  •  PERSONALIZATION ALPHA  •  v0.4.0\nBenchmarks and device validation remain required for parity.",11f,muted)
         foot.gravity=Gravity.CENTER
         root.addView(foot)
         root.addView(gap(15))
