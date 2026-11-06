@@ -1,6 +1,7 @@
 package com.aetherkeys.keyboard
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.content.ClipboardManager
@@ -18,6 +19,8 @@ import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputContentInfo
+import android.view.inputmethod.InputConnection
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -484,7 +487,46 @@ class AetherImeService : InputMethodService() {
             button.setOnLongClickListener { clipStore.pin(item.text,!item.pinned);draw();true }
             items.addView(button,LinearLayout.LayoutParams(-1,d(46)).apply{bottomMargin=d(5)})
         }
+        val savedImages=try{KeyPopImageStore(this).list()}catch(_:Exception){emptyList()}
+        val images=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+        for(image in savedImages.take(25)) {
+            val line=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            val label=(if(image.pinned)"📌 " else "")+"📷 Screenshot · "+image.mime
+            line.addView(chip(label,2f) {
+                val uri=KeyPopImageStore(this).uriForShare(image)
+                if(uri==null){Toast.makeText(this,"Image unavailable",Toast.LENGTH_SHORT).show()}
+                else {
+                    val input=currentInputConnection
+                    val content=InputContentInfo(uri,ClipDescription("KeyPop image",arrayOf(image.mime)),null)
+                    val inserted=try{
+                        input?.commitContent(content,InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION,null)
+                    }catch(_:Exception){false}
+                    if(inserted==true){clipsOpen=false;draw()}
+                    else {
+                        clipboard.setPrimaryClip(ClipData.newUri(contentResolver,"KeyPop image",uri))
+                        val share=Intent(Intent.ACTION_SEND).apply {
+                            type=image.mime;putExtra(Intent.EXTRA_STREAM,uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        startActivity(Intent.createChooser(share,"Share saved image")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+            },LinearLayout.LayoutParams(0,d(40),2f))
+            line.addView(chip(if(image.pinned)"Unpin" else "Pin") {
+                KeyPopImageStore(this).pin(image.id);draw()
+            },LinearLayout.LayoutParams(0,d(40),1f))
+            line.addView(chip("Delete") {
+                KeyPopImageStore(this).delete(image.id);draw()
+            },LinearLayout.LayoutParams(0,d(40),1f))
+            images.addView(line)
+        }
+        items.addView(images)
         root.addView(ScrollView(this).apply { addView(items) },LinearLayout.LayoutParams(-1,d(215)))
+        root.addView(chip("＋ Import screenshot / image") {
+            startActivity(Intent(this,KeyPopImageImportActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        },LinearLayout.LayoutParams(-1,d(37)))
         val actions=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
         val back=makeKey("←  Keyboard") { clipsOpen=false;draw() }
         val erase=makeKey("Hold: clear unpinned") {
