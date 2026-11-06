@@ -262,9 +262,8 @@ class AetherImeService : InputMethodService() {
     private fun makeKey(label:String,heavy:Boolean=false,weight:Float=1f,action:()->Unit):Button {
         val s=palette()
         val round=KeyPopSkins.radius(s,prefs.getInt("round",13)).toInt().coerceIn(1,40)
-        val bg=if(heavy) gradient(s.accent,s.surface,round,s.accent)
-            else gradient(s.key,s.surface,round,if(s.outline) s.accent else null)
-        return Button(this).apply {
+        val bg=KeyPopGlass.key(this,s,heavy)
+        return KeyPopHintKey(this).apply {
             text=label
             textSize=if(label.length>3) 12f else prefs.getInt("font",17).coerceIn(12,24).toFloat()
             isAllCaps=false
@@ -272,11 +271,11 @@ class AetherImeService : InputMethodService() {
             typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
             gravity=Gravity.CENTER
             background=android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf((s.accent and 0x00FFFFFF) or (0x55 shl 24)),
+                android.content.res.ColorStateList.valueOf((s.accent and 0x00FFFFFF) or (0x44 shl 24)),
                 bg,null)
             minWidth=0; minimumWidth=0; minHeight=0; minimumHeight=0
             setPadding(0,0,0,0)
-            elevation=d(if(s.shape==2) 0 else 2).toFloat()
+            elevation=d(if(KeyPopSkins.index(this@AetherImeService)==10)1 else 3).toFloat()
             setOnClickListener { tapFeedback(this); action() }
         }
     }
@@ -285,7 +284,7 @@ class AetherImeService : InputMethodService() {
         return Button(this).apply {
             text=label; textSize=11f; isAllCaps=false
             setTextColor(s.ink); minWidth=0; minimumWidth=0; minHeight=0; minimumHeight=0
-            background=gradient(s.surface,s.background,11,if(s.outline) s.accent else null)
+            background=KeyPopGlass.panel(this@AetherImeService,s)
             setPadding(0,0,0,0)
             setOnClickListener { tapFeedback(this); onTap() }
         }
@@ -337,9 +336,7 @@ class AetherImeService : InputMethodService() {
         keyViews.forEach { (key,label)->
             val heavy=label=="↵" || label=="⇧" ||
                 (label=="SPACE" && skin.shape==3)
-            val bg=if(heavy) gradient(skin.accent,skin.surface,radius,skin.accent)
-                else gradient(skin.key,skin.surface,radius,
-                    if(skin.outline)skin.accent else null)
+            val bg=KeyPopGlass.key(this,skin,heavy)
             key.background=android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(
                     (skin.accent and 0x00FFFFFF) or (0x55 shl 24)),bg,null)
@@ -518,7 +515,8 @@ class AetherImeService : InputMethodService() {
         val s=palette()
         val keyboardBackdrop=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
         liveBackground=keyboardBackdrop
-        root.background=keyboardBackdrop
+        root.background=if(KeyPopSkins.index(this)==10)KeyPopGlass.background(this,s)
+            else keyboardBackdrop
         updateThemeAnimation()
         root.setPadding(d(3),d(5),d(3),d(6))
         applyFloatingLayout()
@@ -704,7 +702,8 @@ class AetherImeService : InputMethodService() {
             gravity=Gravity.CENTER_VERTICAL
             setPadding(d(10),0,0,0)
         }
-        if(preset.id!=KeyboardPresetCatalog.GESTURE && !resizeOpen)
+        if(preset.id!=KeyboardPresetCatalog.GESTURE &&
+            preset.id!=KeyboardPresetCatalog.MATERIAL && !resizeOpen)
             root.addView(title,LinearLayout.LayoutParams(-1,d(20)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
@@ -745,6 +744,7 @@ class AetherImeService : InputMethodService() {
                 LinearLayout.LayoutParams(d(28),d(height)))
             val show=when {
                 label=="SPACE" -> if(language==0) "English" else languages[language]
+                label=="☺," -> "☺"
                 label=="↵" && prefs.getBoolean("autoTranslate",false) &&
                     !sensitive(currentInputEditorInfo) -> "⇄ Send"
                 shift && (language==0 || prefs.getBoolean("romanMode",false)) &&
@@ -755,9 +755,16 @@ class AetherImeService : InputMethodService() {
             val heavy=label in listOf("↵","⇧") || (label=="SPACE" && palette().shape==3)
             val altLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
             val hint=if(prefs.getBoolean("hints",true))KeyPopAlternates.hint(label,altLanguage) else null
-            val caption=if(!symbols && hint!=null && label.length==1)
+            val material=preset.id==KeyboardPresetCatalog.MATERIAL && !symbols
+            val variants=KeyPopMaterialHints.candidates(label,altLanguage,material)
+            val actualHint=if(prefs.getBoolean("hints",true))variants.firstOrNull() else null
+            val caption=if(!material && !symbols && hint!=null && label.length==1)
                 show+"\n"+hint else show
             val button=makeKey(caption,heavy,weight) { press(label) }
+            if(material && label.length==1 && actualHint!=null && button is KeyPopHintKey) {
+                button.hintText=actualHint
+                button.hintColor=palette().ink
+            }
             if(label=="⌫" && prefs.getBoolean("wordDelete",true)) button.setOnLongClickListener {
                 tapFeedback(button)
                 val before=currentInputConnection?.getTextBeforeCursor(200,0)?.toString().orEmpty()
@@ -766,7 +773,6 @@ class AetherImeService : InputMethodService() {
                     if(match!=null)before.length-match.range.first else 1,0)
                 true
             }
-            val variants=KeyPopAlternates.forKey(label,altLanguage)
             val glidable=!symbols && language==0 && label.length==1 &&
                 label[0].isLetter() && prefs.getBoolean("glide",false)
             if(variants.isNotEmpty() || glidable)
@@ -1149,6 +1155,12 @@ class AetherImeService : InputMethodService() {
                 refreshSuggestions()
             }
             "🌐" -> cycleLanguage()
+            "☺," ->{
+                if(!sensitive(currentInputEditorInfo)){
+                    emojiOpen=true;clipsOpen=false;translatorOpen=false
+                    draw()
+                } else currentInputConnection?.commitText(",",1)
+            }
             "?123" -> { symbols=true;draw() }
             "ABC" -> { symbols=false;draw() }
             "↵" -> {
