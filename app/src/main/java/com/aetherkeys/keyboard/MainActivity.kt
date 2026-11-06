@@ -96,6 +96,7 @@ class MainActivity : Activity() {
         root.addView(gap(10))
 
         lateinit var studio:LinearLayout
+        lateinit var presetsCard:LinearLayout
         lateinit var controls:LinearLayout
         lateinit var translate:LinearLayout
         lateinit var vaultCard:LinearLayout
@@ -107,7 +108,8 @@ class MainActivity : Activity() {
             jumpStrip.addView(chip,LinearLayout.LayoutParams(d(105),d(42)).apply{rightMargin=d(7)})
         }
         jump("Themes"){studio}
-        jump("Customize"){controls}
+        jump("Layouts"){presetsCard}
+        jump("Preferences"){controls}
         jump("Translate"){translate}
         jump("Clipboard"){clipsCard}
         jump("Login Vault"){vaultCard}
@@ -131,7 +133,7 @@ class MainActivity : Activity() {
         studio.addView(text("THEME STUDIO",12f,0xFF83CFF4.toInt(),true))
         studio.addView(gap(5))
         studio.addView(text("15 expressive profiles",22f,ink,true))
-        studio.addView(text("Tap any design to apply immediately. The preview below updates without a separate Save button.",12f,muted))
+        studio.addView(text("Browse without changing your active keyboard. Select a preview, then tap Apply Theme.",12f,muted))
         studio.addView(gap(14))
         val activeLabel=text("",14f,ink,true)
         studio.addView(activeLabel)
@@ -143,11 +145,13 @@ class MainActivity : Activity() {
         val gallery=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
         val strip=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
         val tiles=ArrayList<LinearLayout>()
+        var pendingTheme=prefs.getInt("theme",0).coerceIn(0,14)
         fun choose(index:Int) {
-            prefs.edit().putInt("theme",index).apply()
+            pendingTheme=index
             mainPreview.selection=index
             livePreviews.forEach{it.invalidate()}
-            activeLabel.text=KeyPopSkins.all[index].name + "  ·  " + KeyPopSkins.all[index].subtitle
+            activeLabel.text="PREVIEW  ·  "+KeyPopSkins.all[index].name+
+                "  ·  "+KeyPopSkins.all[index].subtitle
             tiles.forEachIndexed { i, tile ->
                 tile.background=background(if(i==index) 0xFF3E416B.toInt() else 0xFF1D2943.toInt(),
                     16,if (i==index) accent else edge)
@@ -166,6 +170,13 @@ class MainActivity : Activity() {
             tiles.add(tile)
         }
         gallery.addView(strip)
+        studio.addView(action("✓ Apply selected theme",true) {
+            prefs.edit().putInt("theme",pendingTheme).apply()
+            android.widget.Toast.makeText(this,"Theme applied: "+KeyPopSkins.all[pendingTheme].name,
+                android.widget.Toast.LENGTH_SHORT).show()
+            livePreviews.forEach{it.invalidate()}
+        })
+        studio.addView(gap(12))
         studio.addView(gallery)
         studio.addView(gap(12))
         studio.addView(text("10 original premium skins  ·  5 familiar-style alternatives",11f,muted))
@@ -196,6 +207,64 @@ class MainActivity : Activity() {
         addCard(root,studio)
         choose(prefs.getInt("theme",0).coerceIn(0,14))
 
+        presetsCard=card()
+        presetsCard.addView(text("FAMILIAR KEYBOARD LAYOUTS",12f,0xFF83CFF4.toInt(),true))
+        presetsCard.addView(gap(5))
+        presetsCard.addView(text("Choose your typing style",22f,ink,true))
+        presetsCard.addView(text("Original layouts informed by Gboard, Microsoft SwiftKey, Samsung Keyboard, Fleksy and Typewise ergonomics. No copied visual assets or endorsements. Browsing is safe; only Apply changes your keyboard.",12f,muted))
+        presetsCard.addView(gap(12))
+        val presetStatus=text("",14f,ink,true)
+        presetsCard.addView(presetStatus)
+        presetsCard.addView(gap(8))
+        val presetPreviewSlot=FrameLayout(this)
+        presetsCard.addView(presetPreviewSlot,LinearLayout.LayoutParams(-1,d(140)))
+        val activePreset=KeyboardPresetCatalog.selected(this).id
+        var chosenPreset=activePreset
+        val presetTiles=ArrayList<LinearLayout>()
+        fun previewPreset(id:Int) {
+            chosenPreset=id
+            val candidate=KeyboardPresetCatalog.byId(id) ?:return
+            presetPreviewSlot.removeAllViews()
+            presetPreviewSlot.addView(KeyboardPresetPreview(this,candidate),
+                FrameLayout.LayoutParams(-1,d(140)))
+            presetStatus.text="PREVIEW  ·  "+candidate.name+
+                "  ("+candidate.reference+")"
+            presetTiles.forEachIndexed{index,tile->
+                tile.background=background(if(index==id)0xFF3E416B.toInt() else 0xFF1D2943.toInt(),
+                    16,if(index==id)accent else edge)
+            }
+        }
+        presetsCard.addView(gap(10))
+        presetsCard.addView(action("✓ Apply selected keyboard layout",true) {
+            val selected=KeyboardPresetCatalog.byId(chosenPreset)
+            if(KeyboardPresetCatalog.apply(this,chosenPreset) && selected!=null){
+                android.widget.Toast.makeText(this,
+                    selected.name+" applied. Reopen the keyboard to see all changes.",
+                    android.widget.Toast.LENGTH_LONG).show()
+                livePreviews.forEach{it.invalidate()}
+            }
+        })
+        presetsCard.addView(gap(10))
+        val presetGallery=HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false}
+        val presetStrip=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        KeyboardPresetCatalog.all.forEach{candidate->
+            val tile=column(9)
+            tile.addView(text(candidate.name,15f,ink,true))
+            tile.addView(KeyboardPresetPreview(this,candidate),
+                LinearLayout.LayoutParams(-1,d(140)))
+            tile.addView(text(candidate.description,12f,muted))
+            tile.addView(text(candidate.reference,11f,0xFF83CFF4.toInt()))
+            tile.setOnClickListener{previewPreset(candidate.id)}
+            presetStrip.addView(tile,LinearLayout.LayoutParams(d(248),-2).apply{
+                rightMargin=d(10)
+            })
+            presetTiles.add(tile)
+        }
+        presetGallery.addView(presetStrip)
+        presetsCard.addView(presetGallery)
+        addCard(root,presetsCard)
+        previewPreset(activePreset)
+
         controls=card()
         controls.addView(text("KEYBOARD CUSTOMIZER",12f,0xFF83CFF4.toInt(),true))
         controls.addView(gap(4))
@@ -215,7 +284,10 @@ class MainActivity : Activity() {
         controls.addView(gap(8))
         controls.addView(text("Adjust live keyboard behavior. Changes apply the next time the keyboard is opened or refreshed.",12f,muted))
         controls.addView(gap(12))
+        controls.addView(text("For instant drag-to-resize, open the keyboard and tap Resize in its toolbar.",12f,0xFF83CFF4.toInt()))
         slider(controls,"Key height", "height", 36,90,51,"dp")
+        slider(controls,"Keyboard width", "keyboardWidthPercent", 65,100,100,"%")
+        slider(controls,"Lift above Android navigation", "bottomLift", 0,96,0,"dp")
         slider(controls,"Key corner curve", "round", 3,26,13,"dp")
         slider(controls,"Key spacing", "spacing", 1,10,4,"dp")
         slider(controls,"Key label size", "font", 12,24,17,"sp")
@@ -388,6 +460,13 @@ class MainActivity : Activity() {
         root.addView(foot)
         root.addView(gap(15))
         setContentView(shell)
+        val target=when(intent.getStringExtra("openSection")){
+            "themes" ->studio
+            "layouts" ->presetsCard
+            "settings" ->controls
+            else ->null
+        }
+        if(target!=null)shell.post{shell.smoothScrollTo(0,target.top)}
     }
 
     private fun slider(parent:LinearLayout,title:String,key:String,low:Int,high:Int,default:Int,unit:String) {
