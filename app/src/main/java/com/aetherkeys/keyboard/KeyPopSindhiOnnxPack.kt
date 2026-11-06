@@ -35,7 +35,7 @@ object KeyPopSindhiOnnxPack {
     val sindhiToEnglish=Bundle("sd-en","Sindhi (Arabic) → English",
         "hari31416/indictrans2-indic-en-dist-200M-ONNX-int8","a7ecdc0",270)
     val bundles=listOf(englishToSindhi,sindhiToEnglish)
-    private val main=Handler(Looper.getMainLooper())
+    private val main by lazy { Handler(Looper.getMainLooper()) }
     private val running=AtomicBoolean(false)
     private val shaPattern=Regex("[a-fA-F0-9]{64}")
     data class Progress(
