@@ -55,7 +55,14 @@ object KeyPopDesignProfile {
                 }
                 k.startsWith("customLayout_") && k in (0..2).map{"customLayout_"+it}->{
                     require(v is JSONArray && v.length()==3){"Invalid rows"}
-                    val counts=listOf(10,9,7)
+                    val englishIndex=if(k=="customLayout_0") (result["englishLayout"] as? Int
+                        ?: obj.optInt("englishLayout",0)) else 0
+                    val counts=if(k=="customLayout_0") when(englishIndex) {
+                        1->listOf(10,10,6)
+                        3->listOf(10,10,10)
+                        4->listOf(10,10,7)
+                        else->listOf(10,9,7)
+                    } else listOf(10,9,7)
                     for(i in 0..2) {
                         val row=v.getJSONArray(i)
                         require(row.length()==counts[i]){"Invalid key count"}
