@@ -135,8 +135,7 @@ class MainActivity : Activity() {
         val sectionTitle=text("SETTINGS",14f,ink,true)
         val back=text("‹  All Settings",15f,ink,true).apply{
             minHeight=d(36)
-            setOnClickListener{navigateHome()}
-        }
+         }
         backBar.addView(back)
         backBar.addView(sectionTitle)
         backBar.visibility=View.GONE
@@ -161,6 +160,7 @@ class MainActivity : Activity() {
                 .forEach{it.visibility=if(it===target) View.VISIBLE else View.GONE}
             shell.post{shell.scrollTo(0,0)}
         }
+        back.setOnClickListener{navigateHome()}
         fun navRow(left:String,leftView:()->LinearLayout,right:String,rightView:()->LinearLayout) {
             val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
             row.addView(action(left){navigate(leftView(),left)},LinearLayout.LayoutParams(0,d(47),1f).apply{rightMargin=d(8)})
@@ -225,9 +225,15 @@ class MainActivity : Activity() {
         val strip=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
         val tiles=ArrayList<LinearLayout>()
         var pendingTheme=prefs.getInt("theme",0).coerceIn(0,14)
+        var pendingAccent:Int?=if(prefs.contains("customAccent"))
+            prefs.getInt("customAccent",accent) else null
+        mainPreview.previewAccent=pendingAccent
         fun choose(index:Int) {
+            if(index!=pendingTheme)pendingAccent=null
             pendingTheme=index
             mainPreview.selection=index
+            mainPreview.ignoreStoredAccent=true
+            mainPreview.previewAccent=pendingAccent
             livePreviews.forEach{it.invalidate()}
             activeLabel.text="PREVIEW  ·  "+KeyPopSkins.all[index].name+
                 "  ·  "+KeyPopSkins.all[index].subtitle
@@ -249,9 +255,13 @@ class MainActivity : Activity() {
             tiles.add(tile)
         }
         gallery.addView(strip)
-        studio.addView(action("✓ Apply selected theme",true) {
-            prefs.edit().putInt("theme",pendingTheme).apply()
-            android.widget.Toast.makeText(this,"Theme applied: "+KeyPopSkins.all[pendingTheme].name,
+        studio.addView(action("✓ Apply selected theme & accent",true) {
+            val editor=prefs.edit().putInt("theme",pendingTheme)
+            if(pendingAccent!=null)editor.putInt("customAccent",pendingAccent!!)
+            else editor.remove("customAccent")
+            editor.apply()
+            dashboard.invalidate()
+            android.widget.Toast.makeText(this,"Applied: "+KeyPopSkins.all[pendingTheme].name,
                 android.widget.Toast.LENGTH_SHORT).show()
             livePreviews.forEach{it.invalidate()}
         })
@@ -271,7 +281,9 @@ class MainActivity : Activity() {
                 gravity=Gravity.CENTER
                 background=background(0xFF27324B.toInt(),12,edge)
                 setOnClickListener {
-                    prefs.edit().putInt("customAccent",color).apply()
+                    pendingAccent=color
+                    mainPreview.previewAccent=color
+                    mainPreview.ignoreStoredAccent=true
                     livePreviews.forEach{it.invalidate()}
                 }
             }
@@ -279,8 +291,10 @@ class MainActivity : Activity() {
         }
         studio.addView(swatches)
         studio.addView(gap(6))
-        studio.addView(action("Reset accent to theme default") {
-            prefs.edit().remove("customAccent").apply()
+        studio.addView(action("Preview default accent") {
+            pendingAccent=null
+            mainPreview.ignoreStoredAccent=true
+            mainPreview.previewAccent=null
             livePreviews.forEach{it.invalidate()}
         })
         addCard(root,studio)
