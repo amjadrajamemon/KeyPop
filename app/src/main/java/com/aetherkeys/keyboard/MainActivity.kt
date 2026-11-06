@@ -101,21 +101,25 @@ class MainActivity : Activity() {
         lateinit var translate:LinearLayout
         lateinit var vaultCard:LinearLayout
         lateinit var clipsCard:LinearLayout
-        val quickJump=HorizontalScrollView(this).apply {isHorizontalScrollBarEnabled=false}
-        val jumpStrip=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        fun jump(label:String, destination:()->View) {
-            val chip=action(label) {shell.smoothScrollTo(0,destination().top)}
-            jumpStrip.addView(chip,LinearLayout.LayoutParams(d(105),d(42)).apply{rightMargin=d(7)})
+        val dashboard=card()
+        dashboard.addView(text("KEYBOARD SETTINGS",12f,0xFF83CFF4.toInt(),true))
+        dashboard.addView(gap(4))
+        dashboard.addView(text("Find anything in two taps",20f,ink,true))
+        dashboard.addView(text("Opening a menu never changes your active theme or layout. Preview first, then apply.",12f,muted))
+        dashboard.addView(gap(10))
+        fun navRow(left:String,leftView:()->View,right:String,rightView:()->View) {
+            val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            row.addView(action(left) {shell.smoothScrollTo(0,leftView().top)},
+                LinearLayout.LayoutParams(0,d(48),1f).apply{rightMargin=d(7)})
+            row.addView(action(right) {shell.smoothScrollTo(0,rightView().top)},
+                LinearLayout.LayoutParams(0,d(48),1f))
+            dashboard.addView(row,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=d(7)})
         }
-        jump("Themes"){studio}
-        jump("Layouts"){presetsCard}
-        jump("Preferences"){controls}
-        jump("Translate"){translate}
-        jump("Clipboard"){clipsCard}
-        jump("Login Vault"){vaultCard}
-        quickJump.addView(jumpStrip)
-        root.addView(quickJump)
-        root.addView(gap(12))
+        navRow("Themes",{studio},"Layouts",{presetsCard})
+        navRow("Typing & Resizing",{controls},"Translation",{translate})
+        navRow("Clipboard",{clipsCard},"Login & Privacy",{vaultCard})
+        root.addView(dashboard)
+        root.addView(gap(7))
 
         val onboarding=card()
         onboarding.addView(text("01  ·  GET STARTED",12f,0xFF83CFF4.toInt(),true))
