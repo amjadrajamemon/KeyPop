@@ -51,12 +51,19 @@ class AetherImeService : InputMethodService() {
     private var translationStatus=""
     private var translateTarget=0
     private val codes=listOf("en","ur","sd")
+    private var voiceTargetPackage=""
+    private var pendingSpeech:String?=null
     private val speechReceiver=object:BroadcastReceiver() {
         override fun onReceive(context:Context,intent:Intent) {
             if(intent.action==KeyPopVoiceActivity.RESULT_ACTION) {
                 val recognized=intent.getStringExtra("text").orEmpty()
-                if(recognized.isNotBlank() && !sensitive(currentInputEditorInfo))
-                    currentInputConnection?.commitText(recognized+" ",1)
+                if(recognized.isNotBlank()) {
+                    val target=currentInputEditorInfo?.packageName.orEmpty()
+                    if(!sensitive(currentInputEditorInfo) && target==voiceTargetPackage) {
+                        val success=currentInputConnection?.commitText(recognized+" ",1) ?: false
+                        if(!success)pendingSpeech=recognized
+                    }else pendingSpeech=recognized
+                }
             }
         }
     }
@@ -158,6 +165,11 @@ class AetherImeService : InputMethodService() {
         super.onStartInputView(info,restarting)
         clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false
         shift=false;capsLock=false
+        val pending=pendingSpeech
+        if(pending!=null && !sensitive(info) && info?.packageName==voiceTargetPackage) {
+            val inserted=currentInputConnection?.commitText(pending+" ",1) ?: false
+            if(inserted)pendingSpeech=null
+        } else if(pending!=null && info?.packageName!=voiceTargetPackage) pendingSpeech=null
         draw()
     }
 
@@ -270,6 +282,8 @@ class AetherImeService : InputMethodService() {
                 draw()
             }
             topButton("🎙",.52f) {
+                voiceTargetPackage=currentInputEditorInfo?.packageName.orEmpty()
+                pendingSpeech=null
                 val lang=when(language){1->"ur-PK";2->"sd-PK";else->"en-US"}
                 startActivity(Intent(this,KeyPopVoiceActivity::class.java)
                     .putExtra("lang",lang).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
