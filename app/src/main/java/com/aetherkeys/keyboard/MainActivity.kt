@@ -192,6 +192,7 @@ class MainActivity : Activity() {
         toggle(controls,"Double-space punctuation","Two spaces insert a period and one space","doubleSpace",true)
         toggle(controls,"Auto capitalize sentences","Capitalize the first English letter of a sentence","autoCap",true)
         toggle(controls,"Tablet split typing","Extra central gap in wide-screen layouts","splitKeyboard",false)
+        toggle(controls,"Floating keyboard","Drag the ⠿ handle to reposition the compact keyboard","floating",false)
         toggle(controls,"Glide English words","Slide between letters to insert common words","glide",false)
         toggle(controls,"Long-press number hints","Reveal additional characters by holding a key","hints",true)
         toggle(controls,"Haptic feedback","Small vibration when a key is pressed","haptics",false)

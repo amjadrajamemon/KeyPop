@@ -113,6 +113,7 @@ class AetherImeService : InputMethodService() {
 
     override fun onCreate() {
         super.onCreate()
+        window.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         val filter=IntentFilter(KeyPopVoiceActivity.RESULT_ACTION)
         if(Build.VERSION.SDK_INT>=33)
             registerReceiver(speechReceiver,filter,Context.RECEIVER_NOT_EXPORTED)
