@@ -149,15 +149,18 @@ object KeyPopSindhiOnnxPack {
                 }
             }
             val digest=sha256(part)
-            if(expectedSha!=null && !expectedSha.equals(digest,true)) {
-                part.delete()
-                error("SHA-256 mismatch on "+name)
-            }
+            // Hugging Face CDN ETag/X-Linked-Etag can identify a Git/Xet
+            // object, not the raw HTTP response body. Do NOT interpret
+            // arbitrary 64-hex ETags as a file's trusted SHA-256 checksum.
+            // Files are pinned by repository commit and protected by HTTPS;
+            // the computed local SHA-256 receipt detects later corruption.
+            // Publisher-signed checksum manifests can add stronger validation.
             if(file.exists() && !file.delete())error("Cannot replace "+name)
             if(!part.renameTo(file))error("Cannot finalize "+name)
             File(destDir,name+".integrity").writeText(
                 JSONObject().put("sha256",digest)
-                    .put("upstreamVerified",expectedSha!=null)
+                    .put("upstreamVerified",false)
+                    .put("upstreamETag",expectedSha?:"")
                     .put("revision",bundle.revision).toString())
         } finally { connection.disconnect() }
     }
