@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <queries>
         <package android:name="com.google.android.apps.translate"/>
         <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH"/></intent>
@@ -36,6 +39,8 @@
         <activity android:name=".KeyPopDictionaryActivity" android:exported="false"/>
         <activity android:name=".KeyPopVoiceActivity" android:exported="false"/>
         <activity android:name=".KeyPopModelManagerActivity" android:exported="false"/>
+        <service android:name=".KeyPopModelDownloadService"
+            android:exported="false" android:foregroundServiceType="dataSync"/>
         <activity android:name=".MainActivity" android:exported="false"/>
         <activity android:name=".KeyPopHomeActivity" android:exported="true"
             android:windowSoftInputMode="adjustResize">

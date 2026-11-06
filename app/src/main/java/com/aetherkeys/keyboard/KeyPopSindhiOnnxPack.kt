@@ -41,10 +41,12 @@ object KeyPopSindhiOnnxPack {
     val bundles=listOf(englishToSindhi,sindhiToEnglish,urduSindhi)
     private val main by lazy { Handler(Looper.getMainLooper()) }
     private val running=AtomicBoolean(false)
+    fun isDownloading():Boolean=running.get()
     private val shaPattern=Regex("[a-fA-F0-9]{64}")
     data class Progress(
         val bundleId:String,val fileName:String,val index:Int,val count:Int,
-        val bytes:Long,val total:Long?,val message:String,val complete:Boolean=false
+        val bytes:Long,val total:Long?,val message:String,val complete:Boolean=false,
+        val failed:Boolean=false
     )
     private fun root(context:Context)=File(context.filesDir,"indictrans2-onnx")
     fun folder(context:Context,bundle:Bundle)=File(root(context),bundle.id)
@@ -60,7 +62,7 @@ object KeyPopSindhiOnnxPack {
     fun status(context:Context,bundle:Bundle):String {
         val count=bundle.files.size-missing(context,bundle).size
         return if(count==bundle.files.size)
-            "All "+count+" files present. Translation runtime NOT enabled."
+            "All "+count+" model files installed. Test the translation for accuracy."
         else count.toString()+"/"+bundle.files.size+" files downloaded ("+
             bundle.approximateMB+" MB approx. full pack)"
     }
@@ -201,8 +203,8 @@ object KeyPopSindhiOnnxPack {
                     "All three offline Sindhi model bundles downloaded. Run translation tests.",true))
             } catch(e:Exception) {
                 publish(notify,Progress("all","",0,3,0,null,
-                    "Offline Sindhi pack download failed: "+(e.localizedMessage?:"unknown")+
-                    ". Retry to resume.",true))
+                    "Offline Sindhi pack download FAILED: "+(e.localizedMessage?:"unknown")+
+                    ". Retry to resume.",true,true))
             } finally {running.set(false)}
         },"keypop-all-sindhi-model-packs").start()
         return true
@@ -230,11 +232,11 @@ object KeyPopSindhiOnnxPack {
                     }
                 }
                 publish(notify,Progress(bundle.id,"",bundle.files.size,bundle.files.size,
-                    0,null,"Model files downloaded; translation inference NOT yet available.",true))
+                    0,null,"Model files installed. Test an offline sentence for accuracy.",true))
             } catch(e:Exception) {
                 publish(notify,Progress(bundle.id,"",index,bundle.files.size,0,null,
                     "Stopped: "+(e.localizedMessage?:"unknown error")+
-                    ". Retry to resume partial files.",true))
+                    ". Retry to resume partial files.",true,true))
             } finally {running.set(false)}
         },"keypop-sindhi-model-files").start()
         return true

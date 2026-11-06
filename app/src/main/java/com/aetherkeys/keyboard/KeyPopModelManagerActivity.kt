@@ -1,6 +1,11 @@
 package com.aetherkeys.keyboard
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.app.AlertDialog
 import android.os.Bundle
 import android.graphics.Color
@@ -29,6 +34,15 @@ class KeyPopModelManagerActivity:Activity() {
     private lateinit var progress:ProgressBar
     private lateinit var status:TextView
     private lateinit var sindhiStatus:TextView
+    private lateinit var downloadState:TextView
+    private lateinit var sindhiProgress:ProgressBar
+    private val observer=Handler(Looper.getMainLooper())
+    private val updateDownloadUi=object:Runnable {
+        override fun run() {
+            renderDownloadStatus()
+            observer.postDelayed(this,650)
+        }
+    }
     private var running=0
     private fun dp(x:Int)=(x*resources.displayMetrics.density).toInt()
     private fun label(t:String,size:Float=15f,color:Int=textColor)=TextView(this).apply{
@@ -92,26 +106,20 @@ class KeyPopModelManagerActivity:Activity() {
         column.addView(label("KeyPop has an integrated IndicTrans2 neural translator for English, Urdu and Sindhi. The full offline model pack is about 978 MB, installed only with your permission. Android inference quality must be verified with real sentences before considering a release complete.",14f,muted))
         sindhiStatus=label("Checking experimental Sindhi model-file status…",13f,muted)
         column.addView(sindhiStatus)
+        downloadState=label("No Sindhi model download started.",13f,teal)
+        column.addView(downloadState)
+        sindhiProgress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply {
+            max=100;progress=0;visibility=View.GONE
+        }
+        column.addView(sindhiProgress,LinearLayout.LayoutParams(-1,dp(13)).apply {
+            topMargin=dp(5);bottomMargin=dp(5)
+        })
         button("Install all Sindhi offline translation models · ~978 MB") {
             AlertDialog.Builder(this)
                 .setTitle("Download offline Sindhi translation?")
                 .setMessage("Download the English → Sindhi, Sindhi → English and direct Urdu ↔ Sindhi models (approximately 978 MB total). Models remain in private phone storage and translation runs locally after installation. A Wi-Fi connection is recommended. Please allow free storage of at least 1.2 GB.")
                 .setPositiveButton("Install all models") {_,_->
-                    progress.visibility=View.VISIBLE
-                    val started=KeyPopSindhiOnnxPack.downloadAll(this) { update->
-                        if(isFinishing||isDestroyed)return@downloadAll
-                        val pc=if(update.total!=null && update.total>0)
-                            " · "+(100*update.bytes/update.total)+"%" else ""
-                        status.text=update.message+pc
-                        if(update.complete) {
-                            progress.visibility=View.GONE
-                            refreshSindhi()
-                        }
-                    }
-                    if(!started) {
-                        progress.visibility=View.GONE
-                        status.text="Model installation already running. Retry when finished."
-                    }
+                    startSindhiService(null)
                 }
                 .setNegativeButton("Cancel",null)
                 .show()
@@ -176,6 +184,58 @@ class KeyPopModelManagerActivity:Activity() {
         // No hidden download during startup; all model transfers require consent.
         refreshSindhi()
     }
+    override fun onResume() {
+        super.onResume()
+        observer.removeCallbacks(updateDownloadUi)
+        observer.post(updateDownloadUi)
+    }
+
+    override fun onPause() {
+        observer.removeCallbacks(updateDownloadUi)
+        super.onPause()
+    }
+
+    private fun startSindhiService(bundleId:String?) {
+        if(KeyPopSindhiOnnxPack.isDownloading()) {
+            renderDownloadStatus()
+            return
+        }
+        try {
+            KeyPopModelDownloadService.start(this,bundleId)
+            downloadState.text="Starting download in the background…"
+            sindhiProgress.visibility=View.VISIBLE
+            sindhiProgress.isIndeterminate=true
+            if(Build.VERSION.SDK_INT>=33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=
+                PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),711)
+            }
+        }catch(error:Exception){
+            downloadState.text="Download could not start: "+
+                (error.localizedMessage?:"Android foreground service unavailable")
+            sindhiProgress.visibility=View.GONE
+        }
+    }
+
+    private fun renderDownloadStatus() {
+        if(!::downloadState.isInitialized)return
+        val state=getSharedPreferences(KeyPopModelDownloadService.PREFS,MODE_PRIVATE)
+        val active=state.getBoolean("active",false)
+        val finished=state.getBoolean("finished",false)
+        val message=state.getString("message","No Sindhi model download started.").orEmpty()
+        val percent=state.getInt("percent",-1)
+        val updateTime=state.getLong("updatedAt",0L)
+        val stale=active && updateTime>0 &&
+            System.currentTimeMillis()-updateTime>180000L
+        downloadState.text=if(stale)
+            "No progress update for 3 minutes. If interrupted, tap Install to resume."
+            else message
+        sindhiProgress.visibility=if(active||finished)View.VISIBLE else View.GONE
+        sindhiProgress.isIndeterminate=active && percent<0
+        if(percent>=0)sindhiProgress.progress=percent
+        if(finished && !active)refreshSindhi()
+    }
+
     private fun refreshSindhi() {
         if(!::sindhiStatus.isInitialized)return
         sindhiStatus.text=KeyPopSindhiOnnxPack.bundles.joinToString("\n") {
@@ -188,16 +248,7 @@ class KeyPopModelManagerActivity:Activity() {
             .setMessage("Download approximately "+bundle.approximateMB+
                 " MB to app-private storage over your current network? KeyPop will attempt local translation with the downloaded ONNX model. This build still requires sentence-level accuracy validation.")
             .setPositiveButton("Download model") {_,_->
-                val started=KeyPopSindhiOnnxPack.download(this,bundle) {update->
-                    if(isFinishing||isDestroyed)return@download
-                    val fraction=if(update.total!=null && update.total>0L)
-                        (100.0*update.bytes/update.total).toInt().coerceIn(0,100)
-                            .toString()+"%" else "progress unavailable"
-                    status.text=update.message+" · "+fraction
-                    if(update.complete)refreshSindhi()
-                }
-                if(!started)status.text="One model download is already running"
-                else status.text="Requesting "+bundle.name+" files (experimental)"
+                startSindhiService(bundle.id)
             }
             .setNegativeButton("Cancel",null)
             .show()
