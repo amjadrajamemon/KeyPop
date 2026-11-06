@@ -183,7 +183,7 @@ class AetherImeService : InputMethodService() {
         shell.addView(current,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
         ViewCompat.setOnApplyWindowInsetsListener(shell) { view,insets ->
             val bottom=insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val safe=bottom.coerceAtLeast(d(12))
+            val safe=KeyboardSizingRules.safeBottom(bottom,d(12))
             if(navSafeBottomPx!=safe) {
                 navSafeBottomPx=safe
                 view.setPadding(0,0,0,safe)
