@@ -62,6 +62,10 @@ object KeyPopSkins {
 class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
     var selection: Int = initial
         set(value) { field = value.coerceIn(0, KeyPopSkins.all.lastIndex); invalidate() }
+    var previewAccent:Int?=null
+        set(value){field=value;invalidate()}
+    var ignoreStoredAccent:Boolean=false
+        set(value){field=value;invalidate()}
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private fun dp(n: Float) = n * resources.displayMetrics.density
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -70,8 +74,10 @@ class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
     }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val s = if(selection==KeyPopSkins.index(context)) KeyPopSkins.active(context)
-                else KeyPopSkins.all[selection]
+        val active=KeyPopSkins.index(context)
+        val base=if(selection==active && !ignoreStoredAccent)
+            KeyPopSkins.active(context) else KeyPopSkins.all[selection]
+        val s=previewAccent?.let{base.copy(accent=it)} ?: base
         val w = width.toFloat()
         val h = height.toFloat()
         KeyPopBackdropDrawable(selection,s).apply {

@@ -34,6 +34,7 @@
         <activity android:name=".KeyPopLayoutStudioActivity" android:exported="false"/>
         <activity android:name=".KeyPopDictionaryActivity" android:exported="false"/>
         <activity android:name=".KeyPopVoiceActivity" android:exported="false"/>
+        <activity android:name=".KeyPopModelManagerActivity" android:exported="false"/>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
