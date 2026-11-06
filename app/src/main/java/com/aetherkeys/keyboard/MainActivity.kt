@@ -95,6 +95,26 @@ class MainActivity : Activity() {
         root.addView(text("Customize the entire typing experience with live visual controls, 15 profiles and three built-in languages.",13f,muted))
         root.addView(gap(10))
 
+        lateinit var studio:LinearLayout
+        lateinit var controls:LinearLayout
+        lateinit var translate:LinearLayout
+        lateinit var vaultCard:LinearLayout
+        lateinit var clipsCard:LinearLayout
+        val quickJump=HorizontalScrollView(this).apply {isHorizontalScrollBarEnabled=false}
+        val jumpStrip=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        fun jump(label:String, destination:()->View) {
+            val chip=action(label) {shell.smoothScrollTo(0,destination().top)}
+            jumpStrip.addView(chip,LinearLayout.LayoutParams(d(105),d(42)).apply{rightMargin=d(7)})
+        }
+        jump("Themes"){studio}
+        jump("Customize"){controls}
+        jump("Translate"){translate}
+        jump("Clipboard"){clipsCard}
+        jump("Login Vault"){vaultCard}
+        quickJump.addView(jumpStrip)
+        root.addView(quickJump)
+        root.addView(gap(12))
+
         val onboarding=card()
         onboarding.addView(text("01  ·  GET STARTED",12f,0xFF83CFF4.toInt(),true))
         onboarding.addView(gap(10))
@@ -107,7 +127,7 @@ class MainActivity : Activity() {
         })
         addCard(root,onboarding)
 
-        val studio=card()
+        studio=card()
         studio.addView(text("THEME STUDIO",12f,0xFF83CFF4.toInt(),true))
         studio.addView(gap(5))
         studio.addView(text("15 expressive profiles",22f,ink,true))
@@ -176,7 +196,7 @@ class MainActivity : Activity() {
         addCard(root,studio)
         choose(prefs.getInt("theme",0).coerceIn(0,14))
 
-        val controls=card()
+        controls=card()
         controls.addView(text("KEYBOARD CUSTOMIZER",12f,0xFF83CFF4.toInt(),true))
         controls.addView(gap(4))
         controls.addView(text("Fine-tune every key",22f,ink,true))
@@ -201,7 +221,7 @@ class MainActivity : Activity() {
         toggle(controls,"Long-press Backspace deletes a word","Hold delete to remove the preceding word","wordDelete",true)
         addCard(root,controls)
 
-        val translate=card()
+        translate=card()
         translate.addView(text("TRANSLATION ENGINE",12f,0xFF83CFF4.toInt(),true))
         translate.addView(gap(6))
         translate.addView(text("Write, translate, send",21f,ink,true))
@@ -242,7 +262,7 @@ class MainActivity : Activity() {
         })
         addCard(root,translate)
 
-        val vaultCard=card()
+        vaultCard=card()
         vaultCard.addView(text("LOGIN VAULT",12f,0xFF83CFF4.toInt(),true))
         vaultCard.addView(gap(5))
         vaultCard.addView(text("Secure sign-ins",21f,ink,true))
@@ -262,7 +282,7 @@ class MainActivity : Activity() {
         })
         addCard(root,vaultCard)
 
-        val clipsCard=card()
+        clipsCard=card()
         clipsCard.addView(text("CLIPBOARD STUDIO",12f,0xFF83CFF4.toInt(),true))
         clipsCard.addView(gap(4))
         clipsCard.addView(text("Search, pin and manage clips",21f,ink,true))
