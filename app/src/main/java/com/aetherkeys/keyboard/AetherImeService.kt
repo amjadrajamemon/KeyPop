@@ -263,7 +263,7 @@ class AetherImeService : InputMethodService() {
                     translateSource=currentInputConnection?.getSelectedText(0)?.toString()
                         ?: currentInputConnection?.getTextBeforeCursor(1000,0)?.toString().orEmpty()
                     translateResult="";translationStatus=""
-                    translateTarget=(language+1)%3
+                    translateTarget=if(language==0)1 else 0
                 }
                 draw()
             }
