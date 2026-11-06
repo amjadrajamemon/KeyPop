@@ -314,7 +314,10 @@ class AetherImeService : InputMethodService() {
             1 -> row.setPadding(0,0,d(72),0)
             2 -> row.setPadding(d(72),0,0,0)
         }
-        labels.forEach { label ->
+        val split=prefs.getBoolean("splitKeyboard",false) && resources.configuration.smallestScreenWidthDp>=600
+        labels.forEachIndexed { index,label ->
+            if(split && index==labels.size/2) row.addView(View(this),
+                LinearLayout.LayoutParams(d(28),d(height)))
             val show=when {
                 label=="SPACE" -> if(language==0) "English" else languages[language]
                 shift && language==0 && label.length==1 && label[0].isLetter() -> label.uppercase(Locale.ROOT)
@@ -404,6 +407,15 @@ class AetherImeService : InputMethodService() {
             }
             "SPACE" -> {
                 if(!sensitive(currentInputEditorInfo)) {
+                    if(prefs.getBoolean("doubleSpace",true)) {
+                        val last=currentInputConnection?.getTextBeforeCursor(2,0)?.toString().orEmpty()
+                        if(last.length==2 && last.last()==' ' && last.first().isLetter()) {
+                            currentInputConnection?.deleteSurroundingText(1,0)
+                            currentInputConnection?.commitText(". ",1)
+                            refreshSuggestions()
+                            return
+                        }
+                    }
                     val before=currentInputConnection?.getTextBeforeCursor(48,0)?.toString().orEmpty()
                     val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
                     if(word.isNotBlank()) {
@@ -429,8 +441,11 @@ class AetherImeService : InputMethodService() {
                 else currentInputConnection?.commitText("\n",1)
             }
             else -> {
+                val prior=currentInputConnection?.getTextBeforeCursor(120,0)?.toString().orEmpty()
+                val sentenceStart=prior.isBlank() || prior.trimEnd().lastOrNull() in listOf('.','!','?','\n')
+                val capital=shift || (language==0 && prefs.getBoolean("autoCap",true) && sentenceStart)
                 currentInputConnection?.commitText(
-                    if(shift && language==0) value.uppercase(Locale.ROOT) else value,1)
+                    if(capital && language==0) value.uppercase(Locale.ROOT) else value,1)
                 if(shift && language==0 && !capsLock) { shift=false;draw() }
                 else refreshSuggestions()
             }
