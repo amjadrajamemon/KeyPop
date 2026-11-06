@@ -206,6 +206,22 @@ class MainActivity : Activity() {
         translate.addView(gap(6))
         translate.addView(text("Write, translate, send",21f,ink,true))
         translate.addView(text("English ↔ Urdu uses downloaded on-device translation models. Sindhi requires your own HTTPS provider; nothing is sent remotely until you enable it and initiate translation.",12f,muted))
+        toggle(translate,"Auto Translate on Send","Press the keyboard Send key to translate and insert automatically","autoTranslate",false)
+        translate.addView(gap(5))
+        val targetLabels=listOf("English","اردو","سنڌي")
+        val targetTitle=text("",13f,muted,true)
+        translate.addView(targetTitle)
+        fun showTarget(){targetTitle.text="Automatic translation target: "+targetLabels[prefs.getInt("autoTarget",0).coerceIn(0,2)]}
+        showTarget()
+        val targetRow=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
+        targetLabels.forEachIndexed{index,label->
+            targetRow.addView(action(label) {
+                prefs.edit().putInt("autoTarget",index).apply()
+                showTarget()
+            },LinearLayout.LayoutParams(0,d(42),1f).apply{rightMargin=d(5)})
+        }
+        translate.addView(targetRow)
+        translate.addView(gap(8))
         toggle(translate,"Allow remote Sindhi translation","Off by default; the configured provider receives messages you submit","remoteTranslate",false)
         val endpoint=EditText(this).apply {
             hint="Optional HTTPS translation endpoint"
