@@ -12,6 +12,7 @@ import android.os.Build
 import android.text.InputType
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
@@ -30,8 +31,32 @@ class AetherImeService : InputMethodService() {
     private var shift=false
     private var symbols=false
     private var clipsOpen=false
-    private var compact=false
+    private var emojiOpen=false
+    private var pinnedOnly=false
+    private var cursorTools=false
+    private var capsLock=false
+    private var lastShiftPress=0L
     private var current:LinearLayout?=null
+    private val emojiRows=listOf(
+        listOf("😀","😁","😂","😍","🥰","😊","😎","😭"),
+        listOf("❤️","👍","👏","🙏","🔥","✨","🎉","✅"),
+        listOf("💯","💪","🤔","😅","😇","🥹","👋","⭐"))
+    private fun sensitive(info:EditorInfo?):Boolean {
+        if(info==null) return true
+        val klass=info.inputType and InputType.TYPE_MASK_CLASS
+        val variation=info.inputType and InputType.TYPE_MASK_VARIATION
+        return klass==InputType.TYPE_NULL ||
+            (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING)!=0 ||
+            (klass==InputType.TYPE_CLASS_TEXT &&
+                (variation==InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                 variation==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                 variation==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) ||
+            (klass==InputType.TYPE_CLASS_NUMBER && variation==InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+    }
+    private fun numeric(info:EditorInfo?):Boolean {
+        val klass=(info?.inputType ?: 0) and InputType.TYPE_MASK_CLASS
+        return klass==InputType.TYPE_CLASS_NUMBER || klass==InputType.TYPE_CLASS_PHONE
+    }
     private val english=listOf(listOf("q","w","e","r","t","y","u","i","o","p"),
         listOf("a","s","d","f","g","h","j","k","l"),
         listOf("z","x","c","v","b","n","m"))
@@ -48,18 +73,7 @@ class AetherImeService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         clipboard.addPrimaryClipChangedListener {
-            val info=currentInputEditorInfo
-            val type=info?.inputType
-            val klass=type?.and(InputType.TYPE_MASK_CLASS)
-            val variation=type?.and(InputType.TYPE_MASK_VARIATION)
-            val sensitive=info==null || klass==InputType.TYPE_NULL ||
-                ((info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING)!=0) ||
-                (klass==InputType.TYPE_CLASS_TEXT &&
-                    (variation==InputType.TYPE_TEXT_VARIATION_PASSWORD ||
-                     variation==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
-                     variation==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) ||
-                (klass==InputType.TYPE_CLASS_NUMBER && variation==InputType.TYPE_NUMBER_VARIATION_PASSWORD)
-            if (!sensitive && prefs.getBoolean("history",true)) {
+            if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",true)) {
                 try {
                     val clip=clipboard.primaryClip
                     if(clip!=null && clip.itemCount>0 && clip.description.hasMimeType("text/plain")) {
@@ -81,6 +95,8 @@ class AetherImeService : InputMethodService() {
     }
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
         super.onStartInputView(info,restarting)
+        clipsOpen=false;emojiOpen=false;cursorTools=false
+        shift=false;capsLock=false
         draw()
     }
 
