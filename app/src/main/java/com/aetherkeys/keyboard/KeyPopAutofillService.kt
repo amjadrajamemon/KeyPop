@@ -62,7 +62,9 @@ class KeyPopAutofillService:AutofillService() {
             val packageName=structure.activityComponent?.packageName.orEmpty()
             val browsers=setOf("com.android.chrome","org.mozilla.firefox","com.microsoft.emmx",
                 "com.brave.browser","com.sec.android.app.sbrowser")
-            val target=if(fields.domain==null && packageName in browsers)"" else fields.domain ?:packageName
+            // Never let an arbitrary application claim a website origin via ViewNode.webDomain.
+            // Browsers require an explicit website hostname; other apps match only their package.
+            val target=if(packageName in browsers) fields.domain.orEmpty() else packageName
             if(!fields.hasFields||target.isBlank()){callback.onSuccess(null);return}
             val logins=KeyPopLoginVault(this).find(target)
             if(logins.isEmpty()){callback.onSuccess(null);return}
