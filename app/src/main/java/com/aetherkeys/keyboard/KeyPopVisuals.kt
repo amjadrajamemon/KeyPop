@@ -64,12 +64,11 @@ class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
     }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val s = KeyPopSkins.all[selection]
+        val s = if(selection==KeyPopSkins.index(context)) KeyPopSkins.active(context)
+                else KeyPopSkins.all[selection]
         val w = width.toFloat()
         val h = height.toFloat()
-        paint.shader = LinearGradient(0f, 0f, w, h, s.background, s.surface, Shader.TileMode.CLAMP)
-        paint.style = Paint.Style.FILL
-        canvas.drawRoundRect(RectF(0f, 0f, w, h), dp(16f), dp(16f), paint)
+        KeyPopBackdropDrawable(selection,s).apply { setBounds(0,0,width,height) }.draw(canvas)
         paint.shader = null
         val topY = dp(10f)
         paint.color = s.accent
@@ -92,7 +91,8 @@ class KeyboardPreview(context: Context, initial: Int = 0): View(context) {
                 val rect = RectF(x, y, x + kw, y + rowHeight - gap)
                 paint.color = s.key
                 paint.style = Paint.Style.FILL
-                canvas.drawRoundRect(rect, dp(KeyPopSkins.radius(s, 9)), dp(KeyPopSkins.radius(s, 9)), paint)
+                val round=KeyPopSkins.radius(s,context.getSharedPreferences("keypop",Context.MODE_PRIVATE).getInt("round",13))
+                canvas.drawRoundRect(rect,dp(round),dp(round),paint)
                 if (s.outline) {
                     paint.color = s.accent
                     paint.strokeWidth = dp(0.7f)
