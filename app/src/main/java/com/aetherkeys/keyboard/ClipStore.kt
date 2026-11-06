@@ -35,7 +35,7 @@ class ClipStore(private val context: Context) {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
             String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8)
-        } catch (_: Exception) { "[]" }
+        } catch (error: Exception) { throw IllegalStateException("Clipboard history cannot be decrypted; no data was erased", error) }
     }
     private fun persist(items: List<ClipItem>) {
         val data = JSONArray()
@@ -46,7 +46,7 @@ class ClipStore(private val context: Context) {
         prefs.edit().putString("encrypted", Base64.encodeToString(bytes, Base64.NO_WRAP)).apply()
     }
     @Synchronized fun list(): List<ClipItem> {
-        val arr = try { JSONArray(decrypt()) } catch (_: Exception) { JSONArray() }
+        val arr = JSONArray(decrypt())
         val out = ArrayList<ClipItem>()
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue

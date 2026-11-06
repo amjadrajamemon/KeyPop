@@ -197,7 +197,7 @@ class MainActivity : Activity() {
         toggle(controls,"Long-press number hints","Reveal additional characters by holding a key","hints",true)
         toggle(controls,"Haptic feedback","Small vibration when a key is pressed","haptics",false)
         toggle(controls,"Keyboard sound","Subtle key click sound","sound",false)
-        toggle(controls,"Clipboard history","Encrypted local text history; clear it on demand","history",true)
+        toggle(controls,"Clipboard history (opt in)","Encrypted local history with manual deletion and pinning","history",false)
         toggle(controls,"Long-press Backspace deletes a word","Hold delete to remove the preceding word","wordDelete",true)
         addCard(root,controls)
 
@@ -265,7 +265,10 @@ class MainActivity : Activity() {
         val clipStore=ClipStore(this)
         fun renderClips() {
             results.removeAllViews()
-            val items=clipStore.search(search.text.toString())
+            val items=try{clipStore.search(search.text.toString())}catch(_:Exception) {
+                results.addView(text("Encrypted clipboard could not be opened. Saved data was retained.",13f,0xFFFF8888.toInt()))
+                return
+            }
             results.addView(text("Saved clips: "+items.size+"  ·  newest first",11f,muted))
             items.take(40).forEach { item ->
                 val line=column(8).apply { background=background(0xFF25314C.toInt(),12,edge) }

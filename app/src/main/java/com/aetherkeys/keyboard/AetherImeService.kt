@@ -119,7 +119,7 @@ class AetherImeService : InputMethodService() {
             registerReceiver(speechReceiver,filter,Context.RECEIVER_NOT_EXPORTED)
         else @Suppress("DEPRECATION") registerReceiver(speechReceiver,filter)
         clipboard.addPrimaryClipChangedListener {
-            if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",true)) {
+            if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",false)) {
                 try {
                     val clip=clipboard.primaryClip
                     if(clip!=null && clip.itemCount>0 && clip.description.hasMimeType("text/plain")) {
@@ -713,7 +713,12 @@ class AetherImeService : InputMethodService() {
         },LinearLayout.LayoutParams(0,d(35),1.7f))
         root.addView(options)
         val items=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-        val listed=clipStore.search("",pinnedOnly)
+        val listed=try{clipStore.search("",pinnedOnly)}catch(_:Exception){
+            root.addView(TextView(this).apply{
+                text="Clipboard could not be decrypted. Data was not erased."
+                setTextColor(s.ink);setPadding(d(10),d(10),d(10),d(10))
+            });return
+        }
         if(listed.isEmpty()) items.addView(TextView(this).apply {
             text="Nothing copied yet. Your saved text will appear here."
             setTextColor(s.ink);setPadding(d(9),d(20),d(9),d(20))
