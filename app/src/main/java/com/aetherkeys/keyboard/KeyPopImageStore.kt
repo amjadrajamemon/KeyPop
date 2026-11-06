@@ -96,6 +96,25 @@ class KeyPopImageStore(private val context:Context) {
         persist(entries.filter{it.pinned})
         entries.filterNot{it.pinned}.forEach{File(folder,it.id+".enc").delete()}
     }
+    /** Decode a bounded thumbnail on a background thread; never cache original plaintext. */
+    fun thumbnail(image:KeyPopImageClip,target:Int=144):android.graphics.Bitmap? {
+        val source=File(folder,image.id+".enc")
+        if(!source.isFile)return null
+        return try {
+            val data=decrypt(source.readBytes())
+            val meta=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+            android.graphics.BitmapFactory.decodeByteArray(data,0,data.size,meta)
+            if(meta.outWidth<=0 || meta.outHeight<=0)return null
+            var factor=1
+            while(meta.outWidth/factor>target*2 || meta.outHeight/factor>target*2)factor*=2
+            val options=android.graphics.BitmapFactory.Options().apply{
+                inSampleSize=factor
+                inPreferredConfig=android.graphics.Bitmap.Config.RGB_565
+            }
+            android.graphics.BitmapFactory.decodeByteArray(data,0,data.size,options)
+        }catch(_:Exception){null}
+    }
+
     /** Decrypt only when the user explicitly taps Paste or Share. */
     fun uriForShare(image:KeyPopImageClip):Uri? {
         val source=File(folder,image.id+".enc")
