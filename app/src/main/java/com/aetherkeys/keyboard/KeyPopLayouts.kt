@@ -27,7 +27,10 @@ object KeyPopLayouts {
     fun factory(context:Context,lang:Int):List<List<String>> = when(lang) {
         1->urdu;2->sindhi;else->layouts[variant(context)]
     }
+    // Prevent user-entered characters from being interpreted as privileged control actions.
+    private val reserved=setOf("SPACE","ABC","?123","⇧","⌫","↵","🌐")
     fun validKey(key:String):Boolean=key.isNotBlank() &&
+        key !in reserved &&
         key.codePointCount(0,key.length) in 1..4 &&
         key.none { Character.isISOControl(it) }
 

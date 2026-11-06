@@ -434,7 +434,8 @@ class AetherImeService : InputMethodService() {
                 LinearLayout.LayoutParams(d(28),d(height)))
             val show=when {
                 label=="SPACE" -> if(language==0) "English" else languages[language]
-                shift && language==0 && label.length==1 && label[0].isLetter() -> label.uppercase(Locale.ROOT)
+                shift && (language==0 || prefs.getBoolean("romanMode",false)) &&
+                    label.length==1 && label[0].isLetter() -> label.uppercase(Locale.ROOT)
                 else -> label
             }
             val weight=when(label) {
@@ -720,7 +721,8 @@ class AetherImeService : InputMethodService() {
         val before=input.getTextBeforeCursor(48,0)?.toString().orEmpty()
         val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
         bar.removeAllViews()
-        val values=lexicon.suggestions(language,word)
+        val suggestionLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
+        val values=lexicon.suggestions(suggestionLanguage,word)
         if(values.isEmpty()) {
             bar.addView(chip("✦ Local suggestions") {},
                 LinearLayout.LayoutParams(-1,d(32)))
@@ -759,7 +761,7 @@ class AetherImeService : InputMethodService() {
         when(value) {
             "⌫" -> currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
             "⇧" -> {
-                if(language==0) {
+                if(language==0 || (prefs.getBoolean("romanMode",false) && language!=0)) {
                     val now=System.currentTimeMillis()
                     if(now-lastShiftPress<420) { capsLock=!capsLock;shift=capsLock }
                     else if(capsLock) {capsLock=false;shift=false}
@@ -825,9 +827,10 @@ class AetherImeService : InputMethodService() {
             else -> {
                 val prior=currentInputConnection?.getTextBeforeCursor(120,0)?.toString().orEmpty()
                 val sentenceStart=prior.isBlank() || prior.trimEnd().lastOrNull() in listOf('.','!','?','\n')
-                val capital=shift || (language==0 && prefs.getBoolean("autoCap",true) && sentenceStart)
+                val latinMode=language==0 || prefs.getBoolean("romanMode",false)
+                val capital=shift || (latinMode && prefs.getBoolean("autoCap",true) && sentenceStart)
                 currentInputConnection?.commitText(
-                    if(capital && language==0) value.uppercase(Locale.ROOT) else value,1)
+                    if(capital && latinMode) value.uppercase(Locale.ROOT) else value,1)
                 if(shift && language==0 && !capsLock) { shift=false;draw() }
                 else refreshSuggestions()
             }
