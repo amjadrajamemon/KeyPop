@@ -13,7 +13,14 @@ android {
         versionCode = 4
         versionName = "0.3.0-parity-candidate"
     }
-    buildTypes { release { isMinifyEnabled = false } }
+    buildTypes {
+        debug {
+            // Coexist with previous alpha installations; no destructive uninstall required.
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+        }
+        release { isMinifyEnabled = false }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
