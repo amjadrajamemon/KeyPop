@@ -619,8 +619,8 @@ class AetherImeService : InputMethodService() {
                 }.apply {
                     textSize=21f;contentDescription=entry.keywords
                     setOnLongClickListener {
-                        KeyPopEmoji.toggleFavorite(this,entry.symbol)
-                        Toast.makeText(this,"Favorite updated",Toast.LENGTH_SHORT).show()
+                        KeyPopEmoji.toggleFavorite(this@AetherImeService,entry.symbol)
+                        Toast.makeText(this@AetherImeService,"Favorite updated",Toast.LENGTH_SHORT).show()
                         draw();true
                     }
                 }
