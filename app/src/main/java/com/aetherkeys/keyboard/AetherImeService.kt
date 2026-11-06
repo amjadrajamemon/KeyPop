@@ -540,7 +540,7 @@ class AetherImeService : InputMethodService() {
                 })
             }
             iconAction("▦","Open feature grid and resize tools"){
-                toolsOpen=!toolsOpen;resizeOpen=false;draw()
+                toolsOpen=!toolsOpen;if(toolsOpen)toolsPage=0;resizeOpen=false;draw()
             }
             iconAction("▤","Open clipboard history"){
                 clipsOpen=!clipsOpen;emojiOpen=false;toolsOpen=false;resizeOpen=false;draw()
@@ -594,7 +594,7 @@ class AetherImeService : InputMethodService() {
             })
         }
         shortcut(if(toolsOpen)"Close Menu" else "☷  Tools",1.12f) {
-            toolsOpen=!toolsOpen;resizeOpen=false;draw()
+            toolsOpen=!toolsOpen;if(toolsOpen)toolsPage=0;resizeOpen=false;draw()
         }
         shortcut(if(resizeOpen)"✓  Done" else "↕  Resize",1f) {
             resizeOpen=!resizeOpen;toolsOpen=false;draw()
