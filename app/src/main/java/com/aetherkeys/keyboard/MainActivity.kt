@@ -25,7 +25,12 @@ class MainActivity : Activity() {
     private val ink = 0xFFF8F9FF.toInt()
     private val muted = 0xFF9CA8C5.toInt()
     private val edge = 0xFF33405C.toInt()
-    private val accent = 0xFF8C82FF.toInt()
+    private val accent:Int get()=KeyPopSkins.active(this).accent
+    private val pageBg:Int get() {
+        val active=KeyPopSkins.active(this).background
+        return KeyPopGlass.blend(active,Color.BLACK,
+            if(Color.luminance(active)>0.32)0.74f else 0.18f)
+    }
     private val prefs by lazy { getSharedPreferences("keypop", MODE_PRIVATE) }
     private val livePreviews=ArrayList<KeyboardPreview>()
     private var keyboardDefaultStatus:TextView?=null
@@ -72,7 +77,8 @@ class MainActivity : Activity() {
     }
     private fun gap(height:Int=12):View=View(this).apply { minimumHeight=d(height) }
     private fun card():LinearLayout=column(16).apply {
-        background=gradient(0xFF1A2440.toInt(),0xFF121A30.toInt())
+        val bg=KeyPopGlass.blend(pageBg,KeyPopSkins.active(this@MainActivity).surface,0.55f)
+        background=gradient(KeyPopGlass.blend(bg,Color.WHITE,0.08f),bg)
     }
     private fun addCard(parent:LinearLayout, child:View) {
         parent.addView(child,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=d(16) })
@@ -81,18 +87,19 @@ class MainActivity : Activity() {
         text(value,14f,if(main) 0xFF10132B.toInt() else ink,true).apply {
             gravity=Gravity.CENTER
             minHeight=d(47)
-            background=if(main) gradient(0xFFB6A7FF.toInt(),0xFF6DCFF8.toInt(),14)
-                else background(0xFF26304B.toInt(),14,edge)
+            background=if(main)
+                gradient(KeyPopGlass.blend(accent,Color.WHITE,0.21f),accent,14)
+                else background(KeyPopGlass.blend(pageBg,KeyPopSkins.active(this@MainActivity).surface,0.8f),14,edge)
             setOnClickListener { onTap() }
         }
 
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor=0xFF0A1124.toInt()
-        window.navigationBarColor=0xFF0A1124.toInt()
+        window.statusBarColor=pageBg
+        window.navigationBarColor=pageBg
         val shell=ScrollView(this).apply {
             isFillViewport=true
-            setBackgroundColor(0xFF0A1124.toInt())
+            setBackgroundColor(pageBg)
             isVerticalScrollBarEnabled=false
         }
         val root=column(18)
@@ -120,27 +127,57 @@ class MainActivity : Activity() {
         lateinit var translate:LinearLayout
         lateinit var vaultCard:LinearLayout
         lateinit var clipsCard:LinearLayout
+        lateinit var onboarding:LinearLayout
+        lateinit var modelCard:LinearLayout
+        lateinit var tryCard:LinearLayout
         val dashboard=card()
-        dashboard.addView(text("KEYBOARD SETTINGS",12f,0xFF83CFF4.toInt(),true))
-        dashboard.addView(gap(4))
-        dashboard.addView(text("Find anything in two taps",20f,ink,true))
-        dashboard.addView(text("Opening a menu never changes your active theme or layout. Preview first, then apply.",12f,muted))
-        dashboard.addView(gap(10))
-        fun navRow(left:String,leftView:()->View,right:String,rightView:()->View) {
-            val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-            row.addView(action(left) {shell.smoothScrollTo(0,leftView().top)},
-                LinearLayout.LayoutParams(0,d(48),1f).apply{rightMargin=d(7)})
-            row.addView(action(right) {shell.smoothScrollTo(0,rightView().top)},
-                LinearLayout.LayoutParams(0,d(48),1f))
-            dashboard.addView(row,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=d(7)})
+        val backBar=card()
+        val sectionTitle=text("SETTINGS",14f,ink,true)
+        val back=text("‹  All Settings",15f,ink,true).apply{
+            minHeight=d(36)
+            setOnClickListener{navigateHome()}
         }
-        navRow("Themes",{studio},"Gboard / SwiftKey / Samsung",{presetsCard})
-        navRow("Typing & Resizing",{controls},"Translation",{translate})
-        navRow("Clipboard",{clipsCard},"Login & Privacy",{vaultCard})
+        backBar.addView(back)
+        backBar.addView(sectionTitle)
+        backBar.visibility=View.GONE
+        dashboard.addView(text("KEYPOP  /  SETTINGS HOME",12f,accent,true))
+        dashboard.addView(gap(3))
+        dashboard.addView(text("Everything in its place",21f,ink,true))
+        dashboard.addView(text("Select a category. Browsing never changes your theme, layout or dimensions.",12f,muted))
+        dashboard.addView(text("Active style: "+KeyPopSkins.active(this).name,12f,accent,true))
+        dashboard.addView(gap(10))
+        fun navigateHome() {
+            dashboard.visibility=View.VISIBLE
+            backBar.visibility=View.GONE
+            listOf(onboarding,modelCard,studio,presetsCard,controls,translate,vaultCard,clipsCard,tryCard)
+                .forEach{it.visibility=View.GONE}
+            shell.post{shell.scrollTo(0,0)}
+        }
+        fun navigate(target:LinearLayout,heading:String) {
+            dashboard.visibility=View.GONE
+            backBar.visibility=View.VISIBLE
+            sectionTitle.text="SETTINGS  /  "+heading
+            listOf(onboarding,modelCard,studio,presetsCard,controls,translate,vaultCard,clipsCard,tryCard)
+                .forEach{it.visibility=if(it===target) View.VISIBLE else View.GONE}
+            shell.post{shell.scrollTo(0,0)}
+        }
+        fun navRow(left:String,leftView:()->LinearLayout,right:String,rightView:()->LinearLayout) {
+            val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            row.addView(action(left){navigate(leftView(),left)},LinearLayout.LayoutParams(0,d(47),1f).apply{rightMargin=d(8)})
+            row.addView(action(right){navigate(rightView(),right)},LinearLayout.LayoutParams(0,d(47),1f))
+            dashboard.addView(row,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=d(8)})
+        }
+        navRow("Keyboard Setup",{onboarding},"Offline Packs",{modelCard})
+        navRow("Themes",{studio},"Layouts",{presetsCard})
+        navRow("Typing & Size",{controls},"Translation",{translate})
+        navRow("Clipboard",{clipsCard},"Security",{vaultCard})
+        navRow("Try Keyboard",{tryCard},"Language Packs",{modelCard})
         root.addView(dashboard)
         root.addView(gap(7))
+        root.addView(backBar)
+        root.addView(gap(7))
 
-        val onboarding=card()
+        onboarding=card()
         onboarding.addView(text("01  ·  GET STARTED",12f,0xFF83CFF4.toInt(),true))
         onboarding.addView(gap(7))
         keyboardDefaultStatus=text("Checking default keyboard…",13f,muted)
@@ -160,6 +197,16 @@ class MainActivity : Activity() {
         })
         addCard(root,onboarding)
         updateDefaultKeyboardStatus()
+        modelCard=card()
+        modelCard.addView(text("OFFLINE LANGUAGE ENGINE",12f,accent,true))
+        modelCard.addView(gap(5))
+        modelCard.addView(text("Download translation models before typing",20f,ink,true))
+        modelCard.addView(text("First-launch consent and a Language Pack Manager are available. English/Urdu ML Kit translation is downloaded on request; Android manages voice models.",12f,muted))
+        modelCard.addView(gap(9))
+        modelCard.addView(action("Manage text and voice packs",true) {
+            startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
+        })
+        addCard(root,modelCard)
 
         studio=card()
         studio.addView(text("THEME STUDIO",12f,0xFF83CFF4.toInt(),true))
@@ -480,7 +527,7 @@ class MainActivity : Activity() {
             search.requestFocus()
         }
 
-        val tryCard=card()
+        tryCard=card()
         tryCard.addView(text("TEST THE EXPERIENCE",12f,0xFF83CFF4.toInt(),true))
         tryCard.addView(gap(5))
         tryCard.addView(text("Try English • اردو • سنڌي",19f,ink,true))
@@ -501,13 +548,21 @@ class MainActivity : Activity() {
         root.addView(foot)
         root.addView(gap(15))
         setContentView(shell)
-        val target=when(intent.getStringExtra("openSection")){
-            "themes" ->studio
-            "layouts" ->presetsCard
-            "settings" ->controls
-            else ->null
+        when(intent.getStringExtra("openSection")){
+            "themes" ->navigate(studio,"Themes")
+            "layouts" ->navigate(presetsCard,"Layouts")
+            "settings" ->navigate(controls,"Typing & Size")
+            "translation" ->navigate(translate,"Translation")
+            "languagePacks" ->navigate(modelCard,"Offline Packs")
+            else ->navigateHome()
         }
-        if(target!=null)shell.post{shell.smoothScrollTo(0,target.top)}
+        if(!prefs.getBoolean("firstLaunchPacksV09",false)){
+            prefs.edit().putBoolean("firstLaunchPacksV09",true).apply()
+            shell.post {
+                startActivity(Intent(this,KeyPopModelManagerActivity::class.java)
+                    .putExtra("firstRun",true))
+            }
+        }
     }
 
     private fun slider(parent:LinearLayout,title:String,key:String,low:Int,high:Int,default:Int,unit:String) {
