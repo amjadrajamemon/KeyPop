@@ -126,7 +126,10 @@ jobs:
   publish-preview:
     name: Publish five individually downloadable prerelease APK assets
     needs: [android, emulator-smoke]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/v0.9.4-android-runtime-verification' }}
+    # Release is intentionally blocked pending GH issue #13: real airplane-mode
+    # Sindhi translation via tokenizer + full ONNX generation + accuracy checks.
+    # A passing compile, emulator screen test or model download is insufficient.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
