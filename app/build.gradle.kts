@@ -10,8 +10,8 @@ android {
         applicationId = "com.aetherkeys.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.9.2-forensic-startup" 
+        versionCode = 14
+        versionName = "0.9.3-sindhi-onnx-experimental" 
     }
     splits {
         abi {
@@ -24,7 +24,7 @@ android {
     buildTypes {
         debug {
             // Coexist with previous alpha installations; no destructive uninstall required.
-            applicationIdSuffix = ".previewv092"
+            applicationIdSuffix = ".previewv093"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
@@ -40,5 +40,6 @@ android {
 dependencies {
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("androidx.core:core:1.15.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
     testImplementation("junit:junit:4.13.2")
 }
