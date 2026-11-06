@@ -128,7 +128,7 @@ class KeyboardPresetPreview(context:Context,private val candidate:KeyboardErgono
             canvas.drawRoundRect(x,y,x+kw,y+kh,radius,radius,paint)
             paint.shader=null
             paint.textAlign=Paint.Align.CENTER
-            paint.typeface=android.graphics.Typeface.create("sans-serif-medium",0)
+            paint.typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL)
             paint.color=if(primary)Color.WHITE else skin.ink
             paint.textSize=dp(if(label.length>=5)7.8f else 10f)
             canvas.drawText(label,x+kw/2f,y+kh*.65f,paint)

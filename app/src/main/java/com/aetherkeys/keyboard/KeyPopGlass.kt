@@ -73,7 +73,7 @@ class KeyPopHintKey(context:Context):Button(context) {
         val dp=resources.displayMetrics.density
         p.color=hintColor;p.alpha=220
         p.textSize=9f*resources.displayMetrics.scaledDensity
-        p.typeface=android.graphics.Typeface.create("sans-serif-medium",0)
+        p.typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL)
         p.textAlign=Paint.Align.RIGHT
         canvas.drawText(hint,width-5*dp,12*dp,p)
     }
