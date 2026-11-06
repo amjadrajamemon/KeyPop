@@ -116,9 +116,8 @@ class AetherImeService : InputMethodService() {
         super.onCreate()
         window.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         val filter=IntentFilter(KeyPopVoiceActivity.RESULT_ACTION)
-        if(Build.VERSION.SDK_INT>=33)
-            registerReceiver(speechReceiver,filter,Context.RECEIVER_NOT_EXPORTED)
-        else @Suppress("DEPRECATION") registerReceiver(speechReceiver,filter)
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,speechReceiver,filter,androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         clipboard.addPrimaryClipChangedListener {
             if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",false)) {
                 try {
