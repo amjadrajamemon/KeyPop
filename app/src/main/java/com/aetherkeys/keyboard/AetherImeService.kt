@@ -1489,6 +1489,21 @@ class AetherImeService : InputMethodService() {
         }
         small("×",.42f){translatorOpen=false;draw()}
         panel.addView(controls)
+        panel.addView(chip("Google Translate ↗  (optional, external)") {
+            if(!sensitive(currentInputEditorInfo)){
+                val fresh=editorTranslationText()
+                if(fresh.isBlank()){
+                    translationStatus="Type text in your app first."
+                    resultView.text=translationStatus
+                }else{
+                    startActivity(Intent(this,KeyPopGoogleTranslateActivity::class.java)
+                        .putExtra("text",fresh.take(2400))
+                        .putExtra("source",if(translateSourceChoice<0)"auto" else codes[translateSourceChoice])
+                        .putExtra("target",codes[translateTarget])
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            }
+        },LinearLayout.LayoutParams(-1,d(36)).apply {topMargin=d(5)})
         panel.addView(resultView)
         if(translateResult.isNotBlank()){
             val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}

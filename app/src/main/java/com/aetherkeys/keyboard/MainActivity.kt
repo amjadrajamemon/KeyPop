@@ -419,6 +419,11 @@ class MainActivity : Activity() {
         translate=card()
         translate.addView(text("TRANSLATION ENGINE",12f,0xFF83CFF4.toInt(),true))
         translate.addView(text("English ⇄ Urdu · English ⇄ Sindhi · Urdu ⇄ Sindhi",14f,ink,true))
+        translate.addView(action("Google Translate ↗  Optional external translator") {
+            startActivity(Intent(this,KeyPopGoogleTranslateActivity::class.java)
+                .putExtra("target",listOf("en","ur","sd")[prefs.getInt("autoTarget",1).coerceIn(0,2)]))
+        })
+        translate.addView(text("Google Translate is a separate optional app or website. KeyPop never forwards typed text there automatically. External results must be copied back manually.",12f,muted))
         translate.addView(gap(6))
         translate.addView(text("Write, speak, translate and send",21f,ink,true))
         translate.addView(gap(8))
@@ -564,7 +569,7 @@ class MainActivity : Activity() {
         }
         tryCard.addView(field)
         addCard(root,tryCard)
-        val foot=text("KEYPOP  •  v1.0.2 RC3 PREVIEW\nCheck offline translations before relying on their linguistic accuracy.",11f,muted)
+        val foot=text("KEYPOP  •  v1.0.3 RC4 PREVIEW\nCheck offline translations before relying on their linguistic accuracy.",11f,muted)
         foot.gravity=Gravity.CENTER
         root.addView(foot)
         root.addView(gap(15))

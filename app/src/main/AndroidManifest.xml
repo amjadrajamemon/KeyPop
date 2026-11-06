@@ -39,6 +39,8 @@
         <activity android:name=".KeyPopDictionaryActivity" android:exported="false"/>
         <activity android:name=".KeyPopVoiceActivity" android:exported="false"/>
         <activity android:name=".KeyPopModelManagerActivity" android:exported="false"/>
+        <activity android:name=".KeyPopGoogleTranslateActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize"/>
         <service android:name=".KeyPopModelDownloadService"
             android:exported="false" android:foregroundServiceType="dataSync"/>
         <activity android:name=".MainActivity" android:exported="false"/>
