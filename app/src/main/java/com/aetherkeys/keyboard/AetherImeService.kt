@@ -366,6 +366,10 @@ class AetherImeService : InputMethodService() {
         adjust("Key height (dp)","height",36,90,51){refreshRowHeights()}
         adjust("Keyboard width (%)","keyboardWidthPercent",65,100,100){applyFloatingLayout()}
         adjust("Above navigation bar (dp)","bottomLift",0,96,0){applyFloatingLayout()}
+        if(prefs.getBoolean("floating",false)){
+            adjust("Floating left/right","floatX",-d(75),d(75),0){applyFloatingLayout()}
+            adjust("Floating lift (dp)","floatY",0,90,16){applyFloatingLayout()}
+        }
         val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
         fun action(label:String,weight:Float,fn:()->Unit){
             actions.addView(chip(label,onTap=fn),LinearLayout.LayoutParams(0,d(40),weight).apply{
@@ -422,6 +426,7 @@ class AetherImeService : InputMethodService() {
         updateThemeAnimation()
         root.setPadding(d(3),d(5),d(3),d(6))
         applyFloatingLayout()
+        val preset=KeyboardPresetCatalog.selected(this)
         val secure=sensitive(currentInputEditorInfo)
         val isNumeric=numeric(currentInputEditorInfo)
         val toolbar=LinearLayout(this).apply {
@@ -595,14 +600,14 @@ class AetherImeService : InputMethodService() {
         }
         val title=TextView(this).apply {
             text=if(symbols) "SYMBOLS   •   TAP ABC TO RETURN"
-                 else if(language==0) "✧  KEYPOP  •  TYPE YOUR WAY"
-                 else "✧  KEYPOP  •  "+languages[language]
+                 else "✧  "+preset.name.uppercase()+"  •  "+languages[language]
             textSize=9.5f; letterSpacing=0.07f
             setTextColor(s.accent)
             gravity=Gravity.CENTER_VERTICAL
             setPadding(d(10),0,0,0)
         }
-        root.addView(title,LinearLayout.LayoutParams(-1,d(25)))
+        if(preset.id!=KeyboardPresetCatalog.GESTURE && !resizeOpen)
+            root.addView(title,LinearLayout.LayoutParams(-1,d(20)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
             else if(emojiSearch)KeyPopLayouts.active(this,0)
@@ -622,15 +627,19 @@ class AetherImeService : InputMethodService() {
             addRow(root,keys,keyHeight,layoutRow=customRow,layoutLanguage=customLanguage)
         }
         if(isNumeric) addRow(root,listOf("-","@","↵"),keyHeight, true)
-        else addRow(root,listOf(if(symbols) "ABC" else "?123", "🌐", ",","SPACE",".","↵","⌫"),keyHeight, true)
+        else addRow(root,KeyboardPresetCatalog.foot(preset.id,symbols),keyHeight,true)
     }
     private fun addRow(parent:LinearLayout,labels:List<String>,height:Int,footer:Boolean=false,
                        layoutRow:Int=-1,layoutLanguage:Int=language) {
         val row=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER }
+        val preset=KeyboardPresetCatalog.selected(this)
         val gap=prefs.getInt("spacing",4).coerceIn(1,10)
-        when(prefs.getInt("handMode",0)) {
-            1 -> row.setPadding(0,0,d(72),0)
-            2 -> row.setPadding(d(72),0,0,0)
+        val hand=prefs.getInt("handMode",0)
+        val offset=if(preset.id==KeyboardPresetCatalog.FACETED && layoutRow>=0 && layoutRow%2==1)d(14) else 0
+        when(hand) {
+            1 -> row.setPadding(offset,0,d(72),0)
+            2 -> row.setPadding(d(72),0,offset,0)
+            else -> if(offset>0) row.setPadding(offset,0,0,0)
         }
         val split=prefs.getBoolean("splitKeyboard",false) && resources.configuration.smallestScreenWidthDp>=600
         labels.forEachIndexed { index,label ->
@@ -642,12 +651,7 @@ class AetherImeService : InputMethodService() {
                     label.length==1 && label[0].isLetter() -> label.uppercase(Locale.ROOT)
                 else -> label
             }
-            val weight=when(label) {
-                "SPACE" -> 4.3f
-                "?123","ABC" -> 1.4f
-                "🌐" -> 1.2f
-                else -> 1f
-            }
+            val weight=KeyboardPresetCatalog.keyWeight(preset.id,label)
             val heavy=label in listOf("↵","⇧") || (label=="SPACE" && palette().shape==3)
             val superscripts=listOf("¹","²","³","⁴","⁵","⁶","⁷","⁸","⁹","⁰")
             val hintIndex="qwertyuiop".indexOf(label)
@@ -703,6 +707,7 @@ class AetherImeService : InputMethodService() {
             })
         }
         parent.addView(row)
+        renderedRows.add(row to (height-prefs.getInt("height",51).coerceIn(36,90)))
     }
     /** Slide on Space to move the caret; long press for an explicit language menu. */
     private fun installSpaceGestures(button:Button) {
