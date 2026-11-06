@@ -8,7 +8,7 @@ class KeyPopV07ErgonomicsTest {
         assertEquals(6,KeyboardPresetCatalog.all.size)
         assertEquals((0..5).toList(),KeyboardPresetCatalog.all.map{it.id})
         assertTrue(KeyboardPresetCatalog.all.all{it.name.isNotBlank() && it.description.isNotBlank()})
-        assertEquals("Gboard-style · Material",KeyboardPresetCatalog.byId(1)?.name)
+        assertEquals("Gboard-style · Material Teal Glass",KeyboardPresetCatalog.byId(1)?.name)
         assertNull(KeyboardPresetCatalog.byId(9))
     }
     @Test fun allPresetsHaveFunctionalSpacebarAndEditingKeys() {
