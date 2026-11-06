@@ -78,7 +78,13 @@ adb shell am instrument -w -r \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
   | tee forensic-evidence/offline-model-install.txt
 grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/offline-model-install.txt
-echo "[8/8] Verify actual Sindhi translation with remote provider disabled and no connectivity"
+echo "[8/10] Install both English and Urdu ML Kit offline models"
+adb shell am instrument -w -r \
+  -e class com.aetherkeys.keyboard.OfflineEnglishUrduModelInstallTest \
+  "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
+  | tee forensic-evidence/english-urdu-model-install.txt
+grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/english-urdu-model-install.txt
+echo "[9/10] Verify actual Sindhi translation with remote provider disabled and no connectivity"
 # A true finished release must download model packs through the app first. This
 # test deliberately fails for 0.9.4: downloading ONNX files without decoding
 # does not produce Sindhi translations.
@@ -93,4 +99,14 @@ if grep -q 'FAILURES!!!' forensic-evidence/offline-sindhi-acceptance.txt; then
     echo "OFFLINE SINDHI NOT READY: mandatory acceptance tests failed" >&2
     exit 1
 fi
-echo "PASS: real offline Sindhi translation tests (manual linguistic QA still required)"
+echo "[10/10] Verify English ↔ Urdu translation in both directions with network disabled"
+adb shell am instrument -w -r \
+  -e class com.aetherkeys.keyboard.OfflineEnglishUrduAcceptanceTest \
+  "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
+  | tee forensic-evidence/offline-english-urdu-acceptance.txt
+grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/offline-english-urdu-acceptance.txt
+if grep -q 'FAILURES!!!' forensic-evidence/offline-english-urdu-acceptance.txt; then
+  echo "OFFLINE ENGLISH ⇄ URDU FAILED; refusing to publish" >&2
+  exit 1
+fi
+echo "PASS: offline Sindhi and bidirectional English ↔ Urdu acceptance checks"

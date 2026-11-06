@@ -78,7 +78,8 @@ class KeyPopModelManagerActivity:Activity() {
 
         column.addView(label("KEYPOP / OFFLINE LANGUAGES",13f,teal))
         column.addView(label("Language Pack Manager",24f))
-        column.addView(label("Only English and Urdu translation models can be downloaded through the included ML Kit SDK. Models belong to this app and require Google Play services and a connection for initial download.",14f,muted))
+        column.addView(label("English ↔ Urdu works in both directions using on-device ML Kit translation. Install the English and Urdu language models once over Wi-Fi or mobile data, then translate offline. These models are separate from the ~978 MB Sindhi downloads.",14f,muted))
+        column.addView(label("ENGLISH ⇄ URDU / انگریزی ⇄ اردو",17f,teal))
         wifi=CheckBox(this).apply {
             text="Wi-Fi only (uncheck to use mobile data)"
             setTextColor(textColor)
@@ -90,6 +91,10 @@ class KeyPopModelManagerActivity:Activity() {
             }
         }
         column.addView(wifi)
+        button("Install English + Urdu offline models") {
+            download("en")
+            download("ur")
+        }
         column.addView(label("ENGLISH / EN",17f,teal))
         statusEn=label("Not checked yet",13f,muted);column.addView(statusEn)
         button("Download / repair English") {download("en")}
@@ -97,6 +102,12 @@ class KeyPopModelManagerActivity:Activity() {
         statusUr=label("Not checked yet",13f,muted);column.addView(statusUr)
         button("Download / repair Urdu") {download("ur")}
         button("Check installed translation models"){check()}
+        button("Test English → Urdu") {
+            testEnglishUrdu("en","ur","Please send the report tomorrow.")
+        }
+        button("Test Urdu → English") {
+            testEnglishUrdu("ur","en","براہ کرم کل رپورٹ بھیج دیں۔")
+        }
         progress=ProgressBar(this).apply{visibility=View.GONE;isIndeterminate=true}
         column.addView(progress,LinearLayout.LayoutParams(-1,dp(28)).apply {topMargin=dp(9)})
         status=label("No download in progress.",13f,muted)
@@ -263,6 +274,15 @@ class KeyPopModelManagerActivity:Activity() {
                 if(!isFinishing&&!isDestroyed)statusUr.text="Urdu: "+msg
             }
         }.onFailure {status.text="Model check could not run: "+it.localizedMessage}
+    }
+    private fun testEnglishUrdu(source:String,target:String,sentence:String) {
+        status.text="Translating "+(if(source=="en")"English → Urdu" else "Urdu → English")+"…"
+        KeyPopTranslator.translate(this,source,target,sentence,false,"") { result ->
+            if(!isFinishing&&!isDestroyed)status.text=result.fold(
+                { "Original: "+sentence+"\nTranslation: "+it },
+                { "Translation failed: "+(it.localizedMessage?:"Install both language models first") }
+            )
+        }
     }
     private fun download(lang:String) {
         running++
