@@ -12,8 +12,8 @@ class KeyPopV09MaterialAndModelsTest {
         assertTrue(preset.name.contains("Teal"))
         val teal=KeyPopSkins.all[10]
         assertTrue(teal.name.contains("Glass"))
-        assertTrue(android.graphics.Color.green(teal.background)>
-            android.graphics.Color.red(teal.background))
+        assertTrue((teal.background ushr 8 and 0xFF)>
+            (teal.background ushr 16 and 0xFF))
     }
     @Test fun screenshotFooterKeepsCriticalActions() {
         val normal=KeyboardPresetCatalog.foot(KeyboardPresetCatalog.MATERIAL,false)
