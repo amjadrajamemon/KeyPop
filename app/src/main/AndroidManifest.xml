@@ -6,7 +6,7 @@
         <package android:name="com.google.android.apps.translate"/>
         <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH"/></intent>
     </queries>
-    <application android:usesCleartextTraffic="false" android:supportsRtl="true" android:icon="@drawable/ic_keypop_logo" android:roundIcon="@drawable/ic_keypop_logo" android:allowBackup="false" android:label="KeyPop 0.9.2 Preview" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <application android:usesCleartextTraffic="false" android:supportsRtl="true" android:icon="@drawable/ic_keypop_logo" android:roundIcon="@drawable/ic_keypop_logo" android:allowBackup="false" android:label="KeyPop 0.9.4 Preview" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"
             android:grantUriPermissions="true" android:exported="false">
@@ -44,7 +44,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <service android:name=".AetherImeService" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true" android:label="KeyPop 0.9.2 Keyboard">
+        <service android:name=".AetherImeService" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true" android:label="KeyPop 0.9.4 Keyboard">
             <intent-filter><action android:name="android.view.InputMethod"/></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/method"/>
         </service>
