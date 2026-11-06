@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PKG="com.aetherkeys.keyboard.previewv094"
+PKG="com.aetherkeys.keyboard.previewv100"
 SERVICE="$PKG/com.aetherkeys.keyboard.AetherImeService"
-APK="dist/KeyPop-v0.9.4-x86_64-debug.apk"
-TEST_APK="dist/KeyPop-v0.9.4-androidTest.apk"
+APK="dist/KeyPop-v1.0.0-rc1-x86_64-debug.apk"
+TEST_APK="dist/KeyPop-v1.0.0-rc1-androidTest.apk"
 mkdir -p forensic-evidence
 function evidence() {
   adb logcat -d -v time > forensic-evidence/logcat.txt || true
@@ -16,7 +16,7 @@ test -s "$APK"; test -s "$TEST_APK"
 AAPT="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" -name aapt -type f | sort -V | tail -1)"
 test -n "$AAPT"
 "$AAPT" dump badging "$APK" > forensic-evidence/apk-badging.txt
-grep -q "previewv094" forensic-evidence/apk-badging.txt
+grep -q "previewv100" forensic-evidence/apk-badging.txt
 grep -q "KeyPopHomeActivity" forensic-evidence/apk-badging.txt
 echo "[1/6] Install the application and Android instrumentation tests"
 adb install -r "$APK"
@@ -46,7 +46,14 @@ adb logcat -d -v time > forensic-evidence/runtime-logcat.txt
 if grep -A 20 'FATAL EXCEPTION' forensic-evidence/runtime-logcat.txt | grep -Fq "$PKG"; then
   echo "A KeyPop process crashed" >&2; exit 1
 fi
-echo "[7/7] Verify actual Sindhi translation with remote provider disabled and no connectivity"
+echo "[7/8] Install and verify real offline Sindhi weights on Android"
+adb shell svc wifi enable || true
+adb shell am instrument -w -r \
+  -e class com.aetherkeys.keyboard.OfflineSindhiModelInstallTest \
+  "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
+  | tee forensic-evidence/offline-model-install.txt
+grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/offline-model-install.txt
+echo "[8/8] Verify actual Sindhi translation with remote provider disabled and no connectivity"
 # A true finished release must download model packs through the app first. This
 # test deliberately fails for 0.9.4: downloading ONNX files without decoding
 # does not produce Sindhi translations.
