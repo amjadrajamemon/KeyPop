@@ -14,6 +14,9 @@ import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
 import android.text.InputType
+import android.view.MotionEvent
+import android.graphics.Rect
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
@@ -33,6 +36,7 @@ class AetherImeService : InputMethodService() {
     private val clipStore by lazy { ClipStore(this) }
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
+    private val keyViews=ArrayList<Pair<Button,String>>()
     private val clipboard by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
     private val languages=listOf("ENGLISH","اردو","سنڌي")
     private var language=0
@@ -193,6 +197,7 @@ class AetherImeService : InputMethodService() {
     private fun draw() {
         val root=current ?: return
         root.removeAllViews()
+        keyViews.clear()
         val s=palette()
         root.background=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
         root.setPadding(d(3),d(5),d(3),d(6))
@@ -357,11 +362,66 @@ class AetherImeService : InputMethodService() {
                     true
                 }
             }
+            keyViews.add(button to label)
+            if(language==0 && !symbols && !numeric(currentInputEditorInfo) &&
+                prefs.getBoolean("glide",false) && label.length==1 && label[0].isLetter()) {
+                installGlide(button,label)
+            }
             row.addView(button,LinearLayout.LayoutParams(0,d(height),weight).apply {
                 leftMargin=d(gap/2); rightMargin=d(gap/2); topMargin=d(2); bottomMargin=d(2)
             })
         }
         parent.addView(row)
+    }
+    private fun installGlide(button:Button,label:String) {
+        var startX=0f;var startY=0f
+        var started=0L;var sliding=false
+        val trail=ArrayList<String>()
+        button.setOnTouchListener { _,event ->
+            when(event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startX=event.rawX;startY=event.rawY;started=SystemClock.uptimeMillis()
+                    sliding=false;trail.clear();trail.add(label);true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if(kotlin.math.abs(event.rawX-startX)+kotlin.math.abs(event.rawY-startY)>d(18))
+                        sliding=true
+                    if(sliding) {
+                        val box=Rect()
+                        for((key,letter) in keyViews) {
+                            if(letter.length==1 && letter[0].isLetter()
+                                && key.getGlobalVisibleRect(box)
+                                && box.contains(event.rawX.toInt(),event.rawY.toInt())) {
+                                if(trail.lastOrNull()!=letter)trail.add(letter)
+                                break
+                            }
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    tapFeedback(button)
+                    if(sliding && trail.size>=3) {
+                        val guess=lexicon.glide(0,trail)
+                        if(guess!=null){
+                            currentInputConnection?.commitText(guess+" ",1)
+                            lexicon.learn(0,guess);refreshSuggestions()
+                        } else press(label)
+                    } else if(!sliding && SystemClock.uptimeMillis()-started>500
+                        && alternates(label).isNotEmpty()) {
+                        val options=alternates(label)
+                        val menu=android.widget.PopupMenu(this,button)
+                        for(option in options)menu.menu.add(option).setOnMenuItemClickListener {
+                            currentInputConnection?.commitText(option,1);true
+                        }
+                        menu.show()
+                    } else press(label)
+                    true
+                }
+                MotionEvent.ACTION_CANCEL ->true
+                else->false
+            }
+        }
     }
     private fun alternates(label:String):List<String> {
         val numeric="qwertyuiop".indexOf(label)
