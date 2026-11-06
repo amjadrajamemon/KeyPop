@@ -19,6 +19,7 @@ class KeyPopV09MaterialAndModelsTest {
         val normal=KeyboardPresetCatalog.foot(KeyboardPresetCatalog.MATERIAL,false)
         assertEquals("?123",normal.first())
         assertTrue(normal.contains("☺,"))
+        assertTrue(normal.contains(","))
         assertTrue(normal.contains("🌐"))
         assertTrue(normal.contains("SPACE"))
         assertTrue(normal.contains("."))
