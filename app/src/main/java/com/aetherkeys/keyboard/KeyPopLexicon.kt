@@ -41,7 +41,7 @@ class KeyPopLexicon(context:Context) {
         if(value.length !in 2..32 || value.any{!it.isLetter()})return
         val old=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         if(value in old)return
-        val updated=(old+value).takeLast(2000).toSet()
+        val updated=(old+value).toList().takeLast(2000).toSet()
         store.edit().putStringSet("learned_"+lang,updated).apply()
     }
     fun suggestions(lang:Int,fragment:String,limit:Int=3):List<String> {
