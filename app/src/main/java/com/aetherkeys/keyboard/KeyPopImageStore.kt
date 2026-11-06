@@ -17,7 +17,8 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-data class KeyPopImageClip(val id:String,val time:Long,val mime:String,val pinned:Boolean)
+data class KeyPopImageClip(val id:String,val time:Long,val mime:String,val pinned:Boolean,
+    val label:String="")
 
 /** Encrypted image vault, bounded at 12 MiB per image and without automatic photo-library access. */
 class KeyPopImageStore(private val context:Context) {
@@ -50,20 +51,24 @@ class KeyPopImageStore(private val context:Context) {
         return List(array.length()) { index->
             val item=array.getJSONObject(index)
             KeyPopImageClip(item.getString("id"),item.getLong("time"),item.getString("mime"),
-                item.optBoolean("pinned"))
+                item.optBoolean("pinned"),item.optString("label",""))
         }.sortedByDescending{it.time}
     }
     private fun persist(items:List<KeyPopImageClip>) {
         val array=JSONArray()
         for(item in items)array.put(JSONObject().apply{
             put("id",item.id);put("time",item.time);put("mime",item.mime);put("pinned",item.pinned)
+            put("label",item.label)
         })
-        prefs.edit().putString("items",Base64.encodeToString(
-            encrypt(array.toString().toByteArray(Charsets.UTF_8)),Base64.NO_WRAP)).commit()
+        check(prefs.edit().putString("items",Base64.encodeToString(
+            encrypt(array.toString().toByteArray(Charsets.UTF_8)),Base64.NO_WRAP)).commit()) {
+            "Could not save encrypted image index"
+        }
     }
     @Synchronized fun save(uri:Uri):Boolean {
         val mime=context.contentResolver.getType(uri) ?:return false
-        if(!mime.startsWith("image/"))return false
+        if(mime !in setOf("image/png","image/jpeg","image/webp","image/gif",
+                "image/heic","image/heif"))return false
         val input=context.contentResolver.openInputStream(uri) ?:return false
         val bytes=input.use { stream->
             val out=ByteArrayOutputStream()
@@ -78,10 +83,32 @@ class KeyPopImageStore(private val context:Context) {
         }
         if(bytes.isEmpty())return false
         val id=UUID.randomUUID().toString()
+        val displayName=runCatching {
+            context.contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null,null,null)?.use { cursor->
+                if(cursor.moveToFirst())cursor.getString(0) else ""
+            } ?: ""
+        }.getOrDefault("").take(70).replace(Regex("[\\r\\n\\t]")," ")
+        val label=displayName.ifBlank { if(mime=="image/gif")"GIF" else "Screenshot" }
         val file=File(folder,id+".enc")
         file.writeBytes(encrypt(bytes))
-        try {persist(list()+KeyPopImageClip(id,System.currentTimeMillis(),mime,false))}
+        try {persist(list()+KeyPopImageClip(id,System.currentTimeMillis(),mime,false,label))}
         catch(e:Exception){file.delete();throw e}
+        return true
+    }
+    @Synchronized fun search(query:String,kind:String="All"):List<KeyPopImageClip> =
+        list().filter { item ->
+            (kind=="All" || (kind=="GIF" && item.mime=="image/gif") ||
+                (kind=="Sticker" && item.mime!="image/gif")) &&
+                (query.isBlank() || item.label.contains(query,ignoreCase=true) ||
+                    item.mime.contains(query,ignoreCase=true))
+        }
+    @Synchronized fun rename(id:String,label:String):Boolean {
+        val cleaned=label.trim().take(80)
+        if(cleaned.isEmpty())return false
+        val original=list()
+        if(original.none{it.id==id})return false
+        persist(original.map{if(it.id==id)it.copy(label=cleaned) else it})
         return true
     }
     @Synchronized fun pin(id:String) {
@@ -120,8 +147,11 @@ class KeyPopImageStore(private val context:Context) {
         val source=File(folder,image.id+".enc")
         if(!source.isFile)return null
         val ext=when(image.mime) {"image/jpeg"->".jpg";"image/gif"->".gif";
-            "image/webp"->".webp";else->".png"}
+            "image/webp"->".webp";"image/heic"->".heic";"image/heif"->".heif";else->".png"}
         val dir=File(context.cacheDir,"keypop-shared-images").apply{mkdirs()}
+        // Expire previously exported plaintext media after a short grace period.
+        val cutoff=System.currentTimeMillis()-15*60*1000L
+        dir.listFiles()?.filter{it.isFile && it.lastModified()<cutoff}?.forEach{it.delete()}
         val result=File(dir,image.id+ext)
         return try{
             result.writeBytes(decrypt(source.readBytes()))
