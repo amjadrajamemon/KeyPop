@@ -200,6 +200,11 @@ class MainActivity : Activity() {
         controls.addView(text("KEYBOARD CUSTOMIZER",12f,0xFF83CFF4.toInt(),true))
         controls.addView(gap(4))
         controls.addView(text("Fine-tune every key",22f,ink,true))
+        controls.addView(gap(9))
+        controls.addView(action("✎ Layout Lab — move, swap and remap keys",true) {
+            startActivity(Intent(this,KeyPopLayoutStudioActivity::class.java))
+        })
+        controls.addView(gap(8))
         controls.addView(text("Adjust live keyboard behavior. Changes apply the next time the keyboard is opened or refreshed.",12f,muted))
         controls.addView(gap(12))
         slider(controls,"Key height", "height", 36,90,51,"dp")

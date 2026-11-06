@@ -67,6 +67,9 @@ class AetherImeService : InputMethodService() {
             }
         }
     }
+    private var emojiCategory="Recent"
+    private var emojiSearch=false
+    private var emojiQuery=""
     private var emojiOpen=false
     private var pinnedOnly=false
     private var cursorTools=false
@@ -351,12 +354,8 @@ class AetherImeService : InputMethodService() {
         if(clipsOpen && !secure) { drawClips(root); return }
         if(translatorOpen && !secure && !isNumeric) showTranslator(root)
         if(emojiOpen && !secure && !isNumeric) {
-            root.addView(TextView(this).apply {
-                text="EMOJI  •  TAP TO INSERT";setTextColor(palette().accent);textSize=11f
-                setPadding(d(8),d(9),0,d(9))
-            })
-            emojiRows.forEach { addRow(root,it,48) }
-            return
+            showEmojiPanel(root)
+            if(!emojiSearch)return
         }
         if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !translatorOpen && !emojiOpen) {
             val bar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
@@ -396,12 +395,11 @@ class AetherImeService : InputMethodService() {
         root.addView(title,LinearLayout.LayoutParams(-1,d(25)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
+            else if(emojiSearch)KeyPopLayouts.active(this,0)
             else if(symbols) { if(extended) extraSymbols else symbolRows }
-            else when(language) {
-                1-> if(extended) urduExtended else urdu
-                2-> if(extended) sindhiExtended else sindhi
-                else->english
-            }
+            else if(extended && language==1)urduExtended
+            else if(extended && language==2)sindhiExtended
+            else KeyPopLayouts.active(this,language)
         val keyHeight=prefs.getInt("height",51).coerceIn(36,90)
         if(!isNumeric && !symbols && prefs.getBoolean("numberRow",true))
             addRow(root, listOf("1","2","3","4","5","6","7","8","9","0"),keyHeight-10)
@@ -579,6 +577,65 @@ class AetherImeService : InputMethodService() {
             }
         }
     }
+    private fun showEmojiPanel(root:LinearLayout) {
+        val skin=palette()
+        val top=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        top.addView(chip(if(emojiSearch)"🔎 "+emojiQuery+"_" else "🔎 Search emoji") {
+            emojiSearch=!emojiSearch
+            if(!emojiSearch)emojiQuery=""
+            draw()
+        },LinearLayout.LayoutParams(0,d(37),2f))
+        top.addView(chip("× Close") {
+            emojiOpen=false;emojiSearch=false;emojiQuery="";draw()
+        },LinearLayout.LayoutParams(0,d(37),1f))
+        root.addView(top)
+        val tabs=HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false}
+        val strip=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        KeyPopEmoji.categories.forEach { cat ->
+            strip.addView(chip(if(cat==emojiCategory)"● "+cat else cat) {
+                emojiCategory=cat;draw()
+            },LinearLayout.LayoutParams(d(if(cat.length>8)99 else 80),d(34)).apply{rightMargin=d(3)})
+        }
+        tabs.addView(strip);root.addView(tabs)
+        val matches=if(emojiSearch && emojiQuery.isNotBlank())KeyPopEmoji.search(emojiQuery)
+            else KeyPopEmoji.inCategory(this,emojiCategory,"")
+        val list=matches.take(if(emojiSearch)16 else 64)
+        val grid=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+        if(list.isEmpty())grid.addView(TextView(this).apply{
+            text="No matching emoji. Try another word."
+            setTextColor(skin.ink);setPadding(d(9),d(13),d(9),d(13))
+        })
+        list.chunked(8).forEach { chunk->
+            val line=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            chunk.forEach { entry->
+                val button=chip(entry.symbol) {
+                    if(!sensitive(currentInputEditorInfo)) {
+                        currentInputConnection?.commitText(entry.symbol,1)
+                        KeyPopEmoji.record(this,entry.symbol)
+                    }
+                }.apply {
+                    textSize=21f;contentDescription=entry.keywords
+                    setOnLongClickListener {
+                        KeyPopEmoji.toggleFavorite(this,entry.symbol)
+                        Toast.makeText(this,"Favorite updated",Toast.LENGTH_SHORT).show()
+                        draw();true
+                    }
+                }
+                line.addView(button,LinearLayout.LayoutParams(0,d(43),1f).apply{
+                    leftMargin=d(1);rightMargin=d(1);bottomMargin=d(2)
+                })
+            }
+            repeat(8-chunk.size){line.addView(View(this),LinearLayout.LayoutParams(0,d(43),1f))}
+            grid.addView(line)
+        }
+        root.addView(ScrollView(this).apply{addView(grid)},
+            LinearLayout.LayoutParams(-1,d(if(emojiSearch)93 else 176)))
+        if(emojiSearch)root.addView(TextView(this).apply{
+            text="Type emoji name below. Enter exits search."
+            textSize=10f;setTextColor(skin.ink);setPadding(d(5),d(3),d(5),d(3))
+        })
+    }
+
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
         val input=currentInputConnection ?:return
@@ -610,6 +667,18 @@ class AetherImeService : InputMethodService() {
         }
     }
     private fun press(value:String) {
+        if(emojiOpen && emojiSearch) {
+            when(value) {
+                "⌫" -> emojiQuery=emojiQuery.dropLast(1)
+                "SPACE" -> emojiQuery+=" "
+                "↵","?123","ABC" -> {emojiSearch=false;emojiQuery=""}
+                "⇧" -> {shift=!shift}
+                "🌐" -> {emojiSearch=false;emojiQuery="";cycleLanguage();return}
+                else -> if(value.length==1 && value[0].isLetterOrDigit())
+                    emojiQuery+=value.lowercase(Locale.ROOT)
+            }
+            draw();return
+        }
         when(value) {
             "⌫" -> currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
             "⇧" -> {
