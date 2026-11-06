@@ -15,9 +15,16 @@ class KeyPopV08IntegratedTest {
     @Test fun punctuationKeysAreDedicatedAcrossAllPresets() {
         for(p in KeyboardPresetCatalog.all) {
             val normal=KeyboardPresetCatalog.foot(p.id,false)
-            assertTrue(p.name,normal.contains(","))
             assertTrue(p.name,normal.contains("."))
-            assertTrue(p.name,normal.contains("?"))
+            if(p.id==KeyboardPresetCatalog.MATERIAL) {
+                assertTrue(p.name,normal.contains("☺,"))
+                assertFalse(p.name,normal.contains(","))
+                assertFalse(p.name,normal.contains("?"))
+                assertTrue(KeyPopAlternates.forKey(".",0).contains("?"))
+            } else {
+                assertTrue(p.name,normal.contains(","))
+                assertTrue(p.name,normal.contains("?"))
+            }
         }
     }
     @Test fun nextWordPredictionsRemainAvailableOnEmptyPrefix() {
