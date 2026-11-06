@@ -29,7 +29,7 @@ class KeyPopCharacterStrip(private val context:Context,private val host:FrameLay
         setColor(color);cornerRadius=dp(radius).toFloat()
     }
     val isShowing:Boolean get()=strip!=null
-    fun show(anchor:View,alternates:List<String>,accentColor:Int,ink:Int,background:Int) {
+    fun show(anchor:View,alternates:List<String>,accentColor:Int,ink:Int,panelColor:Int) {
         dismiss()
         if(alternates.isEmpty())return
         choices=alternates.take(12)
@@ -41,14 +41,14 @@ class KeyPopCharacterStrip(private val context:Context,private val host:FrameLay
             orientation=LinearLayout.HORIZONTAL
             gravity=Gravity.CENTER_VERTICAL
             setPadding(dp(4),dp(4),dp(4),dp(4))
-            background=rounded(background,12)
+            background=rounded(panelColor,12)
             elevation=dp(12).toFloat()
             isClickable=false;isFocusable=false
         }
         cells.clear()
         choices.forEach{label->
             val cell=TextView(context).apply {
-                text=label;textSize=20f;setTextColor(foreground)
+                text=label;textSize=20f;setTextColor(this@KeyPopCharacterStrip.foreground)
                 gravity=Gravity.CENTER
                 includeFontPadding=false
                 contentDescription="Alternate "+label

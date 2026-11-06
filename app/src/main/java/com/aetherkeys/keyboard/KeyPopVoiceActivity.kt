@@ -116,7 +116,7 @@ class KeyPopVoiceActivity:Activity(),RecognitionListener {
             "Translate & Send" to {deliver(true)}
         ))
         root.addView(line("Send is permitted only when the original app exposes an Android Send action. Otherwise the translated text is inserted for manual sending.",12f))
-        val scrolling=ScrollView(this).apply{fillViewport=true}
+        val scrolling=ScrollView(this).apply{isFillViewport=true}
         scrolling.addView(root)
         setContentView(scrolling)
         renderLabels()
