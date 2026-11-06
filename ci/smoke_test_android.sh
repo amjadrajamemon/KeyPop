@@ -46,4 +46,19 @@ adb logcat -d -v time > forensic-evidence/runtime-logcat.txt
 if grep -A 20 'FATAL EXCEPTION' forensic-evidence/runtime-logcat.txt | grep -Fq "$PKG"; then
   echo "A KeyPop process crashed" >&2; exit 1
 fi
-echo "PASS: runtime activity tests, cold launch, IME registration and package"
+echo "[7/7] Verify actual Sindhi translation with remote provider disabled and no connectivity"
+# A true finished release must download model packs through the app first. This
+# test deliberately fails for 0.9.4: downloading ONNX files without decoding
+# does not produce Sindhi translations.
+adb shell svc wifi disable || true
+adb shell svc data disable || true
+adb shell am instrument -w -r \
+  -e class com.aetherkeys.keyboard.OfflineSindhiAcceptanceTest \
+  "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
+  | tee forensic-evidence/offline-sindhi-acceptance.txt
+grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/offline-sindhi-acceptance.txt
+if grep -q 'FAILURES!!!' forensic-evidence/offline-sindhi-acceptance.txt; then
+    echo "OFFLINE SINDHI NOT READY: mandatory acceptance tests failed" >&2
+    exit 1
+fi
+echo "PASS: real offline Sindhi translation tests (manual linguistic QA still required)"
