@@ -573,6 +573,7 @@ class MainActivity : Activity() {
             "layouts" ->navigate(presetsCard,"Layouts")
             "settings" ->navigate(controls,"Typing & Size")
             "translation" ->navigate(translate,"Translation")
+            "security" ->navigate(vaultCard,"Security")
             "languagePacks" ->navigate(modelCard,"Offline Packs")
             else -> if(prefs.getBoolean("firstLaunchPacksV091",false))
                 navigateHome() else navigate(onboarding,"Keyboard Setup")
