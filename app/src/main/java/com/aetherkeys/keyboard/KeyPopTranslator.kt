@@ -1,5 +1,6 @@
 package com.aetherkeys.keyboard
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.google.mlkit.common.model.DownloadConditions
@@ -13,18 +14,35 @@ import java.net.URL
 /** User-initiated translation; cloud service requires explicit opt-in and HTTPS. */
 object KeyPopTranslator {
     private val main = Handler(Looper.getMainLooper())
-    fun translate(source: String,target: String,text: String,remoteEnabled: Boolean,
-                  endpoint: String,done:(Result<String>)->Unit) {
+    fun translate(context:Context,source:String,target:String,text:String,
+                  remoteEnabled:Boolean,endpoint:String,
+                  done:(Result<String>)->Unit) {
         if(text.isBlank()) { done(Result.failure(IllegalArgumentException("Nothing to translate")));return }
         if(source==target) { done(Result.success(text));return }
-        // Built-in phrases are bundled for English, Urdu and Sindhi.
-        // Common phrases work even on first launch without a downloaded model.
-        KeyPopSindhiPhrasebook.translate(source,target,text)?.let {
-            done(Result.success(it));return
+        // Genuine Sindhi translation must route through the installed model.
+        // Never silently replace unknown sentences with a 30-phrase dictionary,
+        // nor send keyboard text over a network without explicit user opt-in.
+        if(KeyPopOfflineSindhiEngine.supports(source,target)) {
+            if(KeyPopOfflineSindhiEngine.ready(context,source,target)) {
+                KeyPopOfflineSindhiEngine.translate(context,source,target,text,done)
+                return
+            }
+            KeyPopSindhiPhrasebook.translate(source,target,text)?.let {
+                done(Result.success(it));return
+            }
+            if(!remoteEnabled || !endpoint.startsWith("https://")) {
+                val selected=KeyPopOfflineSindhiEngine.chosen(source,target)
+                done(Result.failure(IllegalStateException(
+                    "Required Sindhi offline pack not installed: "+
+                    (selected?.name?:"unsupported direction")+
+                    ". Open KeyPop → Language Packs and install all models.")))
+                return
+            }
         }
         val from=TranslateLanguage.fromLanguageTag(source)
         val to=TranslateLanguage.fromLanguageTag(target)
-        if(from!=null && to!=null) {
+        if(from!=null && to!=null &&
+            !KeyPopOfflineSindhiEngine.supports(source,target)) {
             val engine=Translation.getClient(TranslatorOptions.Builder()
                 .setSourceLanguage(from).setTargetLanguage(to).build())
             engine.downloadModelIfNeeded(DownloadConditions.Builder().build())
