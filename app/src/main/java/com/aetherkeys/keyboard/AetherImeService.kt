@@ -1447,6 +1447,7 @@ class AetherImeService : InputMethodService() {
         liveRevision++
         val revision=liveRevision
         liveHandler.removeCallbacksAndMessages(null)
+        val debounce=if(googleEasyMode && !manual)maxOf(waitMs,1100L) else waitMs
         liveHandler.postDelayed({
             if(revision!=liveRevision || !translatorOpen ||
                 (!liveTranslationEnabled && !manual))return@postDelayed
@@ -1495,7 +1496,7 @@ class AetherImeService : InputMethodService() {
             else
                 KeyPopTranslator.translate(this,codes[source],codes[translateTarget],text,
                     false,"",callback)
-        },waitMs)
+        },debounce)
     }
 
     private fun showTranslator(root:LinearLayout) {
@@ -1518,8 +1519,14 @@ class AetherImeService : InputMethodService() {
         }
         val detected=KeyPopTextLanguage.detect(translateSource,language)
         val from=if(translateSourceChoice<0)detected else translateSourceChoice
-        small("From: "+languages[from],1.15f){
-            translateSourceChoice=KeyPopEasyTranslateDirections.nextSource(from,translateTarget)
+        small(if(translateSourceChoice<0)"From: Auto" else "From: "+languages[from],1.15f){
+            translateSourceChoice=if(translateSourceChoice<0)
+                KeyPopEasyTranslateDirections.nextSource(-1,translateTarget)
+            else {
+                val next=KeyPopEasyTranslateDirections.nextSource(
+                    translateSourceChoice,translateTarget)
+                if(next<=translateSourceChoice)-1 else next
+            }
             translateResult="";draw();scheduleLiveTranslation(50)
         }
         small("⇄",0.38f){
