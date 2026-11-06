@@ -10,8 +10,8 @@ android {
         applicationId = "com.aetherkeys.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.7.0-ergonomics-preview"
+        versionCode = 10
+        versionName = "0.8.0-offline-first-preview"
     }
     splits {
         abi {
@@ -24,7 +24,7 @@ android {
     buildTypes {
         debug {
             // Coexist with previous alpha installations; no destructive uninstall required.
-            applicationIdSuffix = ".previewv07"
+            applicationIdSuffix = ".previewv08"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
