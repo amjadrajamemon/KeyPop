@@ -66,16 +66,30 @@ class AetherImeService : InputMethodService() {
     private val codes=listOf("en","ur","sd")
     private var voiceTargetPackage=""
     private var pendingSpeech:String?=null
+    private var pendingSpeechSend=false
     private val speechReceiver=object:BroadcastReceiver() {
         override fun onReceive(context:Context,intent:Intent) {
             if(intent.action==KeyPopVoiceActivity.RESULT_ACTION) {
                 val recognized=intent.getStringExtra("text").orEmpty()
+                val requestSend=intent.getBooleanExtra("send",false)
                 if(recognized.isNotBlank()) {
                     val target=currentInputEditorInfo?.packageName.orEmpty()
                     if(!sensitive(currentInputEditorInfo) && target==voiceTargetPackage) {
-                        val success=currentInputConnection?.commitText(recognized+" ",1) ?: false
-                        if(!success)pendingSpeech=recognized
-                    }else pendingSpeech=recognized
+                        val success=currentInputConnection?.commitText(recognized,1) ?: false
+                        if(success && requestSend) {
+                            val action=(currentInputEditorInfo?.imeOptions ?:0) and
+                                EditorInfo.IME_MASK_ACTION
+                            if(action==EditorInfo.IME_ACTION_SEND)
+                                currentInputConnection?.performEditorAction(action)
+                        }
+                        if(!success) {
+                            pendingSpeech=recognized
+                            pendingSpeechSend=requestSend
+                        }
+                    }else {
+                        pendingSpeech=recognized
+                        pendingSpeechSend=requestSend
+                    }
                 }
             }
         }
@@ -216,9 +230,19 @@ class AetherImeService : InputMethodService() {
         shift=false;capsLock=false
         val pending=pendingSpeech
         if(pending!=null && !sensitive(info) && info?.packageName==voiceTargetPackage) {
-            val inserted=currentInputConnection?.commitText(pending+" ",1) ?: false
-            if(inserted)pendingSpeech=null
-        } else if(pending!=null && info?.packageName!=voiceTargetPackage) pendingSpeech=null
+            val inserted=currentInputConnection?.commitText(pending,1) ?: false
+            if(inserted){
+                pendingSpeech=null
+                if(pendingSpeechSend) {
+                    val action=(info?.imeOptions ?:0) and EditorInfo.IME_MASK_ACTION
+                    if(action==EditorInfo.IME_ACTION_SEND)
+                        currentInputConnection?.performEditorAction(action)
+                }
+                pendingSpeechSend=false
+            }
+        } else if(pending!=null && info?.packageName!=voiceTargetPackage) {
+            pendingSpeech=null;pendingSpeechSend=false
+        }
         draw()
         KeyPopDiagnostics.observeKeyboardBuild(this,SystemClock.elapsedRealtimeNanos()-viewStart)
     }
@@ -585,12 +609,14 @@ class AetherImeService : InputMethodService() {
                         }
                         draw()
                     },
-                    "Voice input" to {
+                    "Voice Translate" to {
                         voiceTargetPackage=currentInputEditorInfo?.packageName.orEmpty()
-                        pendingSpeech=null
+                        pendingSpeech=null;pendingSpeechSend=false
                         val code=when(language){1->"ur-PK";2->"sd-PK";else->"en-US"}
                         startActivity(Intent(this,KeyPopVoiceActivity::class.java)
-                            .putExtra("lang",code).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            .putExtra("lang",code)
+                            .putExtra("target",prefs.getInt("autoTarget",if(language==0)1 else 0))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 )
                 menuRow(
