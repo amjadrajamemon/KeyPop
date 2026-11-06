@@ -173,7 +173,7 @@ class KeyPopVoiceActivity:Activity(),RecognitionListener {
         }
         status.text="Translating… (offline phrases first)"
         val prefs=getSharedPreferences("keypop",MODE_PRIVATE)
-        KeyPopTranslator.translate(codes[source],codes[target],sourceText,
+        KeyPopTranslator.translate(this,codes[source],codes[target],sourceText,
             prefs.getBoolean("remoteTranslate",false),
             prefs.getString("translateEndpoint","").orEmpty()) voiceResult@{ outcome->
             if(isFinishing||isDestroyed)return@voiceResult
