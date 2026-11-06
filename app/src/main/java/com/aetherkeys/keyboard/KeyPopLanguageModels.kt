@@ -20,7 +20,7 @@ object KeyPopLanguageModels {
     private val modelManager get()=RemoteModelManager.getInstance()
     // Retain the recognition client while the Android provider is still reporting progress.
     private val pendingVoiceRequests=LinkedHashSet<SpeechRecognizer>()
-    private val handler=Handler(Looper.getMainLooper())
+    private val handler by lazy { Handler(Looper.getMainLooper()) }
     private fun releaseVoice(recognizer:SpeechRecognizer) {
         if(pendingVoiceRequests.remove(recognizer))recognizer.destroy()
     }
