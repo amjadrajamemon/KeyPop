@@ -1,6 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:icon="@drawable/ic_keypop_logo" android:roundIcon="@drawable/ic_keypop_logo" android:allowBackup="false" android:label="KeyPop" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <queries>
+        <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH"/></intent>
+    </queries>
+    <application android:usesCleartextTraffic="false" android:supportsRtl="true" android:icon="@drawable/ic_keypop_logo" android:roundIcon="@drawable/ic_keypop_logo" android:allowBackup="false" android:label="KeyPop" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:grantUriPermissions="true" android:exported="false">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
+        <activity android:name=".KeyPopImageImportActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
+            </intent-filter>
+        </activity>
+        <activity android:name=".KeyPopVaultActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
+        <activity android:name=".KeyPopAutofillUnlockActivity" android:exported="false"/>
+        <service android:name=".KeyPopAutofillService"
+            android:exported="true"
+            android:label="KeyPop secure login Autofill"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter><action android:name="android.service.autofill.AutofillService"/></intent-filter>
+            <meta-data android:name="android.autofill" android:resource="@xml/autofill_service"/>
+        </service>
+        <activity android:name=".KeyPopDiagnosticsActivity" android:exported="false"/>
+        <activity android:name=".KeyPopMediaStudioActivity" android:exported="false"/>
+        <activity android:name=".KeyPopProfileActivity" android:exported="false"/>
+        <activity android:name=".KeyPopLayoutStudioActivity" android:exported="false"/>
+        <activity android:name=".KeyPopDictionaryActivity" android:exported="false"/>
+        <activity android:name=".KeyPopVoiceActivity" android:exported="false"/>
+        <activity android:name=".KeyPopModelManagerActivity" android:exported="false"/>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
