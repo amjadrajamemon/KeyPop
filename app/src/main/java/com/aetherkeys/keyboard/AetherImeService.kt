@@ -31,6 +31,8 @@ import java.util.Locale
 class AetherImeService : InputMethodService() {
     private val prefs by lazy { getSharedPreferences("keypop",Context.MODE_PRIVATE) }
     private val clipStore by lazy { ClipStore(this) }
+    private val lexicon by lazy { KeyPopLexicon(this) }
+    private var suggestionBar:LinearLayout?=null
     private val clipboard by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
     private val languages=listOf("ENGLISH","اردو","سنڌي")
     private var language=0
@@ -135,6 +137,11 @@ class AetherImeService : InputMethodService() {
         draw()
         return current!!
     }
+    override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
+        super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
+        refreshSuggestions()
+    }
+
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
         super.onStartInputView(info,restarting)
         clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false
@@ -235,6 +242,7 @@ class AetherImeService : InputMethodService() {
             startActivity(Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         root.addView(top)
+        suggestionBar=null
         if(clipsOpen && !secure) { drawClips(root); return }
         if(translatorOpen && !secure && !isNumeric) showTranslator(root)
         if(emojiOpen && !secure && !isNumeric) {
@@ -244,6 +252,12 @@ class AetherImeService : InputMethodService() {
             })
             emojiRows.forEach { addRow(root,it,48) }
             return
+        }
+        if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !translatorOpen && !emojiOpen) {
+            val bar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            root.addView(bar,LinearLayout.LayoutParams(-1,d(35)))
+            suggestionBar=bar
+            refreshSuggestions()
         }
         if(cursorTools) {
             val tools=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
@@ -345,6 +359,36 @@ class AetherImeService : InputMethodService() {
         return mapOf("a" to "@","s" to "$","d" to "#","f" to "%","g" to "&",
             "n" to "ñ","e" to "é","." to "…","," to ";").get(label)
     }
+    private fun refreshSuggestions() {
+        val bar=suggestionBar ?:return
+        val input=currentInputConnection ?:return
+        if(sensitive(currentInputEditorInfo)||numeric(currentInputEditorInfo))return
+        val before=input.getTextBeforeCursor(48,0)?.toString().orEmpty()
+        val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
+        bar.removeAllViews()
+        val values=lexicon.suggestions(language,word)
+        if(values.isEmpty()) {
+            bar.addView(chip("✦ Local suggestions") {},
+                LinearLayout.LayoutParams(-1,d(32)))
+            return
+        }
+        for(candidate in values) {
+            bar.addView(chip(candidate) {
+                val current=input.getTextBeforeCursor(48,0)?.toString().orEmpty()
+                val actual=Regex("[\\p{L}]+$").find(current)?.value
+                if(actual!=null) {
+                    input.beginBatchEdit()
+                    input.deleteSurroundingText(actual.length,0)
+                    input.commitText(candidate+" ",1)
+                    input.endBatchEdit()
+                    lexicon.learn(language,candidate)
+                    refreshSuggestions()
+                }
+            },LinearLayout.LayoutParams(0,d(32),1f).apply {
+                leftMargin=d(2);rightMargin=d(2)
+            })
+        }
+    }
     private fun press(value:String) {
         when(value) {
             "⌫" -> currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
@@ -358,7 +402,23 @@ class AetherImeService : InputMethodService() {
                 }
                 draw()
             }
-            "SPACE" -> currentInputConnection?.commitText(" ",1)
+            "SPACE" -> {
+                if(!sensitive(currentInputEditorInfo)) {
+                    val before=currentInputConnection?.getTextBeforeCursor(48,0)?.toString().orEmpty()
+                    val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
+                    if(word.isNotBlank()) {
+                        val corrected=if(prefs.getBoolean("autoCorrect",false))
+                            lexicon.correction(language,word) else null
+                        if(corrected!=null) {
+                            currentInputConnection?.deleteSurroundingText(word.length,0)
+                            currentInputConnection?.commitText(corrected,1)
+                            lexicon.learn(language,corrected)
+                        } else lexicon.learn(language,word)
+                    }
+                }
+                currentInputConnection?.commitText(" ",1)
+                refreshSuggestions()
+            }
             "🌐" -> cycleLanguage()
             "?123" -> { symbols=true;draw() }
             "ABC" -> { symbols=false;draw() }
@@ -372,6 +432,7 @@ class AetherImeService : InputMethodService() {
                 currentInputConnection?.commitText(
                     if(shift && language==0) value.uppercase(Locale.ROOT) else value,1)
                 if(shift && language==0 && !capsLock) { shift=false;draw() }
+                else refreshSuggestions()
             }
         }
     }
