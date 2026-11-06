@@ -233,6 +233,7 @@ class MainActivity : Activity() {
         toggle(controls,"Keyboard sound","Subtle key click sound","sound",false)
         toggle(controls,"Clipboard history (opt in)","Encrypted local history with manual deletion and pinning","history",false)
         toggle(controls,"Long-press Backspace deletes a word","Hold delete to remove the preceding word","wordDelete",true)
+        toggle(controls,"Spacebar cursor gestures","Drag on Space to move the cursor; hold to select a language","spaceCursor",true)
         addCard(root,controls)
 
         translate=card()
