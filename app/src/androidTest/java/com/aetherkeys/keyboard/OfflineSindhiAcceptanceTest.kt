@@ -22,7 +22,9 @@ class OfflineSindhiAcceptanceTest {
     private fun offline(source:String,target:String,text:String):String {
         val complete=CountDownLatch(1)
         val output=AtomicReference<Result<String>>()
-        KeyPopTranslator.translate(source,target,text,false,"") {
+        KeyPopTranslator.translate(
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext,
+            source,target,text,false,"") {
             output.set(it)
             complete.countDown()
         }
