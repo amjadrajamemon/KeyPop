@@ -302,6 +302,10 @@ class MainActivity : Activity() {
         clipsCard.addView(text("CLIPBOARD STUDIO",12f,0xFF83CFF4.toInt(),true))
         clipsCard.addView(gap(4))
         clipsCard.addView(text("Search, pin and manage clips",21f,ink,true))
+        clipsCard.addView(gap(8))
+        clipsCard.addView(action("GIF & Sticker Shelf — import, search, rename and share",true) {
+            startActivity(Intent(this,KeyPopMediaStudioActivity::class.java))
+        })
         clipsCard.addView(text("Text is encrypted locally and remains until removed. Password-field clipboard collection is disabled.",12f,muted))
         clipsCard.addView(gap(10))
         val search=EditText(this).apply {

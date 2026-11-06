@@ -27,6 +27,7 @@
             <intent-filter><action android:name="android.service.autofill.AutofillService"/></intent-filter>
             <meta-data android:name="android.autofill" android:resource="@xml/autofill_service"/>
         </service>
+        <activity android:name=".KeyPopMediaStudioActivity" android:exported="false"/>
         <activity android:name=".KeyPopProfileActivity" android:exported="false"/>
         <activity android:name=".KeyPopLayoutStudioActivity" android:exported="false"/>
         <activity android:name=".KeyPopDictionaryActivity" android:exported="false"/>

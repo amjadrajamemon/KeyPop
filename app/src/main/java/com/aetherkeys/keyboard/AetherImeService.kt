@@ -1071,7 +1071,8 @@ class AetherImeService : InputMethodService() {
                     else bitmap.recycle()
                 }
             }
-            val label=(if(image.pinned)"📌 " else "")+"📷 "+image.mime
+            val label=(if(image.pinned)"📌 " else "")+
+                (if(image.mime=="image/gif")"🎞 " else "📷 ")+image.label.take(45)
             line.addView(chip(label,2f) {
                 val uri=KeyPopImageStore(this).uriForShare(image)
                 if(uri==null){Toast.makeText(this,"Image unavailable",Toast.LENGTH_SHORT).show()}
@@ -1103,6 +1104,10 @@ class AetherImeService : InputMethodService() {
         }
         items.addView(images)
         root.addView(ScrollView(this).apply { addView(items) },LinearLayout.LayoutParams(-1,d(215)))
+        root.addView(chip("GIF & Sticker Shelf · Manage / Search") {
+            startActivity(Intent(this,KeyPopMediaStudioActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        },LinearLayout.LayoutParams(-1,d(37)))
         root.addView(chip("＋ Import screenshot / image") {
             startActivity(Intent(this,KeyPopImageImportActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
