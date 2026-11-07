@@ -61,6 +61,13 @@ object KeyPopPredictionContext {
         }
         if(typed.endsWith("i")&&(word.endsWith("ing")||word.endsWith("ied")))
             points+=30
+        // When a user types a plausible stem-ending slip (worri -> worry),
+        // favour the inflection of the same verb over unrelated -ing forms
+        // (working/wording). Only applies after a be-auxiliary, where an
+        // -ing participle is grammatically plausible. Bounded, offline.
+        if(parsed.be && typed.length>=4 && typed.endsWith("i") &&
+            word.startsWith(typed.dropLast(1)+"y") && word.endsWith("ing"))
+            points+=85
         return points
     }
     fun score(beforeCursor:String,fragment:String,candidate:String):Int =
