@@ -68,6 +68,7 @@ object KeyboardPresetCatalog {
         "," -> if(id==MATERIAL)0.85f else 1f
         "☺" -> if(id==MATERIAL)0.85f else 1.0f
         "☺," -> if(id==MATERIAL)0.85f else 1.12f
+        "⇧","⌫" -> if(id==MATERIAL)1.42f else 1f
         "↵" ->if(id==MATERIAL)1.58f else 1f
         "." ->if(id==MATERIAL)1f else 1f
         "?" ->if(id==MATERIAL)0.7f else 1f
