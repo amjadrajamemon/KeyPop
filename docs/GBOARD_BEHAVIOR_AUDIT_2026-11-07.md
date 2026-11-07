@@ -40,6 +40,38 @@ Public references:
 5. **Gboard is a behavioral target, not open source.** Don't claim pixel-perfect, byte-equivalent, equivalent neural models or full functionality merely because a debug APK compiles.
 6. **Be precise about download progress.** Google ML Kit does not expose exact transfer byte counts. Sindhi model totals shown are estimates. Downloading the files is not proof of correct general-purpose Sindhi translation.
 
+## Final compliance-report classification — strict evidence policy
+
+The final report must **not** quietly put a feasible engineering defect into an
+"impossible" exception list. Use these distinct categories:
+
+1. **PASS — independently verified:** claim backed by automated test logs or
+   repeatable physical-device measurements. Report the actual test procedure,
+   device and result.
+2. **OPEN — must fix:** any technically addressable deficiency, including bugs,
+   incorrect predictions, jitter, clipping, visual mismatch, downloads, recovery,
+   performance or settings behavior. Assign a reproduction case, code change and
+   retest; do not relabel as an impossibility.
+3. **NOT YET VERIFIED:** code is present but quality or parity is unmeasured,
+   including end-to-end typing latency, physical Gboard screenshot geometry,
+   interrupted multi-gigabyte transfers and offline Sindhi linguistic quality.
+   This is not a PASS, nor an "impossible" exception.
+4. **EXTERNAL / INHERENT LIMITATION:** only for genuinely unreachable objectives
+   with an explanation and evidence. Examples may include access to Gboard's
+   private proprietary prediction model/training data, byte-identical copying
+   of proprietary assets, or Android OS APIs which do not expose precise ML Kit
+   download byte progress. These do **not** rule out building an independent
+   competing implementation.
+5. **COMPARATIVE SUPERIORITY:** "beats Gboard" is a *separate measured claim*,
+   requiring a controlled side-by-side benchmark and comparative dataset; a
+   green CI run alone is insufficient.
+
+**Decision rule:** list feasible deficiencies as **OPEN**, never **EXTERNAL**.
+Publish a claim of *all-aspect superiority* only after every applicable
+criterion has comparable evidence; otherwise state precisely which criteria
+are satisfied and which are still being validated. No unsupported "100%"
+or "nothing left" sign-off.
+
 ## Release gates
 
 - Android unit test suite; lint; APK compilation
