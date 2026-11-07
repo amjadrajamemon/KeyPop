@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 24
-        versionName = "1.0.8-rc9-smart-input-resume-screenshot" 
+        versionCode = 25
+        versionName = "1.0.9-rc10-gboard-wordbank-translation-send" 
     }
     splits {
         abi {
@@ -24,8 +24,8 @@ android {
     }
     buildTypes {
         debug {
-            // Isolate RC9 from differently signed RC6 debug APKs; no uninstall needed.
-            applicationIdSuffix = ".previewv108"
+            // Keep RC10 preview isolated from separately signed RC9 debug APKs; no uninstall needed.
+            applicationIdSuffix = ".previewv109"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
