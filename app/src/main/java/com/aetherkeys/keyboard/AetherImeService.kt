@@ -10,6 +10,9 @@ import android.os.Handler
 import android.os.Looper
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
@@ -51,6 +54,9 @@ class AetherImeService : InputMethodService() {
     private var didRepeatBackspace=false
     private val keyViews=ArrayList<Pair<Button,String>>()
     private val imagePreviewExecutor=Executors.newFixedThreadPool(2)
+    @Volatile private var recentScreenshotUri:Uri?=null
+    @Volatile private var screenshotMime="image/png"
+    private var screenshotRefreshToken=0
     private val clipboard by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
     private val languages=listOf("ENGLISH","اردو","سنڌي")
     private var language=0
@@ -180,6 +186,7 @@ class AetherImeService : InputMethodService() {
                 }
             } catch (_:Exception) { /* Never break typing on inaccessible clipboard. */ }
         }
+        if(!sensitive(currentInputEditorInfo))refreshRecentScreenshotAsync()
     }
 
     override fun onCreate() {
@@ -196,6 +203,7 @@ class AetherImeService : InputMethodService() {
     override fun onDestroy() {
         stopBackspaceRepeating()
         stopLiveTranslation()
+        screenshotRefreshToken++
         themeAnimator?.cancel();themeAnimator=null;liveBackground=null
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
         try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
@@ -277,6 +285,7 @@ class AetherImeService : InputMethodService() {
             pendingSpeech=null;pendingSpeechSend=false
         }
         draw()
+        refreshRecentScreenshotAsync()
         KeyPopDiagnostics.observeKeyboardBuild(this,SystemClock.elapsedRealtimeNanos()-viewStart)
     }
 
@@ -539,6 +548,85 @@ class AetherImeService : InputMethodService() {
         } else if(themeAnimator?.isPaused==true)themeAnimator?.resume()
     }
 
+    /** Refresh clipboard-image and opt-in gallery screenshot offer only when the
+     * keyboard opens or the clipboard changes, never on each typed character. */
+    private fun refreshRecentScreenshotAsync() {
+        if(sensitive(currentInputEditorInfo)) {
+            recentScreenshotUri=null
+            return
+        }
+        val token=++screenshotRefreshToken
+        imagePreviewExecutor.execute {
+            var uri:Uri?=null
+            var mime="image/png"
+            try {
+                val clip=clipboard.primaryClip
+                val markedSensitive=Build.VERSION.SDK_INT>=33 &&
+                    clip?.description?.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true
+                if(clip!=null && clip.itemCount>0 &&
+                    clip.description.hasMimeType("image/*") && !markedSensitive) {
+                    uri=clip.getItemAt(0).uri
+                    if(uri!=null)mime=contentResolver.getType(uri)?:"image/png"
+                }
+                if(uri==null && prefs.getBoolean("autoScreenshotSuggestions",false)) {
+                    uri=KeyPopRecentScreenshots.latest(this)
+                    if(uri!=null)mime=contentResolver.getType(uri)?:"image/png"
+                }
+            } catch(_:Exception){ /* Inaccessible clipboard or media is not an IME failure. */ }
+            val found=uri
+            Handler(Looper.getMainLooper()).post {
+                if(token==screenshotRefreshToken && !sensitive(currentInputEditorInfo) &&
+                    current!=null) {
+                    val changed=recentScreenshotUri!=found
+                    recentScreenshotUri=found
+                    screenshotMime=mime
+                    if(changed)draw()
+                }
+            }
+        }
+    }
+    private fun insertRecentScreenshot(uri:Uri,mime:String) {
+        if(sensitive(currentInputEditorInfo))return
+        val info=InputContentInfo(uri,ClipDescription("Recent screenshot",arrayOf(mime)),null)
+        val inserted=runCatching {
+            currentInputConnection?.commitContent(info,
+                InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION,null)==true
+        }.getOrDefault(false)
+        if(inserted)return
+        try{
+            val intent=Intent(Intent.ACTION_SEND).apply{
+                type=mime
+                putExtra(Intent.EXTRA_STREAM,uri)
+                clipData=ClipData.newUri(contentResolver,"Recent screenshot",uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(Intent.createChooser(intent,"Share screenshot")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }catch(_:Exception){
+            Toast.makeText(this,"This app cannot receive screenshot images",Toast.LENGTH_SHORT).show()
+        }
+    }
+    private fun showScreenshotThumbnail(button:Button,uri:Uri) {
+        imagePreviewExecutor.execute {
+            val bitmap=runCatching {
+                contentResolver.openInputStream(uri)?.use{
+                    BitmapFactory.decodeStream(it,null,BitmapFactory.Options().apply{
+                        inSampleSize=8
+                        inPreferredConfig=android.graphics.Bitmap.Config.RGB_565
+                    })
+                }
+            }.getOrNull()?:return@execute
+            Handler(Looper.getMainLooper()).post {
+                if(recentScreenshotUri==uri && button.isAttachedToWindow){
+                    val icon=BitmapDrawable(resources,bitmap)
+                    icon.setBounds(0,0,d(30),d(30))
+                    button.setCompoundDrawables(icon,null,null,null)
+                    button.text=""
+                }else bitmap.recycle()
+            }
+        }
+    }
+
     private fun draw() {
         val root=current ?: return
         characterStrip?.dismiss()
@@ -604,7 +692,19 @@ class AetherImeService : InputMethodService() {
                 draw()
                 if(translatorOpen) scheduleLiveTranslation(80)
             }
-            iconAction("◈","Preview theme gallery without changing your active theme"){
+            val screenshot=recentScreenshotUri
+            if(screenshot!=null && prefs.getBoolean("screenshotClipOffer",true)) {
+                val screenshotButton=chip("📷",onTap={
+                    insertRecentScreenshot(screenshot,screenshotMime)
+                }).apply{
+                    contentDescription="Recent screenshot. Tap to paste or share"
+                    textSize=18f
+                }
+                top.addView(screenshotButton,LinearLayout.LayoutParams(0,d(40),1f).apply{
+                    leftMargin=d(2);rightMargin=d(2)
+                })
+                showScreenshotThumbnail(screenshotButton,screenshot)
+            } else iconAction("◈","Preview theme gallery without changing your active theme"){
                 startActivity(Intent(this,MainActivity::class.java)
                     .putExtra("openSection","themes")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -1394,7 +1494,9 @@ class AetherImeService : InputMethodService() {
                             }
                         }
                     }
-                    if(prefs.getBoolean("autoPunctuate",true) &&
+                    if(KeyPopTypingRules.autoPunctuationEnabled(
+                            prefs.getBoolean("autoPunctuate",true),
+                            currentInputEditorInfo?.inputType?:0) &&
                         prefs.getBoolean("doubleSpace",true)) {
                         val last=currentInputConnection?.getTextBeforeCursor(2,0)?.toString().orEmpty()
                         if(last.length==2 && last.last()==' ' && last.first().isLetter()) {
@@ -1410,10 +1512,16 @@ class AetherImeService : InputMethodService() {
                     if(word.isNotBlank()) {
                         val predLang=if(language!=0 &&
                             prefs.getBoolean("romanMode",false))0 else language
-                        val corrected=if(prefs.getBoolean("autoCorrect",true))
+                        val inputType=currentInputEditorInfo?.inputType?:0
+                        val corrected=if(KeyPopTypingRules.autocorrectEnabled(
+                                prefs.getBoolean("autoCorrect",true),inputType))
                             lexicon.correction(predLang,word) else null
-                        val grammar=if(prefs.getBoolean("grammarHints",true) &&
-                            prefs.getBoolean("aggressivePredictions",true))
+                        // Grammar hints are suggestions, not forced edits. Optional
+                        // auto-grammar has its own setting and respects autocorrect off.
+                        val grammar=if(prefs.getBoolean("autoGrammarApply",false) &&
+                            KeyPopTypingRules.autocorrectEnabled(
+                                prefs.getBoolean("autoCorrect",true),inputType) &&
+                            prefs.getBoolean("grammarHints",true))
                             KeyPopGrammarRules.suggest(before,predLang) else null
                         if(grammar!=null && grammar.remove<=before.length) {
                             currentInputConnection?.deleteSurroundingText(grammar.remove,0)
@@ -1421,8 +1529,9 @@ class AetherImeService : InputMethodService() {
                             lexicon.learn(predLang,grammar.replacement.substringAfterLast(' '))
                         } else if(corrected!=null) {
                             currentInputConnection?.deleteSurroundingText(word.length,0)
-                            currentInputConnection?.commitText(corrected,1)
-                            lexicon.learn(predLang,corrected)
+                            val final=KeyPopTypingRules.preservesCase(word,corrected)
+                            currentInputConnection?.commitText(final,1)
+                            lexicon.learn(predLang,final)
                         } else lexicon.learn(predLang,word)
                     }
                 }
@@ -1460,8 +1569,11 @@ class AetherImeService : InputMethodService() {
                     InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
                     InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS)
                 val punct=value in setOf(",",".","!","?","،","؟","۔")
-                val doAutoPunct=punct && prefs.getBoolean("autoPunctuate",true) &&
-                    !noAutoSpace && prior.trimEnd().lastOrNull()?.isLetterOrDigit()==true
+                val doAutoPunct=punct && !noAutoSpace &&
+                    KeyPopTypingRules.autoPunctuationEnabled(
+                        prefs.getBoolean("autoPunctuate",true),
+                        currentInputEditorInfo?.inputType?:0) &&
+                    prior.trimEnd().lastOrNull()?.isLetterOrDigit()==true
                 if(doAutoPunct && prior.endsWith(" "))
                     currentInputConnection?.deleteSurroundingText(1,0)
                 currentInputConnection?.commitText(
