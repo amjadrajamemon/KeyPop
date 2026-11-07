@@ -90,6 +90,7 @@ object KeyPopTypingIntelligence {
         "wrod" to "word","screeshots" to "screenshots",
         "screeenshots" to "screenshots","screenshotss" to "screenshots",
         "mesage" to "message","messge" to "message",
+        "vreate" to "create","vreated" to "created",
         "screensots" to "screenshots",
         "screnshots" to "screenshots","screenshto" to "screenshot"
     )
@@ -128,7 +129,8 @@ object KeyPopTypingIntelligence {
     fun suggestions(language:Int,fragment:String,previous:String,
                     learned:Set<String> = emptySet(),limit:Int=3,
                     dictionary:List<String> = emptyList(),
-                    wordTiers:Map<String,Int> = emptyMap()):List<String> {
+                    wordTiers:Map<String,Int> = emptyMap(),
+                    beforeCursor:String = ""):List<String> {
         val prefix=normalized(fragment)
         if(prefix.length !in 1..32)return emptyList()
         val prior=normalized(previous)
@@ -152,7 +154,9 @@ object KeyPopTypingIntelligence {
                 else 3
             if(!starts && edit>1)continue
             candidates.add(Candidate(word,candidateScore(prefix,word,edit,
-                word in learned,word in contextual,wordTiers[word])))
+                word in learned,word in contextual,wordTiers[word])+
+                if(language==0)KeyPopPredictionContext.score(beforeCursor,fragment,word)
+                else 0))
         }
         return candidates.sortedWith(compareByDescending<Candidate>{it.score}
             .thenBy{it.text.length}.thenBy{it.text}).take(limit.coerceIn(1,8))
