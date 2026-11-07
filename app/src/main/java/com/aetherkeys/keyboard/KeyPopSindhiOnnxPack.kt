@@ -59,6 +59,21 @@ object KeyPopSindhiOnnxPack {
             }.getOrDefault("")
             !dest.isFile || dest.length()==0L || revision!=bundle.revision
         }
+    /** Measure durable verified model files plus any resumable .part bytes.
+     * This is intentionally disk-based, so a restarted service resumes with
+     * the correct progress instead of resetting to zero. */
+    fun downloadedBytes(context:Context,bundle:Bundle):Long {
+        val dir=folder(context,bundle)
+        return bundle.files.sumOf{name->
+            val full=File(dir,name)
+            val receipt=File(dir,name+".integrity")
+            if(full.isFile && receipt.isFile &&
+                runCatching{JSONObject(receipt.readText()).optString("revision")==bundle.revision}
+                    .getOrDefault(false))full.length()
+            else File(dir,name+".part").takeIf{it.isFile}?.length()?:0L
+        }
+    }
+    fun estimatedBytes(bundle:Bundle):Long=bundle.approximateMB.toLong()*1024L*1024L
     fun status(context:Context,bundle:Bundle):String {
         val count=bundle.files.size-missing(context,bundle).size
         return if(count==bundle.files.size)
