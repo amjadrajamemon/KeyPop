@@ -18,9 +18,9 @@ class KeyPopV09MaterialAndModelsTest {
     @Test fun screenshotFooterKeepsCriticalActions() {
         val normal=KeyboardPresetCatalog.foot(KeyboardPresetCatalog.MATERIAL,false)
         assertEquals("?123",normal.first())
-        assertTrue(normal.contains("☺,"))
-        assertEquals(6,normal.size)
-        assertFalse("Comma belongs to emoji hold gesture, not a redundant footer key",normal.contains(","))
+        assertTrue(normal.contains("☺"))
+        assertEquals(7,normal.size)
+        assertTrue("Gboard-style comma must be a dedicated key",normal.contains(","))
         assertTrue(normal.contains("🌐"))
         assertTrue(normal.contains("SPACE"))
         assertTrue(normal.contains("."))
