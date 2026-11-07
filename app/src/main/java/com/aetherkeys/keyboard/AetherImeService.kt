@@ -81,6 +81,8 @@ class AetherImeService : InputMethodService() {
     private var writingPreview=""
     private var writingMode="Formal"
     private var translateSource=""
+    private var translateDraftMode=false
+    private var translateDraft=""
     private var translateSourceChoice=-1
     private var translateResult=""
     // Snapshot of the exact preview that completed. Prevent a stale result
@@ -711,7 +713,12 @@ class AetherImeService : InputMethodService() {
                 translatorOpen=!translatorOpen;writingOpen=false;emojiOpen=false
                 clipsOpen=false;toolsOpen=false;resizeOpen=false
                 if(translatorOpen) {
-                    translateSource=editorTranslationText()
+                    translateDraftMode=false
+                    val existing=editorTranslationText()
+                    translateDraftMode=prefs.getBoolean("translateComposeInput",true) &&
+                        prefs.getBoolean("compactTranslate",true) && existing.isBlank()
+                    translateDraft=""
+                    translateSource=if(translateDraftMode)"" else existing
                     translateSourceChoice=-1
                     translateResult="";translationStatus=""
                     googleEasyMode=KeyPopCloudTranslation.configured(this) &&
@@ -895,7 +902,12 @@ class AetherImeService : InputMethodService() {
                         toolsOpen=false
                         if(!secure&&!isNumeric) {
                             translatorOpen=true;writingOpen=false;emojiOpen=false;clipsOpen=false
-                            translateSource=editorTranslationText()
+                            translateDraftMode=false
+                            val existing=editorTranslationText()
+                            translateDraftMode=prefs.getBoolean("translateComposeInput",true) &&
+                                prefs.getBoolean("compactTranslate",true) && existing.isBlank()
+                            translateDraft=""
+                            translateSource=if(translateDraftMode)"" else existing
                             translateSourceChoice=-1
                             translateResult="";translationStatus=""
                             googleEasyMode=KeyPopCloudTranslation.configured(this) &&
@@ -1142,7 +1154,11 @@ class AetherImeService : InputMethodService() {
                         override fun run() {
                             if(!button.isAttachedToWindow)return
                             didRepeatBackspace=true
-                            currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
+                            if(translatorOpen && translateDraftMode) {
+                                translateDraft=translateDraft.dropLast(1)
+                                translateSource=translateDraft
+                                liveSourceView?.text=translateDraft
+                            } else currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
                             repeats++
                             // Avoid inflating suggestion views for every deleted character.
                             if(repeats%5==0)refreshSuggestions()
@@ -1450,7 +1466,8 @@ class AetherImeService : InputMethodService() {
             materialTopBar?.visibility=View.VISIBLE
             return
         }
-        val before=input.getTextBeforeCursor(140,0)?.toString().orEmpty()
+        val before=if(translatorOpen && translateDraftMode)translateDraft.takeLast(140)
+            else input.getTextBeforeCursor(140,0)?.toString().orEmpty()
         val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
         val nextWords=prefs.getBoolean("predictNext",true)
         val show=word.isNotEmpty() || (nextWords && before.isNotBlank())
@@ -1521,6 +1538,21 @@ class AetherImeService : InputMethodService() {
         }
         fun replaceWord(choice:String) {
             lastAppliedCorrection=null
+            if(translatorOpen && translateDraftMode) {
+                val actual=Regex("[\\p{L}]+$").find(translateDraft)?.value.orEmpty()
+                if(actual!=word)return
+                val replacement=KeyPopPredictionContext.wordCase(choice,actual,before)
+                val committed=if(prefs.getBoolean("suggestionSpace",true))
+                    KeyPopPredictionContext.committedWord(replacement,"")
+                    else replacement
+                translateDraft=translateDraft.dropLast(actual.length)+committed
+                translateSource=translateDraft
+                liveSourceView?.text=translateDraft
+                lexicon.learn(predLang,replacement)
+                refreshSuggestions()
+                scheduleLiveTranslation(120)
+                return
+            }
             val connection=currentInputConnection ?:return
             val actual=Regex("[\\p{L}]+$").find(
                 connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
@@ -1599,6 +1631,28 @@ class AetherImeService : InputMethodService() {
         }
     }
     private fun press(value:String) {
+        if(translatorOpen && translateDraftMode &&
+            KeyPopTranslationDraft.handles(value)) {
+            if(value=="↵") {translateBeforeSend();return}
+            if(value=="SPACE" && prefs.getBoolean("autoCorrect",true)) {
+                val fragment=Regex("[\\p{L}]+$").find(translateDraft)?.value.orEmpty()
+                val corrected=lexicon.correction(language,fragment)
+                if(corrected!=null) {
+                    translateDraft=translateDraft.dropLast(fragment.length)+
+                        KeyPopPredictionContext.wordCase(corrected,fragment,translateDraft)
+                }
+            }
+            translateDraft=KeyPopTranslationDraft.edit(
+                translateDraft,value,shift,prefs.getBoolean("autoCap",true))
+            translateSource=translateDraft
+            liveSourceView?.text=translateDraft
+            if(value.length==1 && shift && !capsLock) {
+                shift=false;updateShiftKeys()
+            }
+            refreshSuggestions()
+            scheduleLiveTranslation(130)
+            return
+        }
         if(value!="⌫" && value!="SPACE")lastAppliedCorrection=null
         if(emojiOpen && emojiSearch) {
             when(value) {
@@ -1838,6 +1892,7 @@ class AetherImeService : InputMethodService() {
 
     /** Text belongs to the active editor, not KeyPop's Settings Activity. */
     private fun editorTranslationText():String {
+        if(translatorOpen && translateDraftMode)return translateDraft.takeLast(1200)
         val input=currentInputConnection?:return ""
         return (input.getSelectedText(0)?.toString()?.takeIf{it.isNotBlank()}
             ?:input.getTextBeforeCursor(2400,0)?.toString().orEmpty()).takeLast(1200)
@@ -1862,8 +1917,9 @@ class AetherImeService : InputMethodService() {
                 (!liveTranslationEnabled && !manual))return@postDelayed
             val text=editorTranslationText()
             translateSource=text
-            liveSourceView?.text=if(text.isBlank())"Type in the active app…"
-                else text.takeLast(180)
+            liveSourceView?.text=if(text.isBlank())
+                (if(translateDraftMode)"Type here to translate…"
+                else "Type in the active app…") else text.takeLast(180)
             translateResult=""
             if(text.isBlank()) {
                 translationStatus="Translation appears as you type."
