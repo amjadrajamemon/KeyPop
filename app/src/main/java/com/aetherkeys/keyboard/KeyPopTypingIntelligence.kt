@@ -89,6 +89,8 @@ object KeyPopTypingIntelligence {
         "mroe" to "more","moer" to "more",
         "wrod" to "word","screeshots" to "screenshots",
         "screeenshots" to "screenshots","screenshotss" to "screenshots",
+        "mesage" to "message","messge" to "message",
+        "screensots" to "screenshots",
         "screnshots" to "screenshots","screenshto" to "screenshot"
     )
     private val frequentEnglish=setOf("the","and","you","your","should","would",
