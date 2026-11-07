@@ -44,21 +44,32 @@ class KeyPopLexicon(context:Context) {
         val value=word.trim().lowercase(Locale.ROOT)
         if(value.length !in 2..32 || value.any{!it.isLetter()})return false
         val previous=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
-        store.edit().putStringSet("learned_"+lang,(previous+value).take(3000).toSet()).apply()
+        val manuallyAdded=store.getStringSet("manual_"+lang,emptySet()).orEmpty()
+        store.edit().putStringSet("learned_"+lang,(previous+value).take(3000).toSet())
+            .putStringSet("manual_"+lang,(manuallyAdded+value).take(3000).toSet())
+            .apply()
         return true
     }
 
     fun forget(lang:Int,word:String) {
         val current=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
-        store.edit().putStringSet("learned_"+lang,current-word.lowercase(Locale.ROOT)).apply()
+        val normalized=word.lowercase(Locale.ROOT)
+        val manual=store.getStringSet("manual_"+lang,emptySet()).orEmpty()
+        store.edit().putStringSet("learned_"+lang,current-normalized)
+            .putStringSet("manual_"+lang,manual-normalized).apply()
     }
 
-    fun clearLearned(lang:Int) {store.edit().remove("learned_"+lang).apply()}
+    fun clearLearned(lang:Int) {
+        store.edit().remove("learned_"+lang).remove("manual_"+lang).apply()
+    }
 
     fun learn(lang:Int,word:String) {
         if(!prefs.getBoolean("learningEnabled",true))return
         val value=word.trim().lowercase(Locale.ROOT)
         if(value.length !in 2..32 || value.any{!it.isLetter()})return
+        // Do not silently teach the keyboard that a known high-confidence
+        // misspelling is a valid word; users can add it explicitly instead.
+        if(KeyPopTypingIntelligence.correction(lang,value)!=null)return
         val old=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         if(value in old)return
         val updated=(old+value).toList().takeLast(2000).toSet()
@@ -72,9 +83,13 @@ class KeyPopLexicon(context:Context) {
     fun nextWords(lang:Int,previous:String):List<String> =
         KeyPopTypingIntelligence.nextWords(lang,previous)
     fun correction(lang:Int,word:String):String? {
+        val normalized=word.trim().lowercase(Locale.ROOT)
+        val manual=store.getStringSet("manual_"+lang,emptySet()).orEmpty()
+        if(normalized in manual)return null
+        val base=when(lang){1->urdu;2->sindhi;else->english}
+        if(normalized in base)return null
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
-        if(word.trim().lowercase(Locale.ROOT) in words(lang))return null
-        return KeyPopTypingIntelligence.correction(lang,word,learned+words(lang))
+        return KeyPopTypingIntelligence.correction(lang,word,learned)
     }
     fun glide(lang:Int,path:List<String>):String? {
         if(lang!=0 || path.size<3)return null
