@@ -24,6 +24,16 @@ object KeyPopTransferMetrics {
     fun etaSeconds(downloaded:Long,estimated:Long,bytesPerSecond:Double):Long? =
         if(estimated<=0 || bytesPerSecond<=1024.0 || !bytesPerSecond.isFinite())null
         else (remaining(downloaded,estimated)/bytesPerSecond).toLong().coerceAtLeast(0L)
+    /** Once selected files are verified, estimated budget is not an outstanding
+     * obligation: actual compressed/hosted bytes may be smaller than estimate. */
+    fun completedSummary(verifiedBytes:Long,selectedCount:Int,elapsedSeconds:Long):String =
+        "Completed · "+selectedCount+" selected model pack"+
+        (if(selectedCount==1)"" else "s")+" processed\n"+
+        "Verified files on device: "+mb(verifiedBytes)+" MB\\n"+
+        "Time: "+elapsed(elapsedSeconds)+"\\n"+
+        "Remaining download: none for the selected packs.\\n"+
+        "Planning estimates may differ from actual model file sizes; "+
+        "download completion is not a translation-accuracy test."
     fun summary(downloaded:Long,estimated:Long,bytesPerSecond:Double,
                 includesPlayServices:Boolean):String {
         val google=if(includesPlayServices)" · Google ML Kit size not reported" else ""
