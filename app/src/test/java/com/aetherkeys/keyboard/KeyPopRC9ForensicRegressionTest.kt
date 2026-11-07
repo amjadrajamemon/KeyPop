@@ -64,6 +64,18 @@ class KeyPopRC9ForensicRegressionTest {
         assertNull(KeyPopTransferMetrics.etaSeconds(100*mb,400*mb,0.0))
         assertEquals("2m 30s",KeyPopTransferMetrics.elapsed(150L))
     }
+    @Test fun backspaceUndoOnlyRestoresImmediateConfirmedCorrections() {
+        assertTrue(KeyPopTypingRules.canUndoRecentCorrection(
+            "should ","shoukd","should",600L))
+        assertTrue(KeyPopTypingRules.canUndoRecentCorrection(
+            "The ","Tge","The",1000L))
+        assertFalse(KeyPopTypingRules.canUndoRecentCorrection(
+            "should work ","shoukd","should",200L))
+        assertFalse(KeyPopTypingRules.canUndoRecentCorrection(
+            "should ","shoukd","should",6001L))
+        assertFalse(KeyPopTypingRules.canUndoRecentCorrection(
+            "word ","shoukd","should",100L))
+    }
     @Test fun onlyScreenshotNamesAndDirectoriesQualify() {
         assertTrue(KeyPopRecentScreenshots.isScreenshot("Screenshot_20261107.png","Pictures/"))
         assertTrue(KeyPopRecentScreenshots.isScreenshot("IMG_001.png","Pictures/Screenshots/"))
