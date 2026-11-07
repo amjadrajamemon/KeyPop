@@ -322,6 +322,7 @@ class MainActivity:Activity() {
             option(this,"Number row","numberRow",true)
             option(this,"Word suggestions","suggestions",true)
             option(this,"Aggressive predictions","aggressivePredictions",true)
+            option(this,"Learn my words on this device","learningEnabled",true)
             option(this,"Predict next word","predictNext",true)
             option(this,"Auto-correct spelling","autoCorrect",true)
             option(this,"Auto punctuation","autoPunctuate",true)
