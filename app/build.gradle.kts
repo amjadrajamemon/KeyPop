@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 22
-        versionName = "1.0.6-rc7-gboard-live-predictions" 
+        versionCode = 23
+        versionName = "1.0.7-rc8-responsive-input-selected-packs" 
     }
     splits {
         abi {
@@ -24,8 +24,8 @@ android {
     }
     buildTypes {
         debug {
-            // Isolate RC7 from differently signed RC6 debug APKs; no uninstall needed.
-            applicationIdSuffix = ".previewv106"
+            // Isolate RC8 from differently signed RC6 debug APKs; no uninstall needed.
+            applicationIdSuffix = ".previewv107"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
