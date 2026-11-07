@@ -141,7 +141,7 @@ object KeyPopTypingIntelligence {
         // is only three letters long (tge -> the).
         if(language==0 && prefix in commonTypos){
             val fixed=commonTypos.getValue(prefix)
-            candidates.add(Candidate(fixed,240))
+            candidates.add(Candidate(fixed,500))
             seen.add(fixed)
         }
         for(word in words) {
