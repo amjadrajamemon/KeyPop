@@ -139,6 +139,8 @@ object KeyPopTypingIntelligence {
         data class Candidate(val text:String,val score:Int)
         val candidates=ArrayList<Candidate>()
         val seen=HashSet<String>()
+        val context=if(language==0 && beforeCursor.isNotBlank())
+            KeyPopPredictionContext.parse(beforeCursor,fragment) else null
         // High-confidence correction must appear even when the original token
         // is only three letters long (tge -> the).
         if(language==0 && prefix in commonTypos){
@@ -153,8 +155,8 @@ object KeyPopTypingIntelligence {
                 keyboardDistance(prefix,word.take(prefix.length))
                 else 3
             if(!starts && edit>1)continue
-            val grammar=if(language==0)
-                KeyPopPredictionContext.score(beforeCursor,fragment,word) else 0
+            val grammar=if(context!=null)
+                KeyPopPredictionContext.score(context,fragment,word) else 0
             // A bare base verb after a strong "are you" context is an
             // incompatible candidate, not merely a low-ranked suggestion.
             if(grammar<=-200)continue
