@@ -1,9 +1,8 @@
-name: KeyPop Android stable signed APK
+name: KeyPop RC15 install-safe debug APK
 on:
   push:
     branches:
-      - main
-      - feature/rc15-permanent-signing-20261107
+      - feature/rc15-debug-download-20261108
   pull_request:
   workflow_dispatch:
 
@@ -131,165 +130,41 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-  signed-release:
-    name: Sign stable APKs and enforce pinned certificate fingerprint
+  publish-debug-preview:
+    name: Publish five individually downloadable prerelease APK assets
     needs: [android, emulator-smoke]
-    if: ${{ github.ref == 'refs/heads/feature/rc15-permanent-signing-20261107' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    environment: keypop-signing
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - name: Install Android SDK
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
-          SDKMANAGER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
-          test -n "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.11.1"
-      - name: Restore private key only from protected GitHub environment
-        shell: bash
-        env:
-          KEYPOP_SIGNING_KEYSTORE_B64: ${{ secrets.KEYPOP_SIGNING_KEYSTORE_B64 }}
-          KEYPOP_SIGNING_STORE_PASSWORD: ${{ secrets.KEYPOP_SIGNING_STORE_PASSWORD }}
-          KEYPOP_SIGNING_KEY_ALIAS: ${{ secrets.KEYPOP_SIGNING_KEY_ALIAS }}
-          KEYPOP_SIGNING_KEY_PASSWORD: ${{ secrets.KEYPOP_SIGNING_KEY_PASSWORD }}
-          EXPECTED_SHA256: ${{ vars.KEYPOP_SIGNING_CERT_SHA256 }}
-        run: |
-          set -euo pipefail
-          for required in KEYPOP_SIGNING_KEYSTORE_B64 KEYPOP_SIGNING_STORE_PASSWORD KEYPOP_SIGNING_KEY_ALIAS KEYPOP_SIGNING_KEY_PASSWORD EXPECTED_SHA256; do
-            if [ -z "${!required:-}" ]; then
-              echo "::error::Missing protected signing credential $required. Run scripts/Setup-KeyPop-Signing.ps1 on the owner's Windows PC." >&2
-              exit 1
-            fi
-          done
-          umask 077
-          printf '%s' "$KEYPOP_SIGNING_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/keypop-stable-v1.p12"
-          test -s "$RUNNER_TEMP/keypop-stable-v1.p12"
-          keytool -list -keystore "$RUNNER_TEMP/keypop-stable-v1.p12" -alias "$KEYPOP_SIGNING_KEY_ALIAS" -storepass:env KEYPOP_SIGNING_STORE_PASSWORD >/dev/null
-          echo "Protected signing identity loaded."
-      - name: Build five signed release APKs and enforce certificate
-        shell: bash
-        env:
-          KEYPOP_SIGNING_KEYSTORE_PATH: ${{ runner.temp }}/keypop-stable-v1.p12
-          KEYPOP_SIGNING_STORE_PASSWORD: ${{ secrets.KEYPOP_SIGNING_STORE_PASSWORD }}
-          KEYPOP_SIGNING_KEY_ALIAS: ${{ secrets.KEYPOP_SIGNING_KEY_ALIAS }}
-          KEYPOP_SIGNING_KEY_PASSWORD: ${{ secrets.KEYPOP_SIGNING_KEY_PASSWORD }}
-          EXPECTED_SHA256: ${{ vars.KEYPOP_SIGNING_CERT_SHA256 }}
-        run: |
-          set -euo pipefail
-          test -s "$KEYPOP_SIGNING_KEYSTORE_PATH"
-          gradle --no-daemon :app:assembleRelease
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
-          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
-          test -n "$APKSIGNER"; test -n "$AAPT"
-          EXPECTED="$(echo "$EXPECTED_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
-          test "${#EXPECTED}" -eq 64
-          mkdir -p dist
-          for abi in arm64-v8a armeabi-v7a x86 x86_64 universal; do
-            SRC="app/build/outputs/apk/release/app-$abi-release.apk"
-            test -s "$SRC"
-            DEST="dist/KeyPop-v1.0.14-rc15-$abi-release.apk"
-            cp "$SRC" "$DEST"
-            "$APKSIGNER" verify --verbose --print-certs "$DEST" > "$RUNNER_TEMP/keypop-cert.txt"
-            ACTUAL="$(sed -nE 's/^Signer #1 certificate SHA-256 digest: ([[:xdigit:]]+)$/\1/p' "$RUNNER_TEMP/keypop-cert.txt" | tr '[:lower:]' '[:upper:]')"
-            if [ "$ACTUAL" != "$EXPECTED" ]; then
-              echo "::error::Signing certificate changed for $abi; refusing incompatible update" >&2
-              exit 1
-            fi
-            "$AAPT" dump badging "$DEST" > "$RUNNER_TEMP/keypop-badging.txt"
-            head -1 "$RUNNER_TEMP/keypop-badging.txt" > "$RUNNER_TEMP/keypop-package.txt"
-            grep -q "name='com.aetherkeys.keyboard.stablev1'" "$RUNNER_TEMP/keypop-package.txt"
-            grep -q "versionCode='30'" "$RUNNER_TEMP/keypop-package.txt"
-            echo "PASS: $abi signed certificate pin and package identity"
-          done
-          ls -lh dist/*.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: KeyPop-v1.0.14-rc15-STABLE-SIGNED-APKS
-          path: dist/*-release.apk
-          if-no-files-found: error
-          retention-days: 30
-      - name: Remove private key from runner
-        if: always()
-        shell: bash
-        run: rm -f "$RUNNER_TEMP/keypop-stable-v1.p12" "$RUNNER_TEMP/keypop-cert.txt"
-
-  signed-install-check:
-    name: Verify signed APK coexistence and reinstall on emulator
-    needs: signed-release
-    runs-on: ubuntu-latest
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: KeyPop-v1.0.14-rc15-STABLE-SIGNED-APKS
-          path: dist
-      - name: Grant KVM permission
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-keypop-kvm.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Test stable signed app on Android 35
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: default
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          script: bash ci/verify_signed_upgrade.sh
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: KeyPop-v1.0.14-rc15-signed-install-evidence
-          path: forensic-signed/
-          if-no-files-found: ignore
-          retention-days: 30
-
-  publish-signed:
-    name: Publish tested stable signed ARM64 and Universal APKs
-    needs: [signed-release, signed-install-check]
-    if: ${{ github.ref == 'refs/heads/feature/rc15-permanent-signing-20261107' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    # Testing-only prerelease APKs: NOT a production release. GH issue #13
+    # still blocks claims of complete offline Sindhi translation readiness.
+    # Publish only the specific RC15 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc15-debug-download-20261108' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-STABLE-SIGNED-APKS
+          name: KeyPop-v1.0.14-rc15-all-five-apks
           path: dist
-      - name: Publish only latest validated signed commit
+      - name: Publish or refresh GitHub preview release assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.14-rc15-SIGNED-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc15-permanent-signing-20261107" --jq '.commit.sha')"
+          TAG="v1.0.14-rc15-debug-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc15-debug-download-20261108" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
-            echo "::error::Refusing stale signed APK release" >&2
+            echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
           fi
-          test -s dist/KeyPop-v1.0.14-rc15-arm64-v8a-release.apk
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/*-release.apk --repo "$GH_REPO" --clobber
+            gh release upload "$TAG" dist/*-debug.apk --repo "$GH_REPO" --clobber
           else
-            gh release create "$TAG" dist/*-release.apk \
-              --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease \
-              --title "KeyPop v1.0.14 RC15 — Stable Signed Android APKs" \
-              --notes "KeyPop RC15 signed preview. Protected permanent signing key; certificate SHA-256 pin verified for each APK. Android 35 emulator checked installation beside RC14 and in-place reinstall of stable signed APK. Stable package: com.aetherkeys.keyboard.stablev1. Future signed updates must preserve that ID and certificate, increment versionCode. Existing RC14 data does not automatically migrate to first stable version. Offline Sindhi translation validation remains experimental."
+            gh release create "$TAG" dist/*-debug.apk \
+              --repo "$GH_REPO" \
+              --target "$GITHUB_SHA" \
+              --prerelease \
+              --title "KeyPop v1.0.14-rc15 Debug Preview — Android APKs" \
+              --notes "KeyPop RC15 DEBUG PREVIEW: newest tested changes through RC13 (translation-send opt-in, visible editor typing), RC12 (screenshot position and encrypted clipboard archive), and RC14 (side-by-side conflict-free installation). This build uses Android debug signing and package com.aetherkeys.keyboard.previewv115, different from RC14 previewv114. It is not a permanently signed production release. It installs alongside older KeyPop versions and starts with separate private settings/clipboard history/model downloads. For now, use this APK while permanent signing remains paused."
           fi

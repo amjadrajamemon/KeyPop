@@ -42,19 +42,19 @@ if [ "$ready" != "1" ]; then
 fi
 echo "[1/6] Install the application and Android instrumentation tests"
 # Regression for the reported INSTALL_FAILED_UPDATE_INCOMPATIBLE.
-# Install the last released RC13 APK on the *same* emulator first, then
-# install RC15 without uninstalling RC13. Both must remain installed.
-OLD_APK="dist/KeyPop-v1.0.12-rc13-x86_64-debug.apk"
+# Install the last released RC14 APK on the *same* emulator first, then
+# install RC15 without uninstalling RC14. Both must remain installed.
+OLD_APK="dist/KeyPop-v1.0.13-rc14-x86_64-debug.apk"
 echo "[coexistence] Download the prior signed preview"
 curl -fLsS --retry 3 --connect-timeout 30 \
-  "https://github.com/amjadrajamemon/KeyPop/releases/download/v1.0.12-rc13-preview/KeyPop-v1.0.12-rc13-x86_64-debug.apk" \
+  "https://github.com/amjadrajamemon/KeyPop/releases/download/v1.0.13-rc14-preview/KeyPop-v1.0.13-rc14-x86_64-debug.apk" \
   -o "$OLD_APK"
 test -s "$OLD_APK"
 adb install -r "$OLD_APK"
-adb shell pm path com.aetherkeys.keyboard.previewv110 | grep -q package:
-echo "[coexistence] Install RC15 beside the previous RC13 preview"
+adb shell pm path com.aetherkeys.keyboard.previewv114 | grep -q package:
+echo "[coexistence] Install RC15 beside the previous RC14 preview"
 adb install -r "$APK"
-adb shell pm path com.aetherkeys.keyboard.previewv110 | grep -q package:
+adb shell pm path com.aetherkeys.keyboard.previewv114 | grep -q package:
 adb shell pm path com.aetherkeys.keyboard.previewv115 | grep -q package:
 echo "PASS: old preview remains installed and RC15 installs without a signature conflict"
 adb install -r "$TEST_APK"
