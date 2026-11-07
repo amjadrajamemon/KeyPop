@@ -1403,13 +1403,22 @@ class AetherImeService : InputMethodService() {
                     val before=currentInputConnection?.getTextBeforeCursor(48,0)?.toString().orEmpty()
                     val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
                     if(word.isNotBlank()) {
-                        val corrected=if(prefs.getBoolean("autoCorrect",false))
-                            lexicon.correction(language,word) else null
-                        if(corrected!=null) {
+                        val predLang=if(language!=0 &&
+                            prefs.getBoolean("romanMode",false))0 else language
+                        val corrected=if(prefs.getBoolean("autoCorrect",true))
+                            lexicon.correction(predLang,word) else null
+                        val grammar=if(prefs.getBoolean("grammarHints",true) &&
+                            prefs.getBoolean("aggressivePredictions",true))
+                            KeyPopGrammarRules.suggest(before,predLang) else null
+                        if(grammar!=null && grammar.remove<=before.length) {
+                            currentInputConnection?.deleteSurroundingText(grammar.remove,0)
+                            currentInputConnection?.commitText(grammar.replacement,1)
+                            lexicon.learn(predLang,grammar.replacement.substringAfterLast(' '))
+                        } else if(corrected!=null) {
                             currentInputConnection?.deleteSurroundingText(word.length,0)
                             currentInputConnection?.commitText(corrected,1)
-                            lexicon.learn(language,corrected)
-                        } else lexicon.learn(language,word)
+                            lexicon.learn(predLang,corrected)
+                        } else lexicon.learn(predLang,word)
                     }
                 }
                 currentInputConnection?.commitText(" ",1)
@@ -1440,10 +1449,24 @@ class AetherImeService : InputMethodService() {
                 val sentenceStart=prior.isBlank() || prior.trimEnd().lastOrNull() in listOf('.','!','?','\n')
                 val latinMode=language==0 || prefs.getBoolean("romanMode",false)
                 val capital=shift || (latinMode && prefs.getBoolean("autoCap",true) && sentenceStart)
+                val variation=(currentInputEditorInfo?.inputType ?: 0) and
+                    InputType.TYPE_MASK_VARIATION
+                val noAutoSpace=variation in setOf(InputType.TYPE_TEXT_VARIATION_URI,
+                    InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+                    InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS)
+                val punct=value in setOf(",",".","!","?","،","؟","۔")
+                val doAutoPunct=punct && prefs.getBoolean("autoPunctuate",true) &&
+                    !noAutoSpace && prior.trimEnd().lastOrNull()?.isLetterOrDigit()==true
+                if(doAutoPunct && prior.endsWith(" "))
+                    currentInputConnection?.deleteSurroundingText(1,0)
                 currentInputConnection?.commitText(
-                    if(capital && latinMode) value.uppercase(Locale.ROOT) else value,1)
-                if(shift && language==0 && !capsLock) { shift=false;draw() }
-                else refreshSuggestions()
+                    (if(capital && latinMode)value.uppercase(Locale.ROOT) else value)+
+                        (if(doAutoPunct)" " else ""),1)
+                if(shift && latinMode && !capsLock) {
+                    shift=false
+                    updateShiftKeys()
+                }
+                refreshSuggestions()
             }
         }
         scheduleLiveTranslation()
