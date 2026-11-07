@@ -9,7 +9,7 @@ import kotlin.math.abs
  * Not a replacement for neural predictions and language-level grammars.
  */
 object KeyPopTypingIntelligence {
-    private val english=("about above accept account across action address after again against agree all almost already also always amazing amount another answer anyone anything application approve approved around available aware back bank banking because become before begin being below best better between birthday both build business calendar call camera cannot change check child choose clear click close code color common company complete confirm contact continue copy correct could create current custom customer data date day decision default delete design detail device different direct document done download easy edit email enable enough enter error example excellent family favorite feature feel file find finish first follow forgot form friend from full function future general get give good great group happen happy have hello help here history home hour important improve include information inside install issue just keep keyboard know language latest learn leave letter like link list login look make manage many maybe meeting message minimum minutes modern money month more most move much name near need never next normal note number office only open option order other output page password people personal phone photo please possible prepare present pretty previous privacy project properly quality question quick ready really receive recent recommend remember remove reply report request require result review right save screen search secure select send service setting share show simple some source space special speed start status still storage store style support system team thank thanks their them there these thing think this time today tomorrow tool top touch translate typing update upload user using version video view wait want week welcome what when where which while will window with work world write yes your should would could information details additional important much more other their there though though through receive necessary correct writing spelling punctuation predictive prediction definitely recommend said she he it is were was try again very why whatever both everyone everything something nothing someone someday yesterday we they're isn't that's can't don't").split(' ').filter{it.isNotBlank()}.distinct()
+    private val english=("about above accept account across action address after again against agree all almost already also always amazing amount another answer anyone anything application approve approved around available aware back bank banking because become before begin being below best better between birthday both build business calendar call camera cannot change check child choose clear click close code color common company complete confirm contact continue copy correct could create current custom customer data date day decision default delete design detail device different direct document done download easy edit email enable enough enter error example excellent family favorite feature feel file find finish first follow forgot form friend from full function future general get give good great group happen happy have hello help here history home hour important improve include information inside install issue just keep keyboard know language latest learn leave letter like link list login look make manage many maybe meeting message minimum minutes modern money month more most move much name near need never next normal note number office only open option order other output page password people personal phone photo please possible prepare present pretty previous privacy project properly quality question quick ready really receive recent recommend remember remove reply report request require result review right save screen search secure select send service setting share show simple some source space special speed start status still storage store style support system team thank thanks their them there these thing think this time today tomorrow tool top touch translate typing update upload user using version video view wait want week welcome what when where which while will window with work word words screenshot screenshots world write yes your should would could information details additional important much more other their there though though through receive necessary correct writing spelling punctuation predictive prediction definitely recommend said she he it is were was try again very why whatever both everyone everything something nothing someone someday yesterday we they're isn't that's can't don't").split(' ').filter{it.isNotBlank()}.distinct()
     private val urdu=("آپ آپکا آپکی آپکے آپکو آج ابھی اچھا اچھی اچھے اگر اطلاع ان اندر اور ایک بار بہت بہترین براہ بات بعد پہلے پھر تمام تم تھوڑا تیار تیز جواب جانب جان جانچ جاری جگہ جہاں جتنا جب جس جسے جن جی درخواست دیر دن دوبارہ دوست دین دنیا دیکھ دکھائی رہا رہی رہے رکھ رہا سارا ساتھ سلام سال سب سبق سچ سوال سے صبح صرف شکریہ شامل شام شاندار شروع شخص ضروری فیصلہ فی الحال قبل قلم کل کام کرنے کرتا کرتے کرنا کرم کچھ کئی کس کیسے کیوں کیا کہاں کون کوئی کہ کے کی کیونکہ کو گئی گا گی گئے گزر گیا گھر گیا ہے ہیں ہوتا ہونے ہوئی ہوں ہو ہم ہمارا ہماری ہمارے ہمیں یہاں یہ یہی یاد یقینی واقعی وقت والے والا والی وقت محفوظ معلومات مکمل میرا میری میرے میں نہیں نہ نیا نئے نئی نام نوٹ نرم نرم نہایت درست دستاویز دفتر ماہ مہینہ ملاقات مدد محبت مثال مناسب مشورہ مریض مرحلہ مسئلہ ضروریات طلب استعمال رابطہ رپورٹ کام کاغذ ترجمہ تحریر زبان سندھی اردو انگریزی الفاظ قبول بھی کچھ خریداری مکمل کریں کردی دیجئے بھیجیں پیش معلومات فرما دیجیے").split(' ').filter{it.isNotBlank()}.distinct()
     private val sindhi=("اڄ اڃا اوهان توهان توھان تون مان منهنجو منهنجي منهنجا اسان اسانجو اسانجي اسانجا آهي آھن آهن آھيان آهيان آھيو آيو اچي اچو اچي ٿو اچن اڳ بعد پوءِ جيڪڏھن جيڪڏهن پر ۽ يا به بلڪل تمام سلام مهرباني سٺو سٺي سٺا ٺيڪ ٺيڪ آهي ڪيئن ڪڏهن ڪٿي ڇو ڇا ڪير ڪيترو ڪيتري جڏهن جتي گهر ڪم ڏينھن ڏينهن وقت سڀاڻي اڄ شام رات صبح پوءِ دوست خاندان معلومات ڄاڻ وقت درخواست رپوٽ رپورٽ آفيس دفتر ڪاغذ ترجمو ٻولي انگريزي سنڌي اردو مهرباني ڪري ٻڌايو ٻڌائي ٻڌاءِ ڏيکاريو سمجهيو صحيح غلط نالو فون رابطو نمبر پيغام جواب تيار منهنجو اڪائونٽ محفوظ حفاظتي جائزو پوء ڪيو ڪري ڪرڻ لاءِ کان ۾ کي سان جو جي جا هڪ ٻه ٽي چار پنج ڇهه ست اٺ نو ڏهه نئون نئين سٺو سٺي حاصل ڪرڻ چاهيان ٿو ٿي سگهندو مدد ڪندؤ مهرباني مبارڪ خوش ٿي حاضر آهي").split(' ').filter{it.isNotBlank()}.distinct()
     private val follow=mapOf(
@@ -86,7 +86,10 @@ object KeyPopTypingIntelligence {
         "doesnt" to "doesn't","wasnt" to "wasn't",
         "shoud" to "should","wht" to "what","whst" to "what",
         "thsi" to "this","thn" to "then","plese" to "please",
-        "mroe" to "more","moer" to "more"
+        "mroe" to "more","moer" to "more",
+        "wrod" to "word","screeshots" to "screenshots",
+        "screeenshots" to "screenshots","screenshotss" to "screenshots",
+        "screnshots" to "screenshots","screenshto" to "screenshot"
     )
     private val frequentEnglish=setOf("the","and","you","your","should","would",
         "could","more","this","that","with","what","where","when",
@@ -157,28 +160,13 @@ object KeyPopTypingIntelligence {
         }
         return (contextual+defaults).distinct().take(3)
     }
+    /** Preserve valid vocabulary and plural forms. Fuzzy guesses are suggestions,
+     * NOT forced replacement. Explicit high-confidence typos auto-correct. */
     fun correction(language:Int,typed:String,learned:Set<String> = emptySet()):String? {
         val word=normalized(typed)
-        if(word.length<3 || word.length>32 || word in learned ||
-            word in list(language))return null
-        if(language==0)commonTypos[word]?.let{return it}
-        // Do not rewrite genuine dictionary words. An ambiguous distance-one
-        // candidate is a *suggestion*, but not a forced autocorrection.
-        if(word.length<4)return null
-        val possible=(list(language)+learned).distinct().asSequence()
-            .filter{kotlin.math.abs(it.length-word.length)<=1}
-            .map{it to keyboardDistance(word,it)}
-            .filter{it.second==1}.take(100)
-            .sortedWith(compareByDescending<Pair<String,Int>> {
-                (if(language==0 && it.first in frequentEnglish)50 else 0)+
-                    (if(it.first.length==word.length)10 else 0)
-            }.thenBy{it.first.length}).toList()
-        if(possible.isEmpty())return null
-        val best=possible.first().first
-        // Avoid aggressive false positives on a tiny offline vocabulary:
-        // apply only highly common words or an unambiguous single candidate.
-        return best.takeIf{language==0 && it in frequentEnglish ||
-            possible.size==1 && word.length>=5}
+        if(language!=0 || word.length !in 3..32)return null
+        if(word in learned || word in list(language))return null
+        return commonTypos[word]
     }
     fun contextualReplies(language:Int,text:String):List<String> {
         val source=normalized(text)
