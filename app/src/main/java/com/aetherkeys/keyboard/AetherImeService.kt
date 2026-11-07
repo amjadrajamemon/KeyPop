@@ -714,7 +714,8 @@ class AetherImeService : InputMethodService() {
                     translateSource=editorTranslationText()
                     translateSourceChoice=-1
                     translateResult="";translationStatus=""
-                    googleEasyMode=false
+                    googleEasyMode=KeyPopCloudTranslation.configured(this) &&
+                        prefs.getBoolean("googleCloudConsent",false)
                     val detected=KeyPopTextLanguage.detect(translateSource,language)
                     translateTarget=prefs.getInt("autoTarget",if(detected==2)0 else 2).coerceIn(0,2)
                     if(translateTarget==detected)translateTarget=if(detected==2)0 else 2
@@ -897,7 +898,8 @@ class AetherImeService : InputMethodService() {
                             translateSource=editorTranslationText()
                             translateSourceChoice=-1
                             translateResult="";translationStatus=""
-                            googleEasyMode=false
+                            googleEasyMode=KeyPopCloudTranslation.configured(this) &&
+                                prefs.getBoolean("googleCloudConsent",false)
                             val detected=KeyPopTextLanguage.detect(translateSource,language)
                             translateTarget=prefs.getInt("autoTarget",if(detected==2)0 else 2).coerceIn(0,2)
                             if(translateTarget==detected)translateTarget=if(detected==2)0 else 2
@@ -1854,7 +1856,7 @@ class AetherImeService : InputMethodService() {
         liveRevision++
         val revision=liveRevision
         liveHandler.removeCallbacksAndMessages(null)
-        val debounce=if(googleEasyMode && !manual)maxOf(waitMs,1100L) else waitMs
+        val debounce=if(googleEasyMode && !manual)maxOf(waitMs,550L) else waitMs
         liveHandler.postDelayed({
             if(revision!=liveRevision || !translatorOpen ||
                 (!liveTranslationEnabled && !manual))return@postDelayed
