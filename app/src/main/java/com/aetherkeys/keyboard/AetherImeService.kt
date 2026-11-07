@@ -83,6 +83,11 @@ class AetherImeService : InputMethodService() {
     private var translateSource=""
     private var translateSourceChoice=-1
     private var translateResult=""
+    // Snapshot of the exact preview that completed. Prevent a stale result
+    // being sent after the target, source, engine, or editor has changed.
+    private var previewSource=""
+    private var previewDirection=""
+    private var previewGoogle=false
     private var translationStatus=""
     private var translateTarget=0
     private var googleEasyMode=false
@@ -1291,36 +1296,74 @@ class AetherImeService : InputMethodService() {
         val input=currentInputConnection ?:return
         val source=input.getTextBeforeCursor(1500,0)?.toString().orEmpty()
         if(source.isBlank())return
-        val target=prefs.getInt("autoTarget",if(language==0)1 else 0).coerceIn(0,2)
+        // The visibly selected Easy Translate pair takes precedence over the
+        // Settings default. Formerly Send used autoTarget (Urdu) even while
+        // the live panel explicitly displayed English → Sindhi.
         val detected=KeyPopTextLanguage.detect(source,language)
-        val sourceLanguage=codes[detected]
-        val targetLanguage=codes[target]
-        if(sourceLanguage==targetLanguage) {
-            Toast.makeText(this,"Select a different translation target in Settings",
+        val from=if(translatorOpen && translateSourceChoice in 0..2)
+            translateSourceChoice else detected
+        val to=if(translatorOpen)translateTarget
+            else prefs.getInt("autoTarget",if(language==0)1 else 0).coerceIn(0,2)
+        if(from==to) {
+            Toast.makeText(this,"Select different source and target languages",
                 Toast.LENGTH_LONG).show()
             return
         }
-        Toast.makeText(this,"Translating message…",Toast.LENGTH_SHORT).show()
-        KeyPopTranslator.translate(this,sourceLanguage,targetLanguage,source,
-            prefs.getBoolean("remoteTranslate",false),prefs.getString("translateEndpoint","").orEmpty()) { result ->
+        val direction=codes[from]+"-"+codes[to]
+        val requestedGoogle=translatorOpen && googleEasyMode
+        val callback:(Result<String>)->Unit={result->
             result.onSuccess { translated ->
-                val current=currentInputConnection ?:return@onSuccess
-                if(sensitive(currentInputEditorInfo))return@onSuccess
-                val stillCurrent=current.getTextBeforeCursor(source.length,0)?.toString().orEmpty()
-                if(stillCurrent!=source) {
-                    Toast.makeText(this,"Message changed; translation not inserted",Toast.LENGTH_SHORT).show()
-                    return@onSuccess
+                val current=currentInputConnection
+                if(current!=null && !sensitive(currentInputEditorInfo)) {
+                    val stillCurrent=current.getTextBeforeCursor(source.length,0)?.toString().orEmpty()
+                    if(stillCurrent!=source || (translatorOpen &&
+                        (translateTarget!=to ||
+                         (translateSourceChoice in 0..2 && translateSourceChoice!=from) ||
+                         googleEasyMode!=requestedGoogle))) {
+                        Toast.makeText(this,"Text or translation direction changed; nothing sent",
+                            Toast.LENGTH_SHORT).show()
+                    } else {
+                        current.beginBatchEdit()
+                        current.deleteSurroundingText(source.length,0)
+                        current.commitText(translated,1)
+                        current.endBatchEdit()
+                        val action=(currentInputEditorInfo?.imeOptions ?:0) and EditorInfo.IME_MASK_ACTION
+                        if(action==EditorInfo.IME_ACTION_SEND ||
+                           action==EditorInfo.IME_ACTION_SEARCH ||
+                           action==EditorInfo.IME_ACTION_GO)
+                            current.performEditorAction(action)
+                        else Toast.makeText(this,
+                            "Translated and inserted. Tap Send in the app.",
+                            Toast.LENGTH_LONG).show()
+                    }
                 }
-                current.beginBatchEdit()
-                current.deleteSurroundingText(source.length,0)
-                current.commitText(translated,1)
-                current.endBatchEdit()
-                val action=(currentInputEditorInfo?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
-                if(action==EditorInfo.IME_ACTION_SEND) current.performEditorAction(action)
-                else Toast.makeText(this,"Translated and inserted. Tap Send in the app.",Toast.LENGTH_LONG).show()
             }.onFailure {
-                Toast.makeText(this,it.message ?: "Translation unavailable; original text retained",Toast.LENGTH_LONG).show()
+                Toast.makeText(this,
+                    (it.localizedMessage?:"Translation unavailable")+
+                    " · original text not sent",
+                    Toast.LENGTH_LONG).show()
             }
+        }
+        if(translatorOpen && translateResult.isNotBlank() &&
+            previewSource==source && previewDirection==direction &&
+            previewGoogle==requestedGoogle) {
+            callback(Result.success(translateResult))
+            return
+        }
+        Toast.makeText(this,"Translating "+codes[from]+" → "+codes[to]+"…",
+            Toast.LENGTH_SHORT).show()
+        if(requestedGoogle) {
+            if(!KeyPopCloudTranslation.configured(this) ||
+                !prefs.getBoolean("googleCloudConsent",false)) {
+                callback(Result.failure(IllegalStateException(
+                    "Configure Google Cloud API key and consent in KeyPop Settings")))
+            } else KeyPopCloudTranslation.translate(
+                this,codes[from],codes[to],source,callback)
+        } else {
+            KeyPopTranslator.translate(this,codes[from],codes[to],source,
+                if(translatorOpen)false else prefs.getBoolean("remoteTranslate",false),
+                if(translatorOpen)"" else prefs.getString("translateEndpoint","").orEmpty(),
+                callback)
         }
     }
     private fun showEmojiPanel(root:LinearLayout) {
@@ -1827,6 +1870,9 @@ class AetherImeService : InputMethodService() {
                     googleEasyMode==requestedGoogleMode && editorTranslationText()==text) {
                     outcome.onSuccess{
                         translateResult=it
+                        previewSource=text
+                        previewDirection=codes[source]+"-"+codes[translateTarget]
+                        previewGoogle=requestedGoogleMode
                         translationStatus=""
                         // Preserve all key and prediction views; no full redraw.
                         liveResultView?.text=it
