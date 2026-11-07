@@ -22,6 +22,11 @@ class KeyPopRC10PredictionAndSendRegressionTest {
         }
     }
 
+    @Test fun confirmedTypoWinsOverFamiliarPrefixCompetitors() {
+        assertEquals("the",KeyPopTypingIntelligence.suggestions(0,"tge","").first())
+        assertEquals("the",KeyPopTypingIntelligence.suggestions(0,"thw","").first())
+    }
+
     @Test fun broadTieredLexiconPrefersFamiliarWordsWithoutForcingReplacements() {
         val candidates=KeyPopTypingIntelligence.suggestions(
             0,"doi","",limit=3,
