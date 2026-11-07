@@ -9,7 +9,7 @@ import kotlin.math.abs
  * Not a replacement for neural predictions and language-level grammars.
  */
 object KeyPopTypingIntelligence {
-    private val english=("about above accept account across action address after again against agree all almost already also always amazing amount another answer anyone anything application approve approved around available aware back bank banking because become before begin being below best better between birthday both build business calendar call camera cannot change check child choose clear click close code color common company complete confirm contact continue copy correct could create current custom customer data date day decision default delete design detail device different direct document done download easy edit email enable enough enter error example excellent family favorite feature feel file find finish first follow forgot form friend from full function future general get give good great group happen happy have hello help here history home hour important improve include information inside install issue just keep keyboard know language latest learn leave letter like link list login look make manage many maybe meeting message minimum minutes modern money month more most move much name near need never next normal note number office only open option order other output page password people personal phone photo please possible prepare present pretty previous privacy project properly quality question quick ready really receive recent recommend remember remove reply report request require result review right save screen search secure select send service setting share show simple some source space special speed start status still storage store style support system team thank thanks their them there these thing think this time today tomorrow tool top touch translate typing update upload user using version video view wait want week welcome what when where which while will window with work word words screenshot screenshots world write yes your should would could information details additional important much more other their there though though through receive necessary correct writing spelling punctuation predictive prediction definitely recommend said she he it is were was try again very why whatever both everyone everything something nothing someone someday yesterday we they're isn't that's can't don't").split(' ').filter{it.isNotBlank()}.distinct()
+    private val english=("about above accept account across action address after again against agree all almost already also always amazing amount another answer anyone anything application approve approved around available aware back bank banking because become before begin being below best better between birthday both build business calendar call camera cannot change check child choose clear click close code color common company complete confirm contact continue copy correct could create current custom customer data date day decision default delete design detail device different direct document done download easy edit email enable enough enter error example excellent family favorite feature feel file find finish first follow forgot form friend from full function future general get give good great group happen happy have hello help here history home hour important improve include information inside install issue just keep keyboard know language latest learn leave letter like link list login look make manage many maybe meeting message minimum minutes modern money month more most move much name near need never next normal note number office only open option order other output page password people personal phone photo please possible prepare present pretty previous privacy project properly quality question quick ready really receive recent recommend remember remove reply report request require result review right save screen search secure select send service setting share show simple some source space special speed start status still storage store style support system team thank thanks their them there these thing think this time today tomorrow tool top touch translate typing update upload user using version video view wait want week welcome what when where which while will window with work word words screenshot screenshots world write yes your should would could information details additional important much more other their there though though through receive necessary correct writing spelling punctuation predictive prediction definitely recommend said she he it is were was try again very why whatever both everyone everything something nothing someone someday yesterday we they're isn't that's can't don't doing worked worker workers likewise improvement improvements improving improved improvements improving typing completion completed completing corrected suggestion suggestions predicting prediction predicted predictive completion completions progress progressing download downloads downloaded downloading translation translations translating translate sent sending send").split(' ').filter{it.isNotBlank()}.distinct()
     private val urdu=("آپ آپکا آپکی آپکے آپکو آج ابھی اچھا اچھی اچھے اگر اطلاع ان اندر اور ایک بار بہت بہترین براہ بات بعد پہلے پھر تمام تم تھوڑا تیار تیز جواب جانب جان جانچ جاری جگہ جہاں جتنا جب جس جسے جن جی درخواست دیر دن دوبارہ دوست دین دنیا دیکھ دکھائی رہا رہی رہے رکھ رہا سارا ساتھ سلام سال سب سبق سچ سوال سے صبح صرف شکریہ شامل شام شاندار شروع شخص ضروری فیصلہ فی الحال قبل قلم کل کام کرنے کرتا کرتے کرنا کرم کچھ کئی کس کیسے کیوں کیا کہاں کون کوئی کہ کے کی کیونکہ کو گئی گا گی گئے گزر گیا گھر گیا ہے ہیں ہوتا ہونے ہوئی ہوں ہو ہم ہمارا ہماری ہمارے ہمیں یہاں یہ یہی یاد یقینی واقعی وقت والے والا والی وقت محفوظ معلومات مکمل میرا میری میرے میں نہیں نہ نیا نئے نئی نام نوٹ نرم نرم نہایت درست دستاویز دفتر ماہ مہینہ ملاقات مدد محبت مثال مناسب مشورہ مریض مرحلہ مسئلہ ضروریات طلب استعمال رابطہ رپورٹ کام کاغذ ترجمہ تحریر زبان سندھی اردو انگریزی الفاظ قبول بھی کچھ خریداری مکمل کریں کردی دیجئے بھیجیں پیش معلومات فرما دیجیے").split(' ').filter{it.isNotBlank()}.distinct()
     private val sindhi=("اڄ اڃا اوهان توهان توھان تون مان منهنجو منهنجي منهنجا اسان اسانجو اسانجي اسانجا آهي آھن آهن آھيان آهيان آھيو آيو اچي اچو اچي ٿو اچن اڳ بعد پوءِ جيڪڏھن جيڪڏهن پر ۽ يا به بلڪل تمام سلام مهرباني سٺو سٺي سٺا ٺيڪ ٺيڪ آهي ڪيئن ڪڏهن ڪٿي ڇو ڇا ڪير ڪيترو ڪيتري جڏهن جتي گهر ڪم ڏينھن ڏينهن وقت سڀاڻي اڄ شام رات صبح پوءِ دوست خاندان معلومات ڄاڻ وقت درخواست رپوٽ رپورٽ آفيس دفتر ڪاغذ ترجمو ٻولي انگريزي سنڌي اردو مهرباني ڪري ٻڌايو ٻڌائي ٻڌاءِ ڏيکاريو سمجهيو صحيح غلط نالو فون رابطو نمبر پيغام جواب تيار منهنجو اڪائونٽ محفوظ حفاظتي جائزو پوء ڪيو ڪري ڪرڻ لاءِ کان ۾ کي سان جو جي جا هڪ ٻه ٽي چار پنج ڇهه ست اٺ نو ڏهه نئون نئين سٺو سٺي حاصل ڪرڻ چاهيان ٿو ٿي سگهندو مدد ڪندؤ مهرباني مبارڪ خوش ٿي حاضر آهي").split(' ').filter{it.isNotBlank()}.distinct()
     private val follow=mapOf(
@@ -98,12 +98,17 @@ object KeyPopTypingIntelligence {
         "there","their","they","have","will","please","thank",
         "hello","good","morning","today","tomorrow","information")
     private fun candidateScore(input:String,candidate:String,distance:Int,
-                               known:Boolean,contextual:Boolean):Int {
+                               known:Boolean,contextual:Boolean,tier:Int?):Int {
         val prefix=candidate.startsWith(input)
-        val priority=if(candidate in frequentEnglish)25 else 0
-        return (if(prefix)145 else 91-distance*23) +
-            (if(known)10 else 0)+(if(contextual)35 else 0)+priority-
-            kotlin.math.abs(candidate.length-input.length).coerceAtMost(12)
+        val priority=if(candidate in frequentEnglish)32 else 0
+        // SCOWL size is a familiarity tier, not a per-word usage frequency.
+        // Common tier-10 words win over obscure completions, while user
+        // learning and sentence context can still refine the order.
+        val familiarity=when(tier){10->75;20->43;35->17;else->0}
+        val tailPenalty=(candidate.length-input.length).coerceAtLeast(0).coerceAtMost(16)*3
+        return (if(prefix)205 else 125-distance*30) +
+            (if(known)22 else 0)+(if(contextual)40 else 0)+priority+
+            familiarity-tailPenalty
     }
     // Optimal-string-alignment edit distance counts an adjacent swapped pair
     // as one typo, unlike ordinary Levenshtein (e.g. "teh" → "the").
@@ -121,12 +126,14 @@ object KeyPopTypingIntelligence {
         return d[a.length][b.length].coerceAtMost(3)
     }
     fun suggestions(language:Int,fragment:String,previous:String,
-                    learned:Set<String> = emptySet(),limit:Int=3):List<String> {
+                    learned:Set<String> = emptySet(),limit:Int=3,
+                    dictionary:List<String> = emptyList(),
+                    wordTiers:Map<String,Int> = emptyMap()):List<String> {
         val prefix=normalized(fragment)
         if(prefix.length !in 1..32)return emptyList()
         val prior=normalized(previous)
         val contextual=follow[language]?.get(prior).orEmpty()
-        val words=(list(language)+learned.map(::normalized)+contextual).distinct()
+        val words=(list(language)+learned.map(::normalized)+contextual+dictionary).distinct()
         data class Candidate(val text:String,val score:Int)
         val candidates=ArrayList<Candidate>()
         val seen=HashSet<String>()
@@ -145,7 +152,7 @@ object KeyPopTypingIntelligence {
                 else 3
             if(!starts && edit>1)continue
             candidates.add(Candidate(word,candidateScore(prefix,word,edit,
-                word in learned,word in contextual)))
+                word in learned,word in contextual,wordTiers[word])))
         }
         return candidates.sortedWith(compareByDescending<Candidate>{it.score}
             .thenBy{it.text.length}.thenBy{it.text}).take(limit.coerceIn(1,8))
