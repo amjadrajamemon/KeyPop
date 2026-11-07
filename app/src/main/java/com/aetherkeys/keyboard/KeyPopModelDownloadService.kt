@@ -177,6 +177,8 @@ class KeyPopModelDownloadService:Service() {
     private fun done(message:String,failed:Boolean,startId:Int) {
         stopNetworkWait()
         update(message,if(failed)lastPercent else 100,false,failed,true)
+        getSharedPreferences(PREFS,MODE_PRIVATE).edit()
+            .putLong("finishedAt",System.currentTimeMillis()).apply()
         busy.set(false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         notifier.notify(NOTIFICATION_ID,notice(message,if(failed)-1 else 100,false,failed))
@@ -246,7 +248,15 @@ class KeyPopModelDownloadService:Service() {
             (100.0*(index+part.coerceIn(0.0,1.0))/packCount).toInt().coerceIn(0,99)
         fun step(index:Int,retry:Int=0) {
             if(index>=packCount) {
-                done("Selected packs installed. Confirm offline translation accuracy.",false,startId)
+                val unverified=plan.filter { key ->
+                    val pack=KeyPopSindhiOnnxPack.bundles.firstOrNull { it.id==key }
+                    pack!=null && KeyPopSindhiOnnxPack.missing(this,pack).isNotEmpty()
+                }
+                if(unverified.isNotEmpty())
+                    done("Files still missing for "+unverified.joinToString()+". Tap Download to resume.",
+                        true,startId)
+                else done("All "+packCount+" selected packs verified on device. Test a translation.",
+                    false,startId)
                 return
             }
             val key=plan[index]
