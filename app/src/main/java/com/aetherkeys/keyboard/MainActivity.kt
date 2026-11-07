@@ -197,7 +197,7 @@ class MainActivity:Activity() {
         addBlock{
             addView(text("YOUR KEYBOARD",12f,accent,true))
             action(this,"Keyboard Setup","Enable, choose and test KeyPop"){navigate("onboarding")}
-            action(this,"Offline Packs","Download every English, Urdu and Sindhi pack in one tap"){navigate("languagePacks")}
+            action(this,"Offline Packs","Select translation directions and monitor downloaded MB, speed and ETA"){navigate("languagePacks")}
             action(this,"Themes","15 keyboard styles"){navigate("themes")}
             action(this,"Layouts","Keyboard presets and arrangement"){navigate("layouts")}
         }
@@ -326,13 +326,28 @@ class MainActivity:Activity() {
             option(this,"Predict next word","predictNext",true)
             option(this,"Auto-correct spelling","autoCorrect",true)
             option(this,"Auto punctuation","autoPunctuate",true)
-            option(this,"Grammar hints","grammarHints",true)
+            option(this,"Grammar hints (suggest only)","grammarHints",true)
+            option(this,"Apply grammar fixes automatically","autoGrammarApply",false)
             option(this,"Roman Urdu / Sindhi","romanMode")
             option(this,"Double-space punctuation","doubleSpace",true)
             option(this,"Haptic feedback","haptics")
             option(this,"Keyboard sounds","sound")
             option(this,"Spacebar cursor gesture","spaceCursor",true)
             option(this,"High contrast","highContrast")
+        }
+        addBlock{
+            addView(text("RECENT SCREENSHOTS",15f,ink,true))
+            option(this,"Show copied screenshots on keyboard","screenshotClipOffer",true)
+            option(this,"Suggest recent gallery screenshots (opt-in)","autoScreenshotSuggestions",false)
+            addView(text("Copied image previews can appear automatically. Gallery suggestions require your permission and check only for recent screenshots. Images are never uploaded.",12f,muted))
+            action(this,"Allow screenshot access (optional)"){
+                val permission=if(Build.VERSION.SDK_INT>=33)
+                    Manifest.permission.READ_MEDIA_IMAGES
+                else Manifest.permission.READ_EXTERNAL_STORAGE
+                if(checkSelfPermission(permission)==PackageManager.PERMISSION_GRANTED)
+                    Toast.makeText(this@MainActivity,"Screenshot access already allowed",Toast.LENGTH_SHORT).show()
+                else requestPermissions(arrayOf(permission),733)
+            }
         }
     }
     private fun translation(){
