@@ -407,8 +407,9 @@ class MainActivity:Activity() {
             option(this,"Show copied screenshots on keyboard","screenshotClipOffer",true)
             option(this,"Suggest recent gallery screenshots (opt-in)",
                 "autoScreenshotSuggestions",false)
-            addView(text("Copied previews stay local. Gallery suggestions require "+
-                "permission and only inspect recently created screenshots.",12f,muted))
+            addView(text("Screenshots appear in a dedicated preview strip above the toolbar. "+
+                "Paste inserts into apps supporting image content; Share is separate. "+
+                "Gallery suggestions are opt-in.",12f,muted))
             action(this,"Allow screenshot access (optional)") {
                 val permission=if(Build.VERSION.SDK_INT>=33)
                     Manifest.permission.READ_MEDIA_IMAGES
@@ -425,7 +426,7 @@ class MainActivity:Activity() {
         addBlock {
             addView(text("01   LIVE TRANSLATION",13f,accent,true))
             option(this,"Compact Gboard-style translation bar","compactTranslate",true)
-            option(this,"Compose inside keyboard when editor is empty","translateComposeInput",true)
+            addView(text("Type directly in your app while KeyPop shows translations above the keyboard.",12f,muted))
             option(this,"Show live translation while typing","liveTranslateDefault",true)
             addView(text("Cloud mode translates over the internet with your Google Cloud "+
                 "API key and consent. Offline mode needs downloaded language models. "+
@@ -478,20 +479,28 @@ class MainActivity:Activity() {
                 startActivity(Intent(this@MainActivity,KeyPopGoogleTranslateActivity::class.java))
             }
             option(this,"Translate on Send","autoTranslate")
+            option(this,"Use Enter to send when chat app has no Send action",
+                "sendViaEnterFallback",false)
+            addView(text("Direct Send requires an app-supported keyboard Send action. "+
+                "Enter fallback works only when the app sends on Enter; otherwise it "+
+                "might add a new line.",12f,muted))
         }
         showTransfer()
     }
     private fun privacy(){
         heading("Clipboard & Security","Privacy and local data")
         addBlock {
-            option(this,"Clipboard history","history")
+            option(this,"Clipboard history (opt-in)","history")
+            addView(text("Locally encrypted text archive, with no automatic age "+
+                "or item-count limit. Storage space and Android clipboard access "+
+                "rules apply; uninstalling or clearing app data erases the archive.",12f,muted))
             option(this,"High contrast labels","highContrast")
             option(this,"Private performance metrics","performanceMetrics")
             action(this,"Manage saved passwords"){
                 startActivity(Intent(this@MainActivity,KeyPopVaultActivity::class.java))
             }
             action(this,"Manage clipboard"){
-                startActivity(Intent(this@MainActivity,KeyPopMediaStudioActivity::class.java))
+                startActivity(Intent(this@MainActivity,KeyPopClipboardActivity::class.java))
             }
         }
     }

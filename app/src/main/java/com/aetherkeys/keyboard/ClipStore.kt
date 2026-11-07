@@ -1,25 +1,49 @@
 package com.aetherkeys.keyboard
 
+import android.content.ContentValues
 import android.content.Context
-import android.os.Build
+import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import org.json.JSONArray
-import org.json.JSONObject
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-data class ClipItem(val text: String, val pinned: Boolean, val time: Long)
-class ClipStore(private val context: Context) {
-    private val prefs = context.getSharedPreferences("clips", Context.MODE_PRIVATE)
-    private fun key(): SecretKey {
-        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (ks.getKey("KeyPopClipboardAES", null) as? SecretKey)?.let { return it }
-        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+/** There is no arbitrary item-count or age eviction. Storage is device-limited. */
+data class ClipItem(val text:String,val pinned:Boolean,val time:Long,val id:Long=0L)
+
+/**
+ * Each clip has a separately AES-GCM-encrypted SQLite row. Unlike a single
+ * SharedPreferences JSON blob, saving a new clip does not rewrite the entire
+ * archive. Saved clips stay until the user deletes them or clears app data.
+ */
+class ClipStore(context:Context) {
+    private val app=context.applicationContext
+    private val legacy=app.getSharedPreferences("clips",Context.MODE_PRIVATE)
+    private val helper=object:SQLiteOpenHelper(app,"keypop_clip_history.db",null,1) {
+        override fun onCreate(db:SQLiteDatabase) {
+            db.execSQL("CREATE TABLE clips (_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "cipher BLOB NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, " +
+                "copied_at INTEGER NOT NULL)")
+            db.execSQL("CREATE INDEX idx_clip_newest ON clips(_id DESC)")
+        }
+        override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int) {
+            // Never destroy user's history in a version upgrade.
+            throw IllegalStateException("Unsupported clipboard archive schema")
+        }
+    }
+    companion object { private val migrationLock=Any() }
+
+    private fun key():SecretKey {
+        val ks=KeyStore.getInstance("AndroidKeyStore").apply{load(null)}
+        (ks.getKey("KeyPopClipboardAES",null) as? SecretKey)?.let{return it}
+        val generator=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore")
         generator.init(KeyGenParameterSpec.Builder("KeyPopClipboardAES",
             KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
@@ -27,43 +51,106 @@ class ClipStore(private val context: Context) {
             .setKeySize(256).build())
         return generator.generateKey()
     }
-    private fun decrypt(): String {
-        val stored = prefs.getString("encrypted", null) ?: return "[]"
-        return try {
-            val bytes = Base64.decode(stored, Base64.DEFAULT)
-            if (bytes.size < 13) return "[]"
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
-            String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8)
-        } catch (error: Exception) { throw IllegalStateException("Clipboard history cannot be decrypted; no data was erased", error) }
+    private fun encrypt(text:String):ByteArray {
+        val cipher=Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE,key())
+        return cipher.iv+cipher.doFinal(text.toByteArray(Charsets.UTF_8))
     }
-    private fun persist(items: List<ClipItem>) {
-        val data = JSONArray()
-        items.forEach { data.put(JSONObject().put("text", it.text).put("pinned", it.pinned).put("time", it.time)) }
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
-        val bytes = cipher.iv + cipher.doFinal(data.toString().toByteArray(Charsets.UTF_8))
-        prefs.edit().putString("encrypted", Base64.encodeToString(bytes, Base64.NO_WRAP)).apply()
+    private fun decrypt(blob:ByteArray):String {
+        require(blob.size>=28){"Invalid encrypted clipboard record"}
+        val cipher=Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE,key(),GCMParameterSpec(128,blob.copyOfRange(0,12)))
+        return String(cipher.doFinal(blob.copyOfRange(12,blob.size)),Charsets.UTF_8)
     }
-    @Synchronized fun list(): List<ClipItem> {
-        val arr = JSONArray(decrypt())
-        val out = ArrayList<ClipItem>()
-        for (i in 0 until arr.length()) {
-            val o = arr.optJSONObject(i) ?: continue
-            out.add(ClipItem(o.optString("text"), o.optBoolean("pinned"), o.optLong("time")))
+    private fun oldItems():List<ClipItem> {
+        val raw=legacy.getString("encrypted",null)?:return emptyList()
+        // Decryption errors must never silently replace an archive with empty data.
+        val json=JSONArray(decrypt(Base64.decode(raw,Base64.DEFAULT)))
+        return (0 until json.length()).mapNotNull { index->
+            json.optJSONObject(index)?.let {
+                ClipItem(it.optString("text"),it.optBoolean("pinned"),it.optLong("time"))
+            }
         }
-        return out.sortedByDescending { it.time }
     }
-    @Synchronized fun save(text: String) {
-        if (text.isBlank() || text.length > 100000) return
-        val all = list().filterNot { it.text == text }
-        persist(listOf(ClipItem(text, false, System.currentTimeMillis())) + all)
+    private fun migrateIfNeeded() {
+        if(legacy.getBoolean("sqlite_migrated",false))return
+        synchronized(migrationLock) {
+            if(legacy.getBoolean("sqlite_migrated",false))return
+            val historical=oldItems()
+            val db=helper.writableDatabase
+            db.beginTransaction()
+            try {
+                // Old JSON was newest-first; insert oldest-first to preserve order.
+                for(item in historical.asReversed())insert(db,item)
+                db.setTransactionSuccessful()
+            } finally { db.endTransaction() }
+            check(legacy.edit().putBoolean("sqlite_migrated",true).commit()) {
+                "Clipboard history migration marker could not be saved"
+            }
+            // Retain the old encrypted blob as a non-destructive migration backup.
+        }
     }
-    @Synchronized fun pin(text: String, pinned: Boolean) =
-        persist(list().map { if (it.text == text) it.copy(pinned = pinned) else it })
-    @Synchronized fun delete(text: String) = persist(list().filterNot { it.text == text })
-    @Synchronized fun clearUnpinned() = persist(list().filter { it.pinned })
-    @Synchronized fun search(query: String, pinnedOnly: Boolean = false): List<ClipItem> =
-        list().filter { (!pinnedOnly || it.pinned) && it.text.contains(query, ignoreCase = true) }
-    @Synchronized fun clear() = persist(emptyList())
+    private fun insert(db:SQLiteDatabase,item:ClipItem):Long {
+        val values=ContentValues().apply {
+            put("cipher",encrypt(item.text))
+            put("pinned",if(item.pinned)1 else 0)
+            put("copied_at",item.time)
+        }
+        return db.insertOrThrow("clips",null,values)
+    }
+    private fun record(cursor:Cursor):ClipItem =
+        ClipItem(decrypt(cursor.getBlob(1)),cursor.getInt(2)!=0,cursor.getLong(3),
+            cursor.getLong(0))
+    private fun query(pinnedOnly:Boolean,limit:String?=null):List<ClipItem> {
+        migrateIfNeeded()
+        val output=ArrayList<ClipItem>()
+        helper.readableDatabase.query("clips",arrayOf("_id","cipher","pinned","copied_at"),
+            if(pinnedOnly)"pinned=1" else null,null,null,null,"_id DESC",limit).use {cursor->
+            while(cursor.moveToNext())output.add(record(cursor))
+        }
+        return output
+    }
+    @Synchronized fun list():List<ClipItem> = query(false)
+    /** Indexed paging avoids drawing/decrypting the entire history at once. */
+    @Synchronized fun page(limit:Int=100,offset:Int=0,pinnedOnly:Boolean=false):List<ClipItem> =
+        query(pinnedOnly,"${offset.coerceAtLeast(0)},${limit.coerceIn(1,200)}")
+    @Synchronized fun count(pinnedOnly:Boolean=false):Long {
+        migrateIfNeeded()
+        helper.readableDatabase.rawQuery(
+            if(pinnedOnly)"SELECT COUNT(*) FROM clips WHERE pinned=1"
+            else "SELECT COUNT(*) FROM clips",null).use {c->
+            return if(c.moveToFirst())c.getLong(0) else 0L
+        }
+    }
+    @Synchronized fun save(text:String) {
+        // Per-item bound only; there is NO count cap and NO automatic eviction.
+        if(text.isBlank() || text.length>1000000)return
+        migrateIfNeeded()
+        insert(helper.writableDatabase,ClipItem(text,false,System.currentTimeMillis()))
+    }
+    @Synchronized fun pin(id:Long,pinned:Boolean) {
+        migrateIfNeeded()
+        helper.writableDatabase.execSQL("UPDATE clips SET pinned=? WHERE _id=?",
+            arrayOf(if(pinned)1 else 0,id))
+    }
+    @Synchronized fun pin(text:String,pinned:Boolean) {
+        for(item in list())if(item.text==text)pin(item.id,pinned)
+    }
+    @Synchronized fun delete(id:Long) {
+        migrateIfNeeded()
+        helper.writableDatabase.delete("clips","_id=?",arrayOf(id.toString()))
+    }
+    @Synchronized fun delete(text:String) {
+        for(item in list())if(item.text==text)delete(item.id)
+    }
+    @Synchronized fun clearUnpinned() {
+        migrateIfNeeded()
+        helper.writableDatabase.delete("clips","pinned=0",null)
+    }
+    @Synchronized fun search(query:String,pinnedOnly:Boolean=false):List<ClipItem> =
+        query(pinnedOnly).filter { it.text.contains(query,ignoreCase=true) }
+    @Synchronized fun clear() {
+        migrateIfNeeded()
+        helper.writableDatabase.delete("clips",null,null)
+    }
 }

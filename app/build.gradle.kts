@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 26
-        versionName = "1.0.10-rc11-contextual-predictions-compact-translate" 
+        versionCode = 27
+        versionName = "1.0.11-rc12-screenshot-translate-clipboard" 
     }
     splits {
         abi {

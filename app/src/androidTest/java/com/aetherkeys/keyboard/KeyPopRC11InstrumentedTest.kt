@@ -74,7 +74,7 @@ class KeyPopRC11InstrumentedTest {
                 assertNotNull(parent)
                 parent?.performClick()
                 assertNotNull(find(view,"Compact Gboard-style translation bar"))
-                assertNotNull(find(view,"Compose inside keyboard when editor is empty"))
+                assertNotNull(find(view,"Type directly in your app while KeyPop shows translations above the keyboard."))
                 assertNotNull(find(view,"Show live translation while typing"))
             }
         }

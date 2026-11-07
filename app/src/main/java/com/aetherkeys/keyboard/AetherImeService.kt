@@ -11,7 +11,7 @@ import android.os.Looper
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.BitmapFactory
-import android.graphics.drawable.BitmapDrawable
+import android.widget.ImageView
 import android.net.Uri
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -45,6 +45,8 @@ import java.util.concurrent.Executors
 class AetherImeService : InputMethodService() {
     private val prefs by lazy { getSharedPreferences("keypop",Context.MODE_PRIVATE) }
     private val clipStore by lazy { ClipStore(this) }
+    private val clipExecutor=Executors.newSingleThreadExecutor()
+    private var clipPage=0
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
     private var materialTopBar:LinearLayout?=null
@@ -192,11 +194,15 @@ class AetherImeService : InputMethodService() {
         if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",false)) {
             try {
                 val clip=clipboard.primaryClip
-                if(clip!=null && clip.itemCount>0 && clip.description.hasMimeType("text/plain")) {
+                if(clip!=null && clip.itemCount>0 &&
+                    clip.description.hasMimeType("text/*")) {
                     val markedSensitive=Build.VERSION.SDK_INT>=33 &&
                         clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true
-                    if(!markedSensitive)
-                        clip.getItemAt(0).text?.toString()?.let { clipStore.save(it) }
+                    if(!markedSensitive) {
+                        val captured=clip.getItemAt(0).text?.toString()
+                        if(!captured.isNullOrBlank())
+                            clipExecutor.execute {runCatching{clipStore.save(captured)}}
+                    }
                 }
             } catch (_:Exception) { /* Never break typing on inaccessible clipboard. */ }
         }
@@ -610,6 +616,8 @@ class AetherImeService : InputMethodService() {
             }
         }
     }
+    /** Paste in the current editor whenever it explicitly accepts image content.
+     * Never silently open the system share chooser in another application. */
     private fun insertRecentScreenshot(uri:Uri,mime:String) {
         if(sensitive(currentInputEditorInfo))return
         val info=InputContentInfo(uri,ClipDescription("Recent screenshot",arrayOf(mime)),null)
@@ -618,38 +626,75 @@ class AetherImeService : InputMethodService() {
                 InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION,null)==true
         }.getOrDefault(false)
         if(inserted)return
-        try{
-            val intent=Intent(Intent.ACTION_SEND).apply{
-                type=mime
-                putExtra(Intent.EXTRA_STREAM,uri)
-                clipData=ClipData.newUri(contentResolver,"Recent screenshot",uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(Intent.createChooser(intent,"Share screenshot")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }catch(_:Exception){
-            Toast.makeText(this,"This app cannot receive screenshot images",Toast.LENGTH_SHORT).show()
+        runCatching {
+            clipboard.setPrimaryClip(ClipData.newUri(contentResolver,"Screenshot",uri))
+            Toast.makeText(this,"Image copied. Use Paste or Attach in this app.",
+                Toast.LENGTH_LONG).show()
+        }.onFailure {
+            Toast.makeText(this,"This app does not support pasting screenshots.",
+                Toast.LENGTH_LONG).show()
         }
     }
-    private fun showScreenshotThumbnail(button:Button,uri:Uri) {
+    private fun shareRecentScreenshot(uri:Uri,mime:String) {
+        try {
+            val share=Intent(Intent.ACTION_SEND).apply {
+                type=mime;putExtra(Intent.EXTRA_STREAM,uri)
+                clipData=ClipData.newUri(contentResolver,"Screenshot",uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(Intent.createChooser(share,"Share screenshot")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }catch(_:Exception){
+            Toast.makeText(this,"Screenshot cannot be shared",Toast.LENGTH_SHORT).show()
+        }
+    }
+    /** A full rectangular preview with CENTER_CROP stays in the screenshot
+     * strip; it never displaces an unrelated toolbar key. */
+    private fun showScreenshotPreview(image:ImageView,uri:Uri) {
         imagePreviewExecutor.execute {
             val bitmap=runCatching {
-                contentResolver.openInputStream(uri)?.use{
-                    BitmapFactory.decodeStream(it,null,BitmapFactory.Options().apply{
-                        inSampleSize=8
+                contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it,null,BitmapFactory.Options().apply {
+                        inSampleSize=4
                         inPreferredConfig=android.graphics.Bitmap.Config.RGB_565
                     })
                 }
             }.getOrNull()?:return@execute
             Handler(Looper.getMainLooper()).post {
-                if(recentScreenshotUri==uri && button.isAttachedToWindow){
-                    val icon=BitmapDrawable(resources,bitmap)
-                    icon.setBounds(0,0,d(30),d(30))
-                    button.setCompoundDrawables(icon,null,null,null)
-                    button.text=""
-                }else bitmap.recycle()
+                if(recentScreenshotUri==uri && image.isAttachedToWindow)
+                    image.setImageBitmap(bitmap)
+                else bitmap.recycle()
             }
         }
+    }
+    private fun showScreenshotOffer(root:LinearLayout,uri:Uri,mime:String) {
+        val style=palette()
+        val strip=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+            setPadding(d(6),d(3),d(6),d(3))
+            background=gradient(style.surface,style.background,10)
+        }
+        val thumbnail=ImageView(this).apply {
+            contentDescription="Recent screenshot preview, tap to paste"
+            scaleType=ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(style.background)
+            setOnClickListener{insertRecentScreenshot(uri,mime)}
+        }
+        strip.addView(thumbnail,LinearLayout.LayoutParams(d(76),d(48)).apply {
+            rightMargin=d(7)
+        })
+        val caption=TextView(this).apply {
+            text="Recent screenshot";textSize=12f;setTextColor(style.ink)
+            maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
+        }
+        strip.addView(caption,LinearLayout.LayoutParams(0,d(45),1f))
+        val paste=chip("Paste") {insertRecentScreenshot(uri,mime)}
+        paste.contentDescription="Paste screenshot in active app"
+        strip.addView(paste,LinearLayout.LayoutParams(d(66),d(42)))
+        val share=chip("Share") {shareRecentScreenshot(uri,mime)}
+        strip.addView(share,LinearLayout.LayoutParams(d(66),d(42)))
+        root.addView(strip,LinearLayout.LayoutParams(-1,d(57)))
+        showScreenshotPreview(thumbnail,uri)
     }
 
     private fun draw() {
@@ -680,6 +725,8 @@ class AetherImeService : InputMethodService() {
         // utilities row; compact preview updates without rebuilding keys.
         if(translatorOpen && !secure && !isNumeric &&
             prefs.getBoolean("compactTranslate",true))showTranslator(root)
+        if(!secure && !isNumeric && prefs.getBoolean("screenshotClipOffer",true))
+            recentScreenshotUri?.let{showScreenshotOffer(root,it,screenshotMime)}
         if(materialToolbar) {
             val top=LinearLayout(this).apply {
                 orientation=LinearLayout.HORIZONTAL
@@ -715,8 +762,8 @@ class AetherImeService : InputMethodService() {
                 if(translatorOpen) {
                     translateDraftMode=false
                     val existing=editorTranslationText()
-                    translateDraftMode=prefs.getBoolean("translateComposeInput",true) &&
-                        prefs.getBoolean("compactTranslate",true) && existing.isBlank()
+                    // Composition must remain visible at the actual app cursor.
+                    translateDraftMode=false
                     translateDraft=""
                     translateSource=if(translateDraftMode)"" else existing
                     translateSourceChoice=-1
@@ -730,19 +777,7 @@ class AetherImeService : InputMethodService() {
                 draw()
                 if(translatorOpen) scheduleLiveTranslation(80)
             }
-            val screenshot=recentScreenshotUri
-            if(screenshot!=null && prefs.getBoolean("screenshotClipOffer",true)) {
-                val screenshotButton=chip("📷",onTap={
-                    insertRecentScreenshot(screenshot,screenshotMime)
-                }).apply{
-                    contentDescription="Recent screenshot. Tap to paste or share"
-                    textSize=18f
-                }
-                top.addView(screenshotButton,LinearLayout.LayoutParams(0,d(40),1f).apply{
-                    leftMargin=d(2);rightMargin=d(2)
-                })
-                showScreenshotThumbnail(screenshotButton,screenshot)
-            } else iconAction("◈","Preview theme gallery without changing your active theme"){
+            iconAction("◈","Preview theme gallery without changing your active theme"){
                 startActivity(Intent(this,MainActivity::class.java)
                     .putExtra("openSection","themes")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -904,8 +939,8 @@ class AetherImeService : InputMethodService() {
                             translatorOpen=true;writingOpen=false;emojiOpen=false;clipsOpen=false
                             translateDraftMode=false
                             val existing=editorTranslationText()
-                            translateDraftMode=prefs.getBoolean("translateComposeInput",true) &&
-                                prefs.getBoolean("compactTranslate",true) && existing.isBlank()
+                            // Keep all typing in the host editor, not a hidden IME draft.
+                            translateDraftMode=false
                             translateDraft=""
                             translateSource=if(translateDraftMode)"" else existing
                             translateSourceChoice=-1
@@ -1319,8 +1354,10 @@ class AetherImeService : InputMethodService() {
     private fun translateBeforeSend() {
         val input=currentInputConnection ?:return
         val sendingDraft=translatorOpen && translateDraftMode
-        val source=if(sendingDraft)translateDraft
-            else input.getTextBeforeCursor(1500,0)?.toString().orEmpty()
+        val selected=input.getSelectedText(0)?.toString()?.takeIf{it.isNotBlank()}
+        val source=if(sendingDraft)translateDraft else editorTranslationText()
+        val editorPackage=currentInputEditorInfo?.packageName.orEmpty()
+        val startedConnection=input
         if(source.isBlank())return
         // The visibly selected Easy Translate pair takes precedence over the
         // Settings default. Formerly Send used autoTarget (Urdu) even while
@@ -1341,8 +1378,11 @@ class AetherImeService : InputMethodService() {
         val callback:(Result<String>)->Unit={result->
             result.onSuccess { translated ->
                 val current=currentInputConnection
-                if(current!=null && !sensitive(currentInputEditorInfo)) {
+                if(current!=null && current===startedConnection &&
+                    currentInputEditorInfo?.packageName==editorPackage &&
+                    !sensitive(currentInputEditorInfo)) {
                     val stillCurrent=if(sendingDraft)translateDraft
+                        else if(selected!=null)current.getSelectedText(0)?.toString().orEmpty()
                         else current.getTextBeforeCursor(source.length,0)?.toString().orEmpty()
                     if(stillCurrent!=source ||
                         (sendingDraft && (!translatorOpen || !translateDraftMode)) ||
@@ -1354,31 +1394,39 @@ class AetherImeService : InputMethodService() {
                             Toast.LENGTH_SHORT).show()
                     } else {
                         current.beginBatchEdit()
-                        if(!sendingDraft)current.deleteSurroundingText(source.length,0)
-                        val accepted=current.commitText(translated,1)
+                        val removed=if(sendingDraft || selected!=null)true
+                            else current.deleteSurroundingText(source.length,0)
+                        val accepted=removed && current.commitText(translated,1)
                         current.endBatchEdit()
                         if(!accepted) {
-                            // Restore the original editor text if a host rejected
-                            // the translated insertion after we removed it.
-                            if(!sendingDraft)current.commitText(source,1)
+                            if(!sendingDraft && selected==null && removed)
+                                current.commitText(source,1)
                             Toast.makeText(this,"Editor refused translation; nothing sent",
                                 Toast.LENGTH_SHORT).show()
                             return@onSuccess
                         }
-                        if(sendingDraft) {
-                            translateDraft=""
-                            translatorOpen=false
-                            stopLiveTranslation()
-                            draw()
-                        }
-                        val action=(currentInputEditorInfo?.imeOptions ?:0) and EditorInfo.IME_MASK_ACTION
-                        if(action==EditorInfo.IME_ACTION_SEND ||
-                           action==EditorInfo.IME_ACTION_SEARCH ||
-                           action==EditorInfo.IME_ACTION_GO)
-                            current.performEditorAction(action)
-                        else Toast.makeText(this,
-                            "Translated and inserted. Tap Send in the app.",
+                        if(sendingDraft)translateDraft=""
+                        // This is an explicit Send request: invoke the host's real
+                        // SEND action, not SEARCH/GO or a silent keyboard-only draft.
+                        val action=(currentInputEditorInfo?.imeOptions ?:0) and
+                            EditorInfo.IME_MASK_ACTION
+                        val sent=if(KeyPopTranslationSendPolicy.supportsSendAction(action))
+                            current.performEditorAction(EditorInfo.IME_ACTION_SEND)
+                        else if(KeyPopTranslationSendPolicy.allowEnterSendFallback(action,
+                                prefs.getBoolean("sendViaEnterFallback",false))) {
+                            val now=SystemClock.uptimeMillis()
+                            val down=KeyEvent(now,now,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_ENTER,0)
+                            val downAccepted=current.sendKeyEvent(down)
+                            current.sendKeyEvent(KeyEvent.changeAction(down,KeyEvent.ACTION_UP))
+                            downAccepted
+                        } else false
+                        if(!sent)Toast.makeText(this,
+                            "Translation inserted. This app needs its own Send button "+
+                                "(or enable Enter-to-send fallback in settings).",
                             Toast.LENGTH_LONG).show()
+                        else {
+                            translatorOpen=false;stopLiveTranslation();draw()
+                        }
                     }
                 }
             }.onFailure {
@@ -2012,11 +2060,9 @@ class AetherImeService : InputMethodService() {
         val top=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
         }
-        add(top,if(translateDraftMode)"✎ Draft" else "App text",.75f) {
-            translateDraftMode=!translateDraftMode
-            translateSource=editorTranslationText()
-            translateResult=""
-            draw();scheduleLiveTranslation(50)
+        add(top,"In app",.75f) {
+            Toast.makeText(this,"Type at the cursor in your app; translation previews here.",
+                Toast.LENGTH_SHORT).show()
         }
         add(top,if(translateSourceChoice<0)"Detect language"
             else languages[from],1.42f) {
@@ -2265,15 +2311,15 @@ class AetherImeService : InputMethodService() {
         root.addView(title)
         val options=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
         options.addView(chip(if(pinnedOnly) "📌 Pinned" else "All clips") {
-            pinnedOnly=!pinnedOnly;draw()
+            pinnedOnly=!pinnedOnly;clipPage=0;draw()
         },LinearLayout.LayoutParams(0,d(35),1f))
         options.addView(chip("Search / manage") {
-            startActivity(Intent(this,MainActivity::class.java)
-                .putExtra("openClips",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(Intent(this,KeyPopClipboardActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         },LinearLayout.LayoutParams(0,d(35),1.7f))
         root.addView(options)
         val items=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-        val listed=try{clipStore.search("",pinnedOnly)}catch(_:Exception){
+        val listed=try{clipStore.page(60,clipPage*60,pinnedOnly)}catch(_:Exception){
             root.addView(TextView(this).apply{
                 text="Clipboard could not be decrypted. Data was not erased."
                 setTextColor(s.ink);setPadding(d(10),d(10),d(10),d(10))
@@ -2283,13 +2329,26 @@ class AetherImeService : InputMethodService() {
             text="Nothing copied yet. Your saved text will appear here."
             setTextColor(s.ink);setPadding(d(9),d(20),d(9),d(20))
         })
-        listed.take(60).forEach { item ->
+        listed.forEach { item ->
             val button=makeKey((if(item.pinned) "📌 " else "")+item.text.take(65)) {
                 currentInputConnection?.commitText(item.text,1);clipsOpen=false;draw()
             }
-            button.setOnLongClickListener { clipStore.pin(item.text,!item.pinned);draw();true }
+            button.setOnLongClickListener { clipStore.pin(item.id,!item.pinned);draw();true }
             items.addView(button,LinearLayout.LayoutParams(-1,d(46)).apply{bottomMargin=d(5)})
         }
+        val total=runCatching{clipStore.count(pinnedOnly)}.getOrDefault(0L)
+        val pages=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        pages.addView(chip("← Newer") {
+            if(clipPage>0){clipPage--;draw()}
+        },LinearLayout.LayoutParams(0,d(38),1f))
+        pages.addView(TextView(this).apply {
+            text="Page ${clipPage+1} · $total clips"
+            gravity=Gravity.CENTER;setTextColor(s.ink);textSize=12f
+        },LinearLayout.LayoutParams(0,d(38),1.3f))
+        pages.addView(chip("Older →") {
+            if((clipPage+1)*60<total){clipPage++;draw()}
+        },LinearLayout.LayoutParams(0,d(38),1f))
+        items.addView(pages)
         val savedImages=try{KeyPopImageStore(this).list()}catch(_:Exception){emptyList()}
         val images=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         for(image in savedImages.take(20)) {

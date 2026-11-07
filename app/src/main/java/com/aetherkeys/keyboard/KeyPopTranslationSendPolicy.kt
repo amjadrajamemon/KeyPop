@@ -10,6 +10,18 @@ object KeyPopTranslationSendPolicy {
             if(panelOpen)selectedTarget.coerceIn(0,2) else settingsTarget.coerceIn(0,2)
         )
 
+    /** Only a messaging field's advertised SEND action can be treated as an
+     * automatic send. Search/Go must never silently submit a translated chat. */
+    fun supportsSendAction(action:Int):Boolean =
+        action==android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+
+    /** An optional physical Enter fallback only makes sense when the host
+     * doesn't advertise a more specific action; some apps insert a newline. */
+    fun allowEnterSendFallback(action:Int,enabled:Boolean):Boolean =
+        enabled && action in setOf(
+            android.view.inputmethod.EditorInfo.IME_ACTION_NONE,
+            android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED)
+
     /** Never send a stale preview from a different language pair or engine. */
     fun canReusePreview(panelOpen:Boolean,preview:String,original:String,
                         previewOriginal:String,expectedPair:String,previewPair:String,
