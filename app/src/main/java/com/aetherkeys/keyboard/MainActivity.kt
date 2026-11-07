@@ -229,16 +229,8 @@ class MainActivity:Activity() {
         }
     }
     private fun startDownload(){
-        if(Build.VERSION.SDK_INT>=33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),719)
-        runCatching{KeyPopModelDownloadService.startAllLanguages(this)}
-            .onSuccess{
-                downloadMessage?.text="Starting all language packs…"
-                downloadProgress?.visibility=View.VISIBLE
-            }.onFailure{
-                downloadMessage?.text="Unable to start: "+(it.localizedMessage?:"unknown error")
-            }
+        // Show the six-direction checklist before any network or storage work.
+        startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
     }
     private fun showTransfer(){
         val message=downloadMessage?:return
@@ -252,13 +244,10 @@ class MainActivity:Activity() {
         if(percent>=0)downloadProgress?.progress=percent.coerceIn(0,100)
     }
     private fun offlinePacks(){
-        heading("Offline Language Packs","One download for English, Urdu and Sindhi")
+        heading("Offline Translation Packs","Download only the directions you choose")
         addBlock{
-            addView(text("One-tap installer",18f,ink,true))
-            addView(text("Includes English ↔ Urdu ML Kit and all three Sindhi neural bundles (~978 MB plus English/Urdu). The download starts when you press the button; Wi-Fi and at least 1.2 GB free storage are recommended.",13f,muted))
-            action(this,"Download All Languages"){
-                startDownload()
-            }
+            addView(text("Choose English ↔ Urdu ↔ Sindhi directions, then start one download with a visible progress bar.",14f,muted))
+            action(this,"Choose translation directions"){startDownload()}
             downloadMessage=text("No download started.",13f,accent)
             addView(downloadMessage)
             downloadProgress=ProgressBar(this@MainActivity,null,android.R.attr.progressBarStyleHorizontal).apply{
@@ -332,7 +321,10 @@ class MainActivity:Activity() {
             range(this,"Key corner radius","round",3,26,13)
             option(this,"Number row","numberRow",true)
             option(this,"Word suggestions","suggestions",true)
-            option(this,"Autocorrection","autoCorrect")
+            option(this,"Aggressive predictions","aggressivePredictions",true)
+            option(this,"Predict next word","predictNext",true)
+            option(this,"Auto-correct spelling","autoCorrect",true)
+            option(this,"Auto punctuation","autoPunctuate",true)
             option(this,"Grammar hints","grammarHints",true)
             option(this,"Roman Urdu / Sindhi","romanMode")
             option(this,"Double-space punctuation","doubleSpace",true)
@@ -346,7 +338,7 @@ class MainActivity:Activity() {
         heading("TRANSLATION ENGINE","English ⇄ Urdu ⇄ Sindhi · all six directions")
         addBlock {
             addView(text("KeyPop Offline is the default. Use ⇄ on the keyboard for live translation, language swapping, Insert, Replace and Copy.",13f,muted))
-            action(this,"Download All Languages"){startDownload()}
+            action(this,"Choose and download translation packs"){startDownload()}
             downloadMessage=text("",13f,accent);addView(downloadMessage)
             downloadProgress=ProgressBar(this@MainActivity,null,
                 android.R.attr.progressBarStyleHorizontal).apply{max=100;visibility=View.GONE}
@@ -361,7 +353,7 @@ class MainActivity:Activity() {
         }
         addBlock {
             addView(text("GOOGLE CLOUD · OPTIONAL",14f,accent,true))
-            addView(text("To use live Google Cloud Translation, supply your own Google Cloud API key. Google may charge for translation and receives text only if you enable this option and choose the Google engine.",13f,muted))
+            addView(text("Google's offline ML Kit engine needs no account. Google Cloud is a separate paid service: signing in to a Google account alone cannot enable it. Cloud use requires a billing-enabled Google Cloud project and authorized access. The optional API key below is kept for advanced users.",13f,muted))
             val field=EditText(this@MainActivity).apply{
                 hint=if(KeyPopCloudTranslation.configured(this@MainActivity))
                     "Key saved · enter to replace" else "Google Cloud Translation API key"
