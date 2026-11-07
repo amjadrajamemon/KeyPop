@@ -29,7 +29,8 @@ class KeyPopRuntimeSmokeTest {
             scenario.onActivity { activity->
                 val text=visibleText(activity.window.decorView)
                 for(label in listOf("Keyboard Setup","Enable KeyPop keyboard",
-                    "Choose KeyPop as active keyboard","Language packs and model status")) {
+                    "Choose KeyPop as active keyboard","Language packs and model status",
+                    "Download All Languages")) {
                     assertTrue("Missing home control: "+label,text.contains(label))
                 }
             }
@@ -40,9 +41,11 @@ class KeyPopRuntimeSmokeTest {
             scenario.onActivity {activity->
                 val text=visibleText(activity.window.decorView)
                 for(label in listOf("Language Pack Manager","ENGLISH","URDU",
-                    "SINDHI","Download / repair Urdu")) {
+                    "SINDHI","Download All Languages")) {
                     assertTrue("Missing language pack control: "+label,text.contains(label))
                 }
+                assertTrue("Obsolete redundant Sindhi manual buttons still visible",
+                    !text.contains("Experimental: prepare English"))
             }
         }
     }
@@ -51,7 +54,7 @@ class KeyPopRuntimeSmokeTest {
             scenario.onActivity { activity->
                 val text=visibleText(activity.window.decorView)
                 assertTrue("Advanced settings did not render",text.contains("KeyPop") &&
-                    text.contains("Your keyboard"))
+                    text.contains("Your keyboard, your settings"))
             }
         }
     }
@@ -74,6 +77,8 @@ class KeyPopRuntimeSmokeTest {
                 translation?.performClick()
                 assertTrue("Translation settings screen was blank",
                     find(activity.window.decorView,"TRANSLATION ENGINE")!=null)
+                assertTrue("Missing all-language action within translation",
+                    find(activity.window.decorView,"Download All Languages")!=null)
             }
         }
     }

@@ -2,307 +2,125 @@ package com.aetherkeys.keyboard
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.app.AlertDialog
-import android.os.Bundle
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
-import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 
-/**
- * Render a complete usable screen before asking Play Services about model availability.
- * Model downloads are explicit and fail visibly rather than leaving a blank surface.
- */
+/** Compact status monitor; the same one-click installer lives on Home + Settings. */
 class KeyPopModelManagerActivity:Activity() {
-    private val bg=0xFF101D2B.toInt()
-    private val textColor=Color.WHITE
-    private val muted=0xFFC7D8E6.toInt()
-    private val teal=0xFF7FF0DA.toInt()
-    private lateinit var column:LinearLayout
-    private lateinit var wifi:CheckBox
-    private lateinit var statusEn:TextView
-    private lateinit var statusUr:TextView
+    private val bg=0xFF0F1D29.toInt()
+    private val white=Color.WHITE
+    private val muted=0xFFC1D4E2.toInt()
+    private val teal=0xFF79E9D6.toInt()
+    private lateinit var info:TextView
     private lateinit var progress:ProgressBar
-    private lateinit var status:TextView
-    private lateinit var sindhiStatus:TextView
-    private lateinit var downloadState:TextView
-    private lateinit var sindhiProgress:ProgressBar
-    private val observer=Handler(Looper.getMainLooper())
-    private val updateDownloadUi=object:Runnable {
-        override fun run() {
-            renderDownloadStatus()
-            observer.postDelayed(this,650)
-        }
+    private lateinit var english:TextView
+    private lateinit var urdu:TextView
+    private lateinit var sindhi:TextView
+    private val handler=Handler(Looper.getMainLooper())
+    private val poll=object:Runnable{
+        override fun run(){showState();handler.postDelayed(this,800)}
     }
-    private var running=0
-    private fun dp(x:Int)=(x*resources.displayMetrics.density).toInt()
-    private fun label(t:String,size:Float=15f,color:Int=textColor)=TextView(this).apply{
-        text=t;textSize=size;setTextColor(color)
+    private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
+    private fun label(message:String,size:Float=15f,color:Int=white)=TextView(this).apply{
+        text=message;textSize=size;setTextColor(color)
         setPadding(0,dp(7),0,dp(7))
-    }
-    private fun button(title:String,fn:()->Unit) {
-        val view=label(title,15f).apply {
-            gravity=Gravity.CENTER
-            minHeight=dp(51)
-            background=GradientDrawable().apply {
-                setColor(0xFF245268.toInt())
-                cornerRadius=dp(11).toFloat()
-                setStroke(dp(1),0xFF5CACBF.toInt())
-            }
-            setOnClickListener { fn() }
-        }
-        column.addView(view,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})
     }
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
         window.statusBarColor=bg
         window.navigationBarColor=bg
-        val outer=ScrollView(this).apply {
-            setBackgroundColor(bg);isFillViewport=true
-        }
-        column=LinearLayout(this).apply {
+        val scroll=ScrollView(this).apply{setBackgroundColor(bg);isFillViewport=true}
+        val column=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
-            setPadding(dp(18),dp(18),dp(18),dp(25))
+            setPadding(dp(18),dp(21),dp(18),dp(24))
         }
-        outer.addView(column)
-        setContentView(outer)
-
-        column.addView(label("KEYPOP / OFFLINE LANGUAGES",13f,teal))
+        scroll.addView(column);setContentView(scroll)
+        column.addView(label("KEYPOP  /  OFFLINE LANGUAGES",13f,teal))
         column.addView(label("Language Pack Manager",24f))
-        column.addView(label("English ↔ Urdu works in both directions using on-device ML Kit translation. Install the English and Urdu language models once over Wi-Fi or mobile data, then translate offline. These models are separate from the ~978 MB Sindhi downloads.",14f,muted))
-        column.addView(label("ENGLISH ⇄ URDU / انگریزی ⇄ اردو",17f,teal))
-        wifi=CheckBox(this).apply {
-            text="Wi-Fi only (uncheck to use mobile data)"
-            setTextColor(textColor)
-            isChecked=getSharedPreferences("keypop",MODE_PRIVATE)
-                .getBoolean("packWifiOnly",false)
-            setOnCheckedChangeListener { _,checked->
-                getSharedPreferences("keypop",MODE_PRIVATE)
-                    .edit().putBoolean("packWifiOnly",checked).apply()
+        column.addView(label("English · اردو · سنڌي",17f,teal))
+        column.addView(label("One download installs English and Urdu ML Kit models and all three Sindhi neural model packs (~978 MB plus English/Urdu). Allow about 1.2 GB free storage and preferably use Wi-Fi.",13f,muted))
+        val button=label("Download All Languages",17f,white).apply{
+            gravity=Gravity.CENTER;minHeight=dp(54)
+            background=GradientDrawable().apply{
+                setColor(0xFF23586A.toInt());cornerRadius=dp(13).toFloat()
+                setStroke(dp(1),0xFF6BBBC2.toInt())
+            }
+            setOnClickListener{
+                if(Build.VERSION.SDK_INT>=33&&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=
+                        PackageManager.PERMISSION_GRANTED)
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),718)
+                runCatching{KeyPopModelDownloadService.startAllLanguages(this@KeyPopModelManagerActivity)}
+                    .onSuccess{info.text="Starting download in the background…"}
+                    .onFailure{info.text="Start failed: "+it.localizedMessage}
             }
         }
-        column.addView(wifi)
-        button("Install English + Urdu offline models") {
-            download("en")
-            download("ur")
+        column.addView(button,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10)})
+        info=label("No transfer started.",14f,teal);column.addView(info)
+        progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{
+            max=100;visibility=View.GONE
         }
-        column.addView(label("ENGLISH / EN",17f,teal))
-        statusEn=label("Not checked yet",13f,muted);column.addView(statusEn)
-        button("Download / repair English") {download("en")}
-        column.addView(label("URDU / اردو / UR",17f,teal))
-        statusUr=label("Not checked yet",13f,muted);column.addView(statusUr)
-        button("Download / repair Urdu") {download("ur")}
-        button("Check installed translation models"){check()}
-        button("Test English → Urdu") {
-            testEnglishUrdu("en","ur","Please send the report tomorrow.")
-        }
-        button("Test Urdu → English") {
-            testEnglishUrdu("ur","en","براہ کرم کل رپورٹ بھیج دیں۔")
-        }
-        progress=ProgressBar(this).apply{visibility=View.GONE;isIndeterminate=true}
-        column.addView(progress,LinearLayout.LayoutParams(-1,dp(28)).apply {topMargin=dp(9)})
-        status=label("No download in progress.",13f,muted)
-        column.addView(status)
-
-        column.addView(label("SINDHI / سنڌي / SD",18f,teal))
-        column.addView(label("KeyPop has an integrated IndicTrans2 neural translator for English, Urdu and Sindhi. The full offline model pack is about 978 MB, installed only with your permission. Android inference quality must be verified with real sentences before considering a release complete.",14f,muted))
-        sindhiStatus=label("Checking experimental Sindhi model-file status…",13f,muted)
-        column.addView(sindhiStatus)
-        downloadState=label("No Sindhi model download started.",13f,teal)
-        column.addView(downloadState)
-        sindhiProgress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply {
-            max=100;progress=0;visibility=View.GONE
-        }
-        column.addView(sindhiProgress,LinearLayout.LayoutParams(-1,dp(13)).apply {
-            topMargin=dp(5);bottomMargin=dp(5)
-        })
-        button("Install all Sindhi offline translation models · ~978 MB") {
-            AlertDialog.Builder(this)
-                .setTitle("Download offline Sindhi translation?")
-                .setMessage("Download the English → Sindhi, Sindhi → English and direct Urdu ↔ Sindhi models (approximately 978 MB total). Models remain in private phone storage and translation runs locally after installation. A Wi-Fi connection is recommended. Please allow free storage of at least 1.2 GB.")
-                .setPositiveButton("Install all models") {_,_->
-                    startSindhiService(null)
-                }
-                .setNegativeButton("Cancel",null)
-                .show()
-        }
-        button("Check installed offline Sindhi model packs") {refreshSindhi()}
-        button("Experimental: prepare English → Sindhi model files (about 318 MB)") {
-            confirmSindhi(KeyPopSindhiOnnxPack.englishToSindhi)
-        }
-        button("Experimental: prepare Sindhi → English model files (about 270 MB)") {
-            confirmSindhi(KeyPopSindhiOnnxPack.sindhiToEnglish)
-        }
-        button("Install direct Urdu ↔ Sindhi model · ~390 MB") {
-            confirmSindhi(KeyPopSindhiOnnxPack.urduSindhi)
-        }
-        button("Try a real offline Sindhi sentence") {
-            status.text="Running on-device translation test…"
-            KeyPopOfflineSindhiEngine.translate(this,"en","sd",
-                "Please bring drinking water tomorrow.") { result->
-                if(!isFinishing&&!isDestroyed)
-                    status.text=result.fold(
-                        { "English → Sindhi sample: "+it },
-                        { "Offline translation test failed: "+it.localizedMessage }
-                    )
+        column.addView(progress,LinearLayout.LayoutParams(-1,dp(22)))
+        column.addView(label("Installed model status",17f,white))
+        english=label("ENGLISH · checking…",13f,muted);column.addView(english)
+        urdu=label("URDU · checking…",13f,muted);column.addView(urdu)
+        sindhi=label("SINDHI · checking…",13f,muted);column.addView(sindhi)
+        val settings=label("‹  Back to Settings",14f,teal).apply{
+            setPadding(0,dp(18),0,dp(12))
+            setOnClickListener {
+                startActivity(Intent(this@KeyPopModelManagerActivity,MainActivity::class.java)
+                    .putExtra("openSection","settingsHome"))
+                finish()
             }
         }
-        button("Test downloaded English → Sindhi ONNX encoder") {
-            KeyPopSindhiOnnxProbe.inspect(this,KeyPopSindhiOnnxPack.englishToSindhi) { result->
-                if(!isFinishing&&!isDestroyed)status.text=result.message
-            }
-        }
-        button("Test downloaded Sindhi → English ONNX encoder") {
-            KeyPopSindhiOnnxProbe.inspect(this,KeyPopSindhiOnnxPack.sindhiToEnglish) { result->
-                if(!isFinishing&&!isDestroyed)status.text=result.message
-            }
-        }
-        button("Delete experimental Sindhi model files") {
-            AlertDialog.Builder(this)
-                .setTitle("Remove downloaded ONNX files?")
-                .setMessage("This removes all three large Sindhi model bundles. Sindhi typing and the basic phrasebook remain available.")
-                .setPositiveButton("Remove") {_,_->
-                    val removed=KeyPopSindhiOnnxPack.bundles.all {
-                        KeyPopSindhiOnnxPack.delete(this,it)
-                    }
-                    status.text=if(removed)"Experimental model files removed" else
-                        "Some files could not be removed; stop ongoing downloads first"
-                    refreshSindhi()
-                }
-                .setNegativeButton("Cancel",null).show()
-        }
-        column.addView(label("Android speech services might offer Urdu or Sindhi dictation, but models are supplied by your device's provider, not by KeyPop.",13f,muted))
-        button("Check offline voice service"){
-            status.text=runCatching { KeyPopLanguageModels.voiceAvailability(this) }
-                .getOrElse { "Voice service check failed: "+(it.localizedMessage?:"unknown") }
-        }
-        button("Request Urdu speech model (Android 13+)") {
-            status.text="Requesting Urdu model from Android speech provider…"
-            runCatching { KeyPopLanguageModels.requestOnDeviceVoice(this,"ur") {
-                if(!isFinishing&&!isDestroyed)status.text=it
-            } }.onFailure { status.text="Provider request failed: "+it.localizedMessage }
-        }
-        button("Close Language Pack Manager"){finish()}
-        // No hidden download during startup; all model transfers require consent.
-        refreshSindhi()
+        column.addView(settings)
+        checkInstalled()
     }
-    override fun onResume() {
-        super.onResume()
-        observer.removeCallbacks(updateDownloadUi)
-        observer.post(updateDownloadUi)
-    }
-
-    override fun onPause() {
-        observer.removeCallbacks(updateDownloadUi)
-        super.onPause()
-    }
-
-    private fun startSindhiService(bundleId:String?) {
-        if(KeyPopSindhiOnnxPack.isDownloading()) {
-            renderDownloadStatus()
-            return
+    private fun checkInstalled(){
+        KeyPopLanguageModels.checkText("en"){_,status->
+            if(!isFinishing&&!isDestroyed)english.text="ENGLISH · "+status
         }
-        try {
-            KeyPopModelDownloadService.start(this,bundleId)
-            downloadState.text="Starting download in the background…"
-            sindhiProgress.visibility=View.VISIBLE
-            sindhiProgress.isIndeterminate=true
-            if(Build.VERSION.SDK_INT>=33 &&
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=
-                PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),711)
-            }
-        }catch(error:Exception){
-            downloadState.text="Download could not start: "+
-                (error.localizedMessage?:"Android foreground service unavailable")
-            sindhiProgress.visibility=View.GONE
+        KeyPopLanguageModels.checkText("ur"){_,status->
+            if(!isFinishing&&!isDestroyed)urdu.text="URDU · "+status
         }
+        updateSindhi()
     }
-
-    private fun renderDownloadStatus() {
-        if(!::downloadState.isInitialized)return
+    private fun updateSindhi(){
+        val done=KeyPopSindhiOnnxPack.bundles.count{
+            KeyPopSindhiOnnxPack.missing(this,it).isEmpty()
+        }
+        sindhi.text="SINDHI · "+done+"/3 neural model bundles installed"
+    }
+    private fun showState(){
+        if(!::info.isInitialized)return
         val state=getSharedPreferences(KeyPopModelDownloadService.PREFS,MODE_PRIVATE)
         val active=state.getBoolean("active",false)
         val finished=state.getBoolean("finished",false)
-        val message=state.getString("message","No Sindhi model download started.").orEmpty()
-        val percent=state.getInt("percent",-1)
-        val updateTime=state.getLong("updatedAt",0L)
-        val stale=active && updateTime>0 &&
-            System.currentTimeMillis()-updateTime>180000L
-        downloadState.text=if(stale)
-            "No progress update for 3 minutes. If interrupted, tap Install to resume."
-            else message
-        sindhiProgress.visibility=if(active||finished)View.VISIBLE else View.GONE
-        sindhiProgress.isIndeterminate=active && percent<0
-        if(percent>=0)sindhiProgress.progress=percent
-        if(finished && !active)refreshSindhi()
+        val pct=state.getInt("percent",-1)
+        val last=state.getLong("updatedAt",0L)
+        info.text=if(active&&last>0L&&System.currentTimeMillis()-last>180000L)
+            "No progress for 3 minutes. Tap Download All Languages to retry."
+        else state.getString("message","No transfer started.").orEmpty()
+        progress.visibility=if(active||finished)View.VISIBLE else View.GONE
+        progress.isIndeterminate=active&&pct<0
+        if(pct>=0)progress.progress=pct.coerceIn(0,100)
+        if(finished){updateSindhi()}
     }
-
-    private fun refreshSindhi() {
-        if(!::sindhiStatus.isInitialized)return
-        sindhiStatus.text=KeyPopSindhiOnnxPack.bundles.joinToString("\n") {
-            it.name+": "+KeyPopSindhiOnnxPack.status(this,it)
-        }+"\nDownloaded packs support offline neural translation. Verify result accuracy before relying on it."
+    override fun onResume(){
+        super.onResume();handler.removeCallbacks(poll);handler.post(poll)
+        if(::english.isInitialized)checkInstalled()
     }
-    private fun confirmSindhi(bundle:KeyPopSindhiOnnxPack.Bundle) {
-        AlertDialog.Builder(this)
-            .setTitle("Download offline Sindhi model")
-            .setMessage("Download approximately "+bundle.approximateMB+
-                " MB to app-private storage over your current network? KeyPop will attempt local translation with the downloaded ONNX model. This build still requires sentence-level accuracy validation.")
-            .setPositiveButton("Download model") {_,_->
-                startSindhiService(bundle.id)
-            }
-            .setNegativeButton("Cancel",null)
-            .show()
-    }
-    private fun check() {
-        status.text="Checking installed text models…"
-        runCatching {
-            KeyPopLanguageModels.checkText("en") { _,msg->
-                if(!isFinishing&&!isDestroyed)statusEn.text="English: "+msg
-            }
-            KeyPopLanguageModels.checkText("ur") { _,msg->
-                if(!isFinishing&&!isDestroyed)statusUr.text="Urdu: "+msg
-            }
-        }.onFailure {status.text="Model check could not run: "+it.localizedMessage}
-    }
-    private fun testEnglishUrdu(source:String,target:String,sentence:String) {
-        status.text="Translating "+(if(source=="en")"English → Urdu" else "Urdu → English")+"…"
-        KeyPopTranslator.translate(this,source,target,sentence,false,"") { result ->
-            if(!isFinishing&&!isDestroyed)status.text=result.fold(
-                { "Original: "+sentence+"\nTranslation: "+it },
-                { "Translation failed: "+(it.localizedMessage?:"Install both language models first") }
-            )
-        }
-    }
-    private fun download(lang:String) {
-        running++
-        progress.visibility=View.VISIBLE
-        val target=if(lang=="en")statusEn else statusUr
-        val name=if(lang=="en")"English" else "Urdu"
-        target.text="$name: download requested"
-        status.text="$name: requesting model over "+if(wifi.isChecked)"Wi-Fi" else "Wi-Fi/mobile data"
-        runCatching {
-            KeyPopLanguageModels.downloadText(lang,wifi.isChecked) { ok,msg->
-                if(isFinishing||isDestroyed)return@downloadText
-                target.text="$name: "+msg
-                status.text=if(ok)"✓ $name model installed" else "$name download did not complete: "+msg
-                running=(running-1).coerceAtLeast(0)
-                if(running==0)progress.visibility=View.GONE
-            }
-        }.onFailure {
-            target.text="$name: download could not start: "+(it.localizedMessage?:"unknown")
-            running=(running-1).coerceAtLeast(0)
-            if(running==0)progress.visibility=View.GONE
-        }
-    }
+    override fun onPause(){handler.removeCallbacks(poll);super.onPause()}
 }

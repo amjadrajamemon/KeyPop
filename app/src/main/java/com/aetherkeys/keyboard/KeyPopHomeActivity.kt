@@ -69,7 +69,7 @@ class KeyPopHomeActivity : Activity() {
         scroll.addView(column)
         setContentView(scroll)
 
-        column.addView(text("KEYPOP  ·  v1.0.4 RC5",29f,teal,true))
+        column.addView(text("KEYPOP  ·  v1.0.5 RC6",29f,teal,true))
         column.addView(text("Keyboard Setup",24f,ink,true))
         column.addView(text("English ⇄ اردو  •  سنڌي",17f,muted))
         column.addView(text("To type, enable KeyPop in Android settings and choose it as the active keyboard. Installing an APK does not activate it.",14f,muted))
@@ -95,14 +95,21 @@ class KeyPopHomeActivity : Activity() {
                 cornerRadius=dp(10).toFloat()
             }
         },LinearLayout.LayoutParams(-1,-2))
-        addButton(column,"Install complete offline Sindhi translation · ~978 MB") {
-            startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
+        addButton(column,"Download All Languages · English + Urdu + Sindhi") {
+            if(android.os.Build.VERSION.SDK_INT>=33 &&
+                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=
+                android.content.pm.PackageManager.PERMISSION_GRANTED)
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),716)
+            KeyPopModelDownloadService.startAllLanguages(this)
+            Toast.makeText(this,"Language pack download started. Check the download notification.",
+                Toast.LENGTH_LONG).show()
         }
         addButton(column,"Language packs and model status") {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
         }
         addButton(column,"Settings · Themes · Layouts · Translation") {
-            startActivity(Intent(this,MainActivity::class.java))
+            startActivity(Intent(this,MainActivity::class.java)
+                .putExtra("openSection","settingsHome"))
         }
         column.addView(text("Offline Sindhi neural models download after your consent. Full sentence translation stays on your phone.",13f,muted))
         val settings=getSharedPreferences("keypop",MODE_PRIVATE)
@@ -111,10 +118,12 @@ class KeyPopHomeActivity : Activity() {
             column.post {
                 if(!isFinishing && !isDestroyed) {
                     AlertDialog.Builder(this)
-                        .setTitle("Install offline Sindhi translation?")
-                        .setMessage("English, Sindhi, and Urdu translation needs about 978 MB of downloadable models plus free working storage. Choose the one-tap installer now, or install later on Wi-Fi. Android cannot download these automatically during APK installation.")
-                        .setPositiveButton("Language packs") {_,_->
-                            startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
+                        .setTitle("Download all offline language packs?")
+                        .setMessage("One tap starts English, Urdu and all three Sindhi translation packs (~978 MB plus English/Urdu). Wi-Fi and 1.2 GB free storage recommended.")
+                        .setPositiveButton("Download All") {_,_->
+                            KeyPopModelDownloadService.startAllLanguages(this)
+                            Toast.makeText(this,"Downloading offline language packs",
+                                Toast.LENGTH_LONG).show()
                         }
                         .setNegativeButton("Later",null).show()
                 }
