@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# Do not let older RC commits overwrite newer release assets. Only the most
+# recent commit on each branch should complete the expensive Android jobs.
+concurrency:
+  group: keypop-android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -146,6 +152,11 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v1.0.8-rc9-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc9-smart-autocorrect-resumable-downloads-20261107" --jq '.commit.sha')"
+          if [ "$LATEST" != "$GITHUB_SHA" ]; then
+            echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
+            exit 1
+          fi
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/*-debug.apk --repo "$GH_REPO" --clobber
           else
