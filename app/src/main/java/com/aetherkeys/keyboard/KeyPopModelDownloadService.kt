@@ -197,6 +197,9 @@ class KeyPopModelDownloadService:Service() {
             done("Choose at least one translation direction.",true,startId);return
         }
         transferPlan=plan
+        val transfer=getSharedPreferences(PREFS,MODE_PRIVATE)
+        if(!transfer.getBoolean("active",false))
+            transfer.edit().putLong("startedAt",System.currentTimeMillis()).apply()
         previousElapsed=0L;rateBytesPerSecond=0.0
         val packCount=plan.size
         fun progressPosition(index:Int,part:Double=0.0):Int =
