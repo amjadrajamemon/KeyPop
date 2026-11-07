@@ -1267,18 +1267,22 @@ class AetherImeService : InputMethodService() {
         }
         val before=input.getTextBeforeCursor(140,0)?.toString().orEmpty()
         val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
-        // Show quick tools until typing starts. Do not waste an extra row on
-        // permanent generic 'I / The / Please' suggestions.
-        if(materialTopBar!=null) {
-            materialTopBar?.visibility=if(word.isEmpty())View.VISIBLE else View.GONE
-            bar.visibility=if(word.isEmpty())View.GONE else View.VISIBLE
-            if(word.isEmpty()) { bar.removeAllViews();return }
-        } else bar.visibility=View.VISIBLE
+        val allowNext=prefs.getBoolean("predictNext",true)
+        val showPredictions=word.isNotEmpty() || (allowNext && before.isNotBlank())
+        val key="$language|$translatorOpen|$before|$allowNext"
+        if(materialTopBar!=null)
+            materialTopBar?.visibility=if(showPredictions)View.GONE else View.VISIBLE
+        bar.visibility=if(showPredictions)View.VISIBLE else View.GONE
+        if(lastSuggestionContext==key)return
+        lastSuggestionContext=key
+        if(!showPredictions) {bar.removeAllViews();return}
         val predLang=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
         val without=before.removeSuffix(word).trimEnd()
         val previous=Regex("[\\p{L}]+$").find(without)?.value.orEmpty()
         val values=if(word.isEmpty())lexicon.nextWords(predLang,previous)
-            else lexicon.suggestions(predLang,word,previous=previous)
+            else lexicon.suggestions(predLang,word,
+                limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
+                previous=previous)
         val spelling=if(word.length>=4 && prefs.getBoolean("grammarHints",true))
             lexicon.correction(predLang,word) else null
         val grammar=if(word.isNotEmpty() && prefs.getBoolean("grammarHints",true))
@@ -1333,6 +1337,17 @@ class AetherImeService : InputMethodService() {
             else alternatives.getOrNull(1)
         if(last!=null)chipSuggestion(last) {completeWord(last)}
     }
+    /** Re-label only changed Latin keys instead of rebuilding the full IME. */
+    private fun updateShiftKeys() {
+        if(language!=0 && !prefs.getBoolean("romanMode",false))return
+        for((key,raw) in keyViews) {
+            if(raw.length!=1 || !raw[0].isLetter())continue
+            val old=key.text.toString()
+            val hint=if(old.contains('\n'))"\n"+old.substringAfter('\n') else ""
+            key.text=(if(shift||capsLock)raw.uppercase(Locale.ROOT)
+                else raw.lowercase(Locale.ROOT))+hint
+        }
+    }
     private fun press(value:String) {
         if(emojiOpen && emojiSearch) {
             when(value) {
@@ -1356,7 +1371,7 @@ class AetherImeService : InputMethodService() {
                     else shift=!shift
                     lastShiftPress=now
                 }
-                draw()
+                updateShiftKeys()
             }
             "SPACE" -> {
                 if(!sensitive(currentInputEditorInfo)) {
@@ -1374,12 +1389,14 @@ class AetherImeService : InputMethodService() {
                             }
                         }
                     }
-                    if(prefs.getBoolean("doubleSpace",true)) {
+                    if(prefs.getBoolean("autoPunctuate",true) &&
+                        prefs.getBoolean("doubleSpace",true)) {
                         val last=currentInputConnection?.getTextBeforeCursor(2,0)?.toString().orEmpty()
                         if(last.length==2 && last.last()==' ' && last.first().isLetter()) {
                             currentInputConnection?.deleteSurroundingText(1,0)
                             currentInputConnection?.commitText(". ",1)
                             refreshSuggestions()
+                            scheduleLiveTranslation(260)
                             return
                         }
                     }
@@ -1527,7 +1544,7 @@ class AetherImeService : InputMethodService() {
     }
 
     /** Debounce both physical editor updates and KeyPop's own key presses. */
-    private fun scheduleLiveTranslation(waitMs:Long=650L,manual:Boolean=false) {
+    private fun scheduleLiveTranslation(waitMs:Long=300L,manual:Boolean=false) {
         if(!translatorOpen || (!liveTranslationEnabled && !manual) ||
             sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo))return
         liveRevision++
@@ -1570,7 +1587,8 @@ class AetherImeService : InputMethodService() {
                     outcome.onSuccess{
                         translateResult=it
                         translationStatus=""
-                        draw()
+                        // Preserve all key and prediction views; no full redraw.
+                        liveResultView?.text=it
                     }.onFailure{
                         translationStatus=it.localizedMessage?:"Translation unavailable"
                         liveResultView?.text=translationStatus
