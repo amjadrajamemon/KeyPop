@@ -5,6 +5,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
+import android.widget.Switch
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -84,6 +87,44 @@ class KeyPopRuntimeSmokeTest {
                     find(activity.window.decorView,"TRANSLATION ENGINE")!=null)
                 assertTrue("Missing direction-selective download action within translation",
                     find(activity.window.decorView,"Choose and download translation packs")!=null)
+            }
+        }
+    }
+    @Test fun autocorrectPunctuationAndGrammarTogglesPersist() {
+        ActivityScenario.launch(MainActivity::class.java).use {scenario->
+            scenario.onActivity { activity->
+                fun find(node:View,text:String):TextView? {
+                    if(node is TextView && node.text?.toString()==text && node.isShown)
+                        return node
+                    if(node is ViewGroup)for(i in 0 until node.childCount) {
+                        val match=find(node.getChildAt(i),text)
+                        if(match!=null)return match
+                    }
+                    return null
+                }
+                var category:View?=find(activity.window.decorView,"Typing & Size")
+                while(category!=null && !category.hasOnClickListeners())
+                    category=category.parent as? View
+                assertTrue("Typing settings inaccessible",category!=null)
+                category?.performClick()
+                val prefs=activity.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                for((label,key) in listOf(
+                    "Auto-correct spelling" to "autoCorrect",
+                    "Auto punctuation" to "autoPunctuate",
+                    "Grammar hints (suggest only)" to "grammarHints",
+                    "Apply grammar fixes automatically" to "autoGrammarApply")) {
+                    val item=find(activity.window.decorView,label)
+                    assertTrue("Missing settings switch: $label",item!=null)
+                    val row=item?.parent as? ViewGroup
+                    val toggle=(0 until (row?.childCount?:0)).map{row?.getChildAt(it)}
+                        .filterIsInstance<Switch>().firstOrNull()
+                    assertTrue("No switch for $label",toggle!=null)
+                    val original=toggle?.isChecked?:false
+                    toggle?.isChecked=!original
+                    assertEquals("Switch not saved: $key",!original,
+                        prefs.getBoolean(key,original))
+                    toggle?.isChecked=original
+                }
             }
         }
     }
