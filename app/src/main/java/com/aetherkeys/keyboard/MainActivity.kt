@@ -425,6 +425,7 @@ class MainActivity:Activity() {
         addBlock {
             addView(text("01   LIVE TRANSLATION",13f,accent,true))
             option(this,"Compact Gboard-style translation bar","compactTranslate",true)
+            option(this,"Compose inside keyboard when editor is empty","translateComposeInput",true)
             option(this,"Show live translation while typing","liveTranslateDefault",true)
             addView(text("Cloud mode translates over the internet with your Google Cloud "+
                 "API key and consent. Offline mode needs downloaded language models. "+
