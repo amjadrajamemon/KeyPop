@@ -1029,7 +1029,12 @@ class AetherImeService : InputMethodService() {
         when(hand) {
             1 -> row.setPadding(offset,0,d(72),0)
             2 -> row.setPadding(d(72),0,offset,0)
-            else -> if(offset>0) row.setPadding(offset,0,0,0)
+            else -> when {
+                preset.id==KeyboardPresetCatalog.MATERIAL && layoutRow==1 ->
+                    row.setPadding(d(14),0,d(14),0)
+                offset>0 -> row.setPadding(offset,0,0,0)
+                else -> Unit
+            }
         }
         val split=prefs.getBoolean("splitKeyboard",false) && resources.configuration.smallestScreenWidthDp>=600
         labels.forEachIndexed { index,label ->
