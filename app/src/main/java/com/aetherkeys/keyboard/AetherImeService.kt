@@ -1693,7 +1693,7 @@ class AetherImeService : InputMethodService() {
             "?123" -> { symbols=true;draw() }
             "ABC" -> { symbols=false;draw() }
             "↵" -> {
-                if(prefs.getBoolean("autoTranslate",false) &&
+                if((translatorOpen || prefs.getBoolean("autoTranslate",false)) &&
                     !sensitive(currentInputEditorInfo) && !numeric(currentInputEditorInfo)) {
                     translateBeforeSend()
                     return
