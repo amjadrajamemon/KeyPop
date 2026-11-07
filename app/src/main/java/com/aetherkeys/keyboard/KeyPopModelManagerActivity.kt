@@ -162,10 +162,20 @@ class KeyPopModelManagerActivity:Activity() {
         updateSindhi()
     }
     private fun updateSindhi() {
-        val done=KeyPopSindhiOnnxPack.bundles.count {
+        val selectedPacks=KeyPopPackSelection.required(selected()).filter {
+            it=="en-sd" || it=="sd-en" || it=="ur-sd"
+        }
+        val selectedReady=selectedPacks.count { id ->
+            val pack=KeyPopSindhiOnnxPack.bundles.first { it.id==id }
+            KeyPopSindhiOnnxPack.missing(this,pack).isEmpty()
+        }
+        val globallyReady=KeyPopSindhiOnnxPack.bundles.count {
             KeyPopSindhiOnnxPack.missing(this,it).isEmpty()
         }
-        sindhi.text="Sindhi · "+done+"/3 model bundles downloaded"
+        sindhi.text=if(selectedPacks.isEmpty())
+            "Sindhi · "+globallyReady+"/3 optional model bundles downloaded"
+        else "Sindhi · "+selectedReady+"/"+selectedPacks.size+" selected packs installed" +
+            (if(globallyReady<3) " · "+globallyReady+"/3 overall (others optional)" else "")
     }
     private fun showState() {
         if(!::info.isInitialized)return
@@ -192,8 +202,14 @@ class KeyPopModelManagerActivity:Activity() {
         val rate=java.lang.Double.longBitsToDouble(state.getLong(
             "speedBytesBits",java.lang.Double.doubleToRawLongBits(0.0)))
         val started=state.getLong("startedAt",0L)
-        val elapsed=if(started>0L)(System.currentTimeMillis()-started).coerceAtLeast(0L)/1000L else 0L
-        if(estimated>0L) {
+        val finishedAt=state.getLong("finishedAt",0L)
+        val stopped=if(finished && finishedAt>0L)finishedAt else System.currentTimeMillis()
+        val elapsed=if(started>0L)(stopped-started).coerceAtLeast(0L)/1000L else 0L
+        if(finished && !active && !state.getBoolean("failed",false)) {
+            val plan=KeyPopPackSelection.required(
+                state.getStringSet("selectedDirections",emptySet()).orEmpty())
+            metrics.text=KeyPopTransferMetrics.completedSummary(downloaded,plan.size,elapsed)
+        } else if(estimated>0L) {
             val time=KeyPopTransferMetrics.etaSeconds(downloaded,estimated,rate)
                 ?.let{KeyPopTransferMetrics.elapsed(it)}?:"Calculating…"
             metrics.text="Downloaded: "+KeyPopTransferMetrics.mb(downloaded)+" MB\n"+
@@ -213,7 +229,7 @@ class KeyPopModelManagerActivity:Activity() {
             metrics.text="Choose language packs above. Exact model bytes and ETA appear "+
                 "where supplied by the model host."
         }
-        if(finished)updateSindhi()
+        updateSindhi()
     }
     override fun onResume() {
         super.onResume();handler.removeCallbacks(poll);handler.post(poll)
