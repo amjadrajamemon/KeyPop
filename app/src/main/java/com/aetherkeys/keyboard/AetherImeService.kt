@@ -1657,7 +1657,8 @@ class AetherImeService : InputMethodService() {
                 }
             }
             translateDraft=KeyPopTranslationDraft.edit(
-                translateDraft,value,shift,prefs.getBoolean("autoCap",true))
+                translateDraft,value,shift,prefs.getBoolean("autoCap",true),
+                prefs.getBoolean("autoPunctuate",true))
             translateSource=translateDraft
             liveSourceView?.text=translateDraft
             if(value.length==1 && shift && !capsLock) {
