@@ -9,7 +9,7 @@ import kotlin.math.abs
  * Not a replacement for neural predictions and language-level grammars.
  */
 object KeyPopTypingIntelligence {
-    private val english=("about above accept account across action address after again against agree all almost already also always amazing amount another answer anyone anything application approve approved around available aware back bank banking because become before begin being below best better between birthday both build business calendar call camera cannot change check child choose clear click close code color common company complete confirm contact continue copy correct could create current custom customer data date day decision default delete design detail device different direct document done download easy edit email enable enough enter error example excellent family favorite feature feel file find finish first follow forgot form friend from full function future general get give good great group happen happy have hello help here history home hour important improve include information inside install issue just keep keyboard know language latest learn leave letter like link list login look make manage many maybe meeting message minimum minutes modern money month more most move much name near need never next normal note number office only open option order other output page password people personal phone photo please possible prepare present pretty previous privacy project properly quality question quick ready really receive recent recommend remember remove reply report request require result review right save screen search secure select send service setting share show simple some source space special speed start status still storage store style support system team thank thanks their them there these thing think this time today tomorrow tool top touch translate typing update upload user using version video view wait want week welcome what when where which while will window with work world write yes your").split(' ').filter{it.isNotBlank()}.distinct()
+    private val english=("about above accept account across action address after again against agree all almost already also always amazing amount another answer anyone anything application approve approved around available aware back bank banking because become before begin being below best better between birthday both build business calendar call camera cannot change check child choose clear click close code color common company complete confirm contact continue copy correct could create current custom customer data date day decision default delete design detail device different direct document done download easy edit email enable enough enter error example excellent family favorite feature feel file find finish first follow forgot form friend from full function future general get give good great group happen happy have hello help here history home hour important improve include information inside install issue just keep keyboard know language latest learn leave letter like link list login look make manage many maybe meeting message minimum minutes modern money month more most move much name near need never next normal note number office only open option order other output page password people personal phone photo please possible prepare present pretty previous privacy project properly quality question quick ready really receive recent recommend remember remove reply report request require result review right save screen search secure select send service setting share show simple some source space special speed start status still storage store style support system team thank thanks their them there these thing think this time today tomorrow tool top touch translate typing update upload user using version video view wait want week welcome what when where which while will window with work world write yes your should would could information details additional important much more other their there though though through receive necessary correct writing spelling punctuation predictive prediction definitely recommend said she he it is were was try again very why whatever whatever both everyone everything something nothing someone someday yesterday we'll they're isn't that's can't don't shoukd").split(' ').filter{it.isNotBlank()}.distinct()
     private val urdu=("آپ آپکا آپکی آپکے آپکو آج ابھی اچھا اچھی اچھے اگر اطلاع ان اندر اور ایک بار بہت بہترین براہ بات بعد پہلے پھر تمام تم تھوڑا تیار تیز جواب جانب جان جانچ جاری جگہ جہاں جتنا جب جس جسے جن جی درخواست دیر دن دوبارہ دوست دین دنیا دیکھ دکھائی رہا رہی رہے رکھ رہا سارا ساتھ سلام سال سب سبق سچ سوال سے صبح صرف شکریہ شامل شام شاندار شروع شخص ضروری فیصلہ فی الحال قبل قلم کل کام کرنے کرتا کرتے کرنا کرم کچھ کئی کس کیسے کیوں کیا کہاں کون کوئی کہ کے کی کیونکہ کو گئی گا گی گئے گزر گیا گھر گیا ہے ہیں ہوتا ہونے ہوئی ہوں ہو ہم ہمارا ہماری ہمارے ہمیں یہاں یہ یہی یاد یقینی واقعی وقت والے والا والی وقت محفوظ معلومات مکمل میرا میری میرے میں نہیں نہ نیا نئے نئی نام نوٹ نرم نرم نہایت درست دستاویز دفتر ماہ مہینہ ملاقات مدد محبت مثال مناسب مشورہ مریض مرحلہ مسئلہ ضروریات طلب استعمال رابطہ رپورٹ کام کاغذ ترجمہ تحریر زبان سندھی اردو انگریزی الفاظ قبول بھی کچھ خریداری مکمل کریں کردی دیجئے بھیجیں پیش معلومات فرما دیجیے").split(' ').filter{it.isNotBlank()}.distinct()
     private val sindhi=("اڄ اڃا اوهان توهان توھان تون مان منهنجو منهنجي منهنجا اسان اسانجو اسانجي اسانجا آهي آھن آهن آھيان آهيان آھيو آيو اچي اچو اچي ٿو اچن اڳ بعد پوءِ جيڪڏھن جيڪڏهن پر ۽ يا به بلڪل تمام سلام مهرباني سٺو سٺي سٺا ٺيڪ ٺيڪ آهي ڪيئن ڪڏهن ڪٿي ڇو ڇا ڪير ڪيترو ڪيتري جڏهن جتي گهر ڪم ڏينھن ڏينهن وقت سڀاڻي اڄ شام رات صبح پوءِ دوست خاندان معلومات ڄاڻ وقت درخواست رپوٽ رپورٽ آفيس دفتر ڪاغذ ترجمو ٻولي انگريزي سنڌي اردو مهرباني ڪري ٻڌايو ٻڌائي ٻڌاءِ ڏيکاريو سمجهيو صحيح غلط نالو فون رابطو نمبر پيغام جواب تيار منهنجو اڪائونٽ محفوظ حفاظتي جائزو پوء ڪيو ڪري ڪرڻ لاءِ کان ۾ کي سان جو جي جا هڪ ٻه ٽي چار پنج ڇهه ست اٺ نو ڏهه نئون نئين سٺو سٺي حاصل ڪرڻ چاهيان ٿو ٿي سگهندو مدد ڪندؤ مهرباني مبارڪ خوش ٿي حاضر آهي").split(' ').filter{it.isNotBlank()}.distinct()
     private val follow=mapOf(
@@ -47,7 +47,17 @@ object KeyPopTypingIntelligence {
             "thank" to listOf("you","you!"),
             "best" to listOf("regards","wishes"),
             "happy" to listOf("birthday","to"),
-            "good" to listOf("morning","evening","luck")),
+            "good" to listOf("morning","evening","luck"),
+            "more" to listOf("information","details","than"),
+            "show" to listOf("me","the"),
+            "tell" to listOf("me","us"),
+            "send" to listOf("me","the"),
+            "give" to listOf("me","us"),
+            "there" to listOf("is","are"),
+            "their" to listOf("work","details"),
+            "what" to listOf("is","are","can"),
+            "should" to listOf("be","we","I"),
+            "please" to listOf("check","share","confirm")),
         1 to mapOf(
             "براہ" to listOf("کرم"),"شکریہ" to listOf("بہت"),
             "السلام" to listOf("علیکم"),"آپ" to listOf("کا","کی","کے"),
@@ -60,32 +70,81 @@ object KeyPopTypingIntelligence {
         1->urdu;2->sindhi;else->english
     }
     private fun normalized(value:String)=value.trim().lowercase(Locale.ROOT)
+    // High-confidence corrections for common neighbouring-key, dropped-key
+    // and transposition mistakes; never transmit typed text to a server.
+    private val commonTypos=mapOf(
+        "tge" to "the","hte" to "the","teh" to "the","thw" to "the",
+        "shoukd" to "should","shold" to "should","shoudl" to "should",
+        "woudl" to "would","coudl" to "could","adn" to "and",
+        "taht" to "that","wiht" to "with","yuo" to "you",
+        "youre" to "you're","thier" to "their","becuase" to "because",
+        "recieve" to "receive","seperate" to "separate",
+        "definately" to "definitely","diferent" to "different",
+        "langauge" to "language","remeber" to "remember",
+        "wierd" to "weird","dont" to "don't","cant" to "can't",
+        "im" to "I'm","ive" to "I've","couldnt" to "couldn't",
+        "doesnt" to "doesn't","wasnt" to "wasn't",
+        "shoud" to "should","wht" to "what","whst" to "what",
+        "thsi" to "this","thn" to "then","plese" to "please",
+        "mroe" to "more","moer" to "more"
+    )
+    private val frequentEnglish=setOf("the","and","you","your","should","would",
+        "could","more","this","that","with","what","where","when",
+        "there","their","they","have","will","please","thank",
+        "hello","good","morning","today","tomorrow","information")
+    private fun candidateScore(input:String,candidate:String,distance:Int,
+                               known:Boolean,contextual:Boolean):Int {
+        val prefix=candidate.startsWith(input)
+        val priority=if(candidate in frequentEnglish)25 else 0
+        return (if(prefix)145 else 91-distance*23) +
+            (if(known)10 else 0)+(if(contextual)35 else 0)+priority-
+            kotlin.math.abs(candidate.length-input.length).coerceAtMost(12)
+    }
+    // Optimal-string-alignment edit distance counts an adjacent swapped pair
+    // as one typo, unlike ordinary Levenshtein (e.g. "teh" → "the").
+    fun keyboardDistance(a:String,b:String):Int {
+        if(kotlin.math.abs(a.length-b.length)>2)return 3
+        val d=Array(a.length+1){IntArray(b.length+1)}
+        for(i in 0..a.length)d[i][0]=i
+        for(j in 0..b.length)d[0][j]=j
+        for(i in 1..a.length)for(j in 1..b.length) {
+            val sub=if(a[i-1]==b[j-1])0 else 1
+            d[i][j]=minOf(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+sub)
+            if(i>1 && j>1 && a[i-1]==b[j-2] && a[i-2]==b[j-1])
+                d[i][j]=minOf(d[i][j],d[i-2][j-2]+1)
+        }
+        return d[a.length][b.length].coerceAtMost(3)
+    }
     fun suggestions(language:Int,fragment:String,previous:String,
                     learned:Set<String> = emptySet(),limit:Int=3):List<String> {
         val prefix=normalized(fragment)
         if(prefix.length !in 1..32)return emptyList()
         val prior=normalized(previous)
         val contextual=follow[language]?.get(prior).orEmpty()
-        val vocabulary=(list(language)+learned.map(::normalized)).distinct()
+        val words=(list(language)+learned.map(::normalized)+contextual).distinct()
         data class Candidate(val text:String,val score:Int)
-        val matches=ArrayList<Candidate>()
+        val candidates=ArrayList<Candidate>()
         val seen=HashSet<String>()
-        for(word in contextual+vocabulary) {
+        // High-confidence correction must appear even when the original token
+        // is only three letters long (tge -> the).
+        if(language==0 && prefix in commonTypos){
+            val fixed=commonTypos.getValue(prefix)
+            candidates.add(Candidate(fixed,240))
+            seen.add(fixed)
+        }
+        for(word in words) {
             if(!seen.add(word)||word==prefix)continue
             val starts=word.startsWith(prefix)
-            // Fuzzy partial-word matching: a typo in 'keybor' can still suggest
-            // 'keyboard', rather than requiring a finished typo of equal length.
-            val distance=if(!starts && prefix.length>=3)
-                distanceAtMost2(prefix,word.take(prefix.length)) else 3
-            if(!starts && distance>1)continue
-            val contextualBonus=if(word in contextual)48 else 0
-            val learnedBonus=if(word in learned)12 else 0
-            val score=(if(starts)95 else 54-distance*18)+contextualBonus+
-                learnedBonus-abs(word.length-prefix.length).coerceAtMost(12)
-            matches.add(Candidate(word,score))
+            val edit=if(!starts && prefix.length>=3)
+                keyboardDistance(prefix,word.take(prefix.length))
+                else 3
+            if(!starts && edit>1)continue
+            candidates.add(Candidate(word,candidateScore(prefix,word,edit,
+                word in learned,word in contextual)))
         }
-        return matches.sortedWith(compareByDescending<Candidate>{it.score}
-            .thenBy{it.text.length}.thenBy{it.text}).take(limit.coerceIn(1,8)).map{it.text}
+        return candidates.sortedWith(compareByDescending<Candidate>{it.score}
+            .thenBy{it.text.length}.thenBy{it.text}).take(limit.coerceIn(1,8))
+            .map{it.text}
     }
     /** Next-word predictions when the cursor follows a space; always available offline. */
     fun nextWords(language:Int,previous:String):List<String> {
@@ -100,21 +159,26 @@ object KeyPopTypingIntelligence {
     }
     fun correction(language:Int,typed:String,learned:Set<String> = emptySet()):String? {
         val word=normalized(typed)
-        if(word.length<3 || word in learned || word in list(language))return null
-        val common=if(language==0)mapOf(
-            "teh" to "the","adn" to "and","dont" to "don't","cant" to "can't",
-            "recieve" to "receive","definately" to "definitely",
-            "seperate" to "separate","langauge" to "language",
-            "thier" to "their","becuase" to "because",
-            "remeber" to "remember","wierd" to "weird") else emptyMap()
-        common[word]?.let{return it}
+        if(word.length<3 || word.length>32 || word in learned ||
+            word in list(language))return null
+        if(language==0)commonTypos[word]?.let{return it}
+        // Do not rewrite genuine dictionary words. An ambiguous distance-one
+        // candidate is a *suggestion*, but not a forced autocorrection.
         if(word.length<4)return null
-        return (list(language)+learned).asSequence()
-            .filter{abs(it.length-word.length)<=1}
-            .map{it to distanceAtMost2(word,it)}
-            .filter{it.second==1}.take(20)
-            .minWithOrNull(compareBy<Pair<String,Int>>{abs(it.first.length-word.length)}
-                .thenBy{it.first.length})?.first
+        val possible=(list(language)+learned).distinct().asSequence()
+            .filter{kotlin.math.abs(it.length-word.length)<=1}
+            .map{it to keyboardDistance(word,it)}
+            .filter{it.second==1}.take(100)
+            .sortedWith(compareByDescending<Pair<String,Int>> {
+                (if(language==0 && it.first in frequentEnglish)50 else 0)+
+                    (if(it.first.length==word.length)10 else 0)
+            }.thenBy{it.first.length}).toList()
+        if(possible.isEmpty())return null
+        val best=possible.first().first
+        // Avoid aggressive false positives on a tiny offline vocabulary:
+        // apply only highly common words or an unambiguous single candidate.
+        return best.takeIf{language==0 && it in frequentEnglish ||
+            possible.size==1 && word.length>=5}
     }
     fun contextualReplies(language:Int,text:String):List<String> {
         val source=normalized(text)
