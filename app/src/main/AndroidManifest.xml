@@ -51,7 +51,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <service android:name=".AetherImeService" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true" android:label="KeyPop 1.0.0 RC Keyboard">
+        <service android:name=".AetherImeService" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true" android:label="KeyPop RC6 Preview Keyboard">
             <intent-filter><action android:name="android.view.InputMethod"/></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/method"/>
         </service>

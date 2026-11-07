@@ -24,8 +24,8 @@ android {
     }
     buildTypes {
         debug {
-            // Coexist with previous alpha installations; no destructive uninstall required.
-            applicationIdSuffix = ".previewv100"
+            // RC6 uses a distinct preview package to avoid CI-generated debug signing conflicts. Do not uninstall earlier builds.
+            applicationIdSuffix = ".previewv105"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
