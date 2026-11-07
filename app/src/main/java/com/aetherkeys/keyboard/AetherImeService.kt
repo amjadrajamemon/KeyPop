@@ -1394,7 +1394,7 @@ class AetherImeService : InputMethodService() {
             return
         }
         val before=input.getTextBeforeCursor(140,0)?.toString().orEmpty()
-        val word=Regex("[\p{L}]+$").find(before)?.value.orEmpty()
+        val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
         val nextWords=prefs.getBoolean("predictNext",true)
         val show=word.isNotEmpty() || (nextWords && before.isNotBlank())
         materialTopBar?.visibility=if(show)View.GONE else View.VISIBLE
@@ -1421,7 +1421,7 @@ class AetherImeService : InputMethodService() {
             (bar.getChildAt(1) as? Button)?.text=word
         }
         val without=before.removeSuffix(word).trimEnd()
-        val previous=Regex("[\p{L}]+$").find(without)?.value.orEmpty()
+        val previous=Regex("[\\p{L}]+$").find(without)?.value.orEmpty()
         val task=Runnable {
             if(predictionExecutor.isShutdown)return@Runnable
             predictionExecutor.execute {
@@ -1460,7 +1460,7 @@ class AetherImeService : InputMethodService() {
         }
         fun replaceWord(choice:String) {
             val connection=currentInputConnection ?:return
-            val actual=Regex("[\p{L}]+$").find(
+            val actual=Regex("[\\p{L}]+$").find(
                 connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
             if(actual!=word || sensitive(currentInputEditorInfo))return
             connection.beginBatchEdit()
