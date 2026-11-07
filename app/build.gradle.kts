@@ -12,7 +12,7 @@ android {
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 26
-        versionName = "1.0.10-rc11-gboard-wordbank-translation-send" 
+        versionName = "1.0.10-rc11-contextual-predictions-compact-translate" 
     }
     splits {
         abi {
