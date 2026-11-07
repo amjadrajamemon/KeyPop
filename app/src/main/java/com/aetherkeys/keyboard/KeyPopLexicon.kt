@@ -29,12 +29,36 @@ class KeyPopLexicon(context:Context) {
         }
         index
     }
+    private val qwertyRows=listOf("qwertyuiop","asdfghjkl","zxcvbnm")
+    /** Neighbouring first-letter substitutions are cheap to recover by
+     * adding a few nearby two-letter buckets, not rescanning 39k words. */
+    private fun nearby(letter:Char):Set<Char> {
+        val row=qwertyRows.indexOfFirst{letter in it}
+        if(row<0)return emptySet()
+        val column=qwertyRows[row].indexOf(letter)
+        val candidates=linkedSetOf<Char>()
+        for(r in (row-1).coerceAtLeast(0)..(row+1).coerceAtMost(2))
+            for(c in (column-1).coerceAtLeast(0)..(column+1).coerceAtMost(qwertyRows[r].lastIndex))
+                candidates.add(qwertyRows[r][c])
+        // Staggered bottom row: c and v are adjacent, but v is also close
+        // to r's vertical column and the typed vreate => create case.
+        if(letter=='v')candidates.add('c')
+        return candidates-letter
+    }
     private fun rankCandidates(fragment:String):List<RankedWord> {
         val input=fragment.trim().lowercase(Locale.ROOT)
         if(input.isBlank())return emptyList()
-        if(input.length>=2)return scowlIndex[input.take(2)].orEmpty()
-        return scowlIndex.asSequence().filter { it.key.startsWith(input) }
-            .flatMap { it.value.asSequence() }.filter { it.tier<=10 }.toList()
+        if(input.length<2)
+            return scowlIndex.asSequence().filter { it.key.startsWith(input) }
+                .flatMap { it.value.asSequence() }.filter { it.tier<=10 }.toList()
+        val keys=linkedSetOf(input.take(2))
+        if(input.length>=3) {
+            for(other in nearby(input[0]))keys.add(""+other+input[1])
+            for(other in nearby(input[1]))keys.add(""+input[0]+other)
+            keys.add(""+input[1]+input[0])
+        }
+        return keys.asSequence().flatMap {scowlIndex[it].orEmpty().asSequence()}
+            .distinctBy {it.word}.toList()
     }
     private val store=context.getSharedPreferences("keypop_lexicon",Context.MODE_PRIVATE)
     private val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
@@ -103,14 +127,15 @@ class KeyPopLexicon(context:Context) {
         val updated=(old+value).toList().takeLast(2000).toSet()
         store.edit().putStringSet("learned_"+lang,updated).apply()
     }
-    fun suggestions(lang:Int,fragment:String,limit:Int=3,previous:String=""):List<String> {
+    fun suggestions(lang:Int,fragment:String,limit:Int=3,previous:String="",
+                    beforeCursor:String=""):List<String> {
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         val familiar=if(lang==0)rankCandidates(fragment) else emptyList()
         val base=when(lang){1->urdu;2->sindhi;else->english}
         val dictionary=base.toList()+familiar.map {it.word}
         val tiers=if(lang==0)familiar.associate {it.word to it.tier} else emptyMap()
         return KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
-            learned,limit,dictionary,tiers)
+            learned,limit,dictionary,tiers,beforeCursor)
     }
     fun nextWords(lang:Int,previous:String):List<String> =
         KeyPopTypingIntelligence.nextWords(lang,previous)
