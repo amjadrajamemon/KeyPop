@@ -1234,7 +1234,7 @@ class AetherImeService : InputMethodService() {
         bar.removeAllViews()
         fun chipSuggestion(label:String,action:()->Unit) {
             bar.addView(chip(label,onTap=action),
-                LinearLayout.LayoutParams(0,d(41),1f).apply{
+                LinearLayout.LayoutParams(0,d(if(materialTopBar!=null)41 else 34),1f).apply{
                     leftMargin=d(2);rightMargin=d(2)
                 })
         }
