@@ -49,6 +49,10 @@ class AetherImeService : InputMethodService() {
     private var suggestionBar:LinearLayout?=null
     private var materialTopBar:LinearLayout?=null
     private var lastSuggestionContext:String?=null
+    private val predictionExecutor=Executors.newSingleThreadExecutor()
+    private val predictionHandler=Handler(Looper.getMainLooper())
+    private var predictionPending:Runnable?=null
+    private var predictionGeneration=0
     private val repeatHandler=Handler(Looper.getMainLooper())
     private var repeatBackspace:Runnable?=null
     private var didRepeatBackspace=false
@@ -207,6 +211,9 @@ class AetherImeService : InputMethodService() {
         themeAnimator?.cancel();themeAnimator=null;liveBackground=null
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
         try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
+        predictionGeneration++
+        predictionPending?.let{predictionHandler.removeCallbacks(it)}
+        predictionExecutor.shutdownNow()
         imagePreviewExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -254,6 +261,9 @@ class AetherImeService : InputMethodService() {
 
     override fun onFinishInputView(finishingInput:Boolean) {
         stopBackspaceRepeating()
+        predictionGeneration++
+        predictionPending?.let{predictionHandler.removeCallbacks(it)}
+        predictionPending=null
         stopLiveTranslation()
         themeAnimator?.pause()
         KeyPopDiagnostics.flush(this)
@@ -307,7 +317,9 @@ class AetherImeService : InputMethodService() {
         val bg=KeyPopGlass.key(this,s,heavy)
         return KeyPopHintKey(this).apply {
             text=label
-            textSize=if(label.length>3) 12f else prefs.getInt("font",17).coerceIn(12,24).toFloat()
+            textSize=if(label.length>3) {
+                (prefs.getInt("font",19)*0.70f).coerceIn(12f,24f)
+            } else prefs.getInt("font",19).coerceIn(12,32).toFloat()
             isAllCaps=false
             setTextColor(if(heavy) Color.WHITE else s.ink)
             typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
@@ -634,6 +646,9 @@ class AetherImeService : InputMethodService() {
         suggestionBar=null
         materialTopBar=null
         lastSuggestionContext=null
+        predictionGeneration++
+        predictionPending?.let{predictionHandler.removeCallbacks(it)}
+        predictionPending=null
         keyViews.clear()
         renderedRows.clear()
         val s=palette()
@@ -941,7 +956,9 @@ class AetherImeService : InputMethodService() {
         }
         if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !emojiOpen) {
             val bar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-            root.addView(bar,LinearLayout.LayoutParams(-1,d(if(materialToolbar)43 else 35)))
+            val preferred=prefs.getInt("suggestionHeight",45).coerceIn(38,64)
+            root.addView(bar,LinearLayout.LayoutParams(-1,d(
+                if(materialToolbar)preferred else preferred.coerceAtLeast(38))))
             suggestionBar=bar
             refreshSuggestions()
         }
@@ -1355,92 +1372,142 @@ class AetherImeService : InputMethodService() {
         })
     }
 
-    /** One live prediction surface, sharing the Gboard-style toolbar slot. */
+    /**
+     * Never run spelling-distance calculations or dictionary SharedPreferences
+     * reads on the keyboard's input thread. All work is serialized off the
+     * main thread, debounced 28 ms, and stale results are discarded.
+     * Three chip views are reused instead of recreated on every keystroke.
+     */
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
         val input=currentInputConnection ?:return
         if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo)) {
-            bar.removeAllViews()
+            predictionGeneration++
+            predictionPending?.let{predictionHandler.removeCallbacks(it)}
             bar.visibility=View.GONE
             materialTopBar?.visibility=View.VISIBLE
             return
         }
         val before=input.getTextBeforeCursor(140,0)?.toString().orEmpty()
-        val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
-        val allowNext=prefs.getBoolean("predictNext",true)
-        val showPredictions=word.isNotEmpty() || (allowNext && before.isNotBlank())
-        val key="$language|$translatorOpen|$before|$allowNext"
-        if(materialTopBar!=null)
-            materialTopBar?.visibility=if(showPredictions)View.GONE else View.VISIBLE
-        bar.visibility=if(showPredictions)View.VISIBLE else View.GONE
-        if(lastSuggestionContext==key)return
-        lastSuggestionContext=key
-        if(!showPredictions) {bar.removeAllViews();return}
+        val word=Regex("[\p{L}]+$").find(before)?.value.orEmpty()
+        val nextWords=prefs.getBoolean("predictNext",true)
+        val show=word.isNotEmpty() || (nextWords && before.isNotBlank())
+        materialTopBar?.visibility=if(show)View.GONE else View.VISIBLE
+        bar.visibility=if(show)View.VISIBLE else View.GONE
         val predLang=when {
             translatorOpen && translateSourceChoice in 0..2 -> translateSourceChoice
             translatorOpen && word.isNotBlank() -> KeyPopTextLanguage.detect(word,language)
             language!=0 && prefs.getBoolean("romanMode",false) -> 0
             else -> language
         }
-        val without=before.removeSuffix(word).trimEnd()
-        val previous=Regex("[\\p{L}]+$").find(without)?.value.orEmpty()
-        val values=if(word.isEmpty())lexicon.nextWords(predLang,previous)
-            else lexicon.suggestions(predLang,word,
-                limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
-                previous=previous)
-        val spelling=if(word.length>=4 && prefs.getBoolean("grammarHints",true))
-            lexicon.correction(predLang,word) else null
-        val grammar=if(word.isNotEmpty() && prefs.getBoolean("grammarHints",true))
-            KeyPopGrammarRules.suggest(before,predLang) else null
-        bar.removeAllViews()
-        fun chipSuggestion(label:String,action:()->Unit) {
-            bar.addView(chip(label,onTap=action),
-                LinearLayout.LayoutParams(0,d(if(materialTopBar!=null)41 else 34),1f).apply{
-                    leftMargin=d(2);rightMargin=d(2)
-                })
-        }
-        fun completeWord(choice:String) {
-            val connection=currentInputConnection ?:return
-            val actual=Regex("[\\p{L}]+$").find(
-                connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
-            if(actual!=word)return
-            connection.beginBatchEdit()
-            if(actual.isNotEmpty())connection.deleteSurroundingText(actual.length,0)
-            connection.commitText(choice+" ",1)
-            connection.endBatchEdit()
-            lexicon.learn(predLang,choice)
-            refreshSuggestions()
-        }
-        if(word.isEmpty()) {
-            values.distinct().take(3).forEach{candidate->
-                chipSuggestion(candidate) {completeWord(candidate)}
-            }
+        val key="$language|$translatorOpen|$predLang|$before|$nextWords"
+        if(lastSuggestionContext==key)return
+        lastSuggestionContext=key
+        val token=++predictionGeneration
+        predictionPending?.let{predictionHandler.removeCallbacks(it)}
+        predictionPending=null
+        if(!show) {
+            bar.removeAllViews()
             return
         }
-        val alternatives=(listOfNotNull(spelling)+values)
-            .filterNot{it.equals(word,ignoreCase=true)}
-            .distinct().take(2)
-        if(grammar!=null) {
-            chipSuggestion("✓ "+grammar.label) {
-                val connection=currentInputConnection
-                val ending=connection?.getTextBeforeCursor(grammar.remove,0)?.toString().orEmpty()
-                if(ending.length==grammar.remove && before.endsWith(ending)) {
-                    connection?.beginBatchEdit()
-                    connection?.deleteSurroundingText(grammar.remove,0)
-                    connection?.commitText(grammar.replacement,1)
-                    connection?.endBatchEdit()
-                    refreshSuggestions()
+        // Immediately expose what the person typed; never show a stale
+        // *correction* from the previous word while the new word is entering.
+        if(word.isNotEmpty() && bar.childCount>=2) {
+            (bar.getChildAt(1) as? Button)?.text=word
+        }
+        val without=before.removeSuffix(word).trimEnd()
+        val previous=Regex("[\p{L}]+$").find(without)?.value.orEmpty()
+        val task=Runnable {
+            if(predictionExecutor.isShutdown)return@Runnable
+            predictionExecutor.execute {
+                val values=if(word.isEmpty())lexicon.nextWords(predLang,previous)
+                    else lexicon.suggestions(predLang,word,
+                        limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
+                        previous=previous)
+                val spelling=if(word.length>=3 && prefs.getBoolean("autoCorrect",true))
+                    lexicon.correction(predLang,word) else null
+                val grammar=if(word.isNotEmpty() && prefs.getBoolean("grammarHints",true))
+                    KeyPopGrammarRules.suggest(before,predLang) else null
+                predictionHandler.post {
+                    if(token!=predictionGeneration || lastSuggestionContext!=key ||
+                        bar!==suggestionBar || sensitive(currentInputEditorInfo))return@post
+                    renderSuggestions(bar,before,word,predLang,values,spelling,grammar)
                 }
             }
-        } else if(alternatives.isNotEmpty()) {
-            val first=alternatives.first()
-            chipSuggestion(first) {completeWord(first)}
         }
-        // The exact current token stays tappable in the central slot.
-        chipSuggestion(word) {completeWord(word)}
-        val last=if(grammar!=null) alternatives.firstOrNull()
-            else alternatives.getOrNull(1)
-        if(last!=null)chipSuggestion(last) {completeWord(last)}
+        predictionPending=task
+        predictionHandler.postDelayed(task,28L)
+    }
+    private fun renderSuggestions(bar:LinearLayout,before:String,word:String,
+        predLang:Int,values:List<String>,spelling:String?,grammar:KeyPopGrammarFix?) {
+        val size=prefs.getInt("suggestionFont",17).coerceIn(12,24)
+        while(bar.childCount<3) {
+            val button=chip(""){}
+            button.textSize=size.toFloat()
+            button.setSingleLine(true)
+            button.ellipsize=android.text.TextUtils.TruncateAt.END
+            bar.addView(button,LinearLayout.LayoutParams(0,d(
+                prefs.getInt("suggestionHeight",45).coerceIn(38,64)),1f).apply {
+                leftMargin=d(2);rightMargin=d(2)
+            })
+        }
+        fun replaceWord(choice:String) {
+            val connection=currentInputConnection ?:return
+            val actual=Regex("[\p{L}]+$").find(
+                connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
+            if(actual!=word || sensitive(currentInputEditorInfo))return
+            connection.beginBatchEdit()
+            if(actual.isNotEmpty())connection.deleteSurroundingText(actual.length,0)
+            val replacement=KeyPopTypingRules.preservesCase(actual,choice)
+            connection.commitText(replacement+" ",1)
+            connection.endBatchEdit()
+            lexicon.learn(predLang,replacement)
+            refreshSuggestions()
+        }
+        val offers=mutableListOf<Pair<String,()->Unit>>()
+        if(word.isBlank()) {
+            values.distinct().take(3).forEach {candidate ->
+                offers.add(candidate to {replaceWord(candidate)})
+            }
+        } else {
+            val alternatives=(listOfNotNull(spelling)+values)
+                .filterNot{it.equals(word,ignoreCase=true)}
+                .distinct().take(2)
+            if(grammar!=null) {
+                offers.add(("✓ "+grammar.label) to {
+                    val conn=currentInputConnection
+                    val actual=conn?.getTextBeforeCursor(grammar.remove,0)?.toString().orEmpty()
+                    if(actual.length==grammar.remove && before.endsWith(actual)) {
+                        conn?.beginBatchEdit()
+                        conn?.deleteSurroundingText(grammar.remove,0)
+                        conn?.commitText(grammar.replacement,1)
+                        conn?.endBatchEdit()
+                        refreshSuggestions()
+                    }
+                })
+            } else alternatives.firstOrNull()?.let {first->
+                offers.add(KeyPopTypingRules.preservesCase(word,first) to {replaceWord(first)})
+            }
+            offers.add(word to {replaceWord(word)})
+            val last=if(grammar!=null)alternatives.firstOrNull() else alternatives.getOrNull(1)
+            last?.let{candidate->
+                offers.add(KeyPopTypingRules.preservesCase(word,candidate) to {
+                    replaceWord(candidate)
+                })
+            }
+        }
+        for(i in 0..2) {
+            val button=bar.getChildAt(i) as Button
+            val offer=offers.getOrNull(i)
+            if(offer==null) {
+                button.visibility=View.GONE
+            } else {
+                button.visibility=View.VISIBLE
+                button.textSize=size.toFloat()
+                button.text=offer.first
+                button.setOnClickListener {tapFeedback(button);offer.second.invoke()}
+            }
+        }
     }
     /** Re-label only changed Latin keys instead of rebuilding the full IME. */
     private fun updateShiftKeys() {
