@@ -181,6 +181,7 @@ class KeyPopModelManagerActivity:Activity() {
         progress.isIndeterminate=active&&pct<0
         if(pct>=0)progress.progress=pct.coerceIn(0,100)
         progressLabel.text=when {
+            active && pct<0 -> "Preparing the selected packs…"
             active -> "$pct% complete · downloading / resuming"
             finished && state.getBoolean("failed",false) -> "Paused at $pct% · tap Download to resume"
             finished -> "Download completed · 100%"
