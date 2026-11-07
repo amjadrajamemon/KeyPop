@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 23
-        versionName = "1.0.7-rc8-responsive-input-selected-packs" 
+        versionCode = 24
+        versionName = "1.0.8-rc9-smart-input-resume-screenshot" 
     }
     splits {
         abi {
@@ -24,8 +24,8 @@ android {
     }
     buildTypes {
         debug {
-            // Isolate RC8 from differently signed RC6 debug APKs; no uninstall needed.
-            applicationIdSuffix = ".previewv107"
+            // Isolate RC9 from differently signed RC6 debug APKs; no uninstall needed.
+            applicationIdSuffix = ".previewv108"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
