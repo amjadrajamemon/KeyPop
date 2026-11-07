@@ -21,7 +21,7 @@ class KeyPopLexicon(context:Context) {
         " office project report approved approval good better best need available working"+
         " important confirm really great fine welcome home family friend name number"+
         " account password secure please help write translate english urdu sindhi"+
-        " keyboard theme layout colors clipboard image screenshot copied saved history").split(Regex("\\s+")).toSet()
+        " keyboard theme layout colors clipboard image screenshot screenshots copied saved history word words should more").split(Regex("\\s+")).toSet()
     private val urdu=("میں ہم آپ تم وہ یہ ہے ہیں تھا تھی تھے ہوں کیوں کیا کہاں کیسے کب اور"+
         " نہیں جی ہاں شکریہ بہت سلام علیکم صبح شام رات اچھا ٹھیک کام کل آج ابھی"+
         " معلوم اطلاع دوست خاندان دن وقت اہم درخواست رپورٹ دفتر کے کو کا کی"+
@@ -73,6 +73,7 @@ class KeyPopLexicon(context:Context) {
         KeyPopTypingIntelligence.nextWords(lang,previous)
     fun correction(lang:Int,word:String):String? {
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+        if(word.trim().lowercase(Locale.ROOT) in words(lang))return null
         return KeyPopTypingIntelligence.correction(lang,word,learned+words(lang))
     }
     fun glide(lang:Int,path:List<String>):String? {
