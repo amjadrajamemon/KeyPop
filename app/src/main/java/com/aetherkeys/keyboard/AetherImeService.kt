@@ -953,7 +953,7 @@ class AetherImeService : InputMethodService() {
                 refreshSuggestions()
                 true
             }
-            if(label=="⌫" && !isNumeric)installRepeatingBackspace(button)
+            if(label=="⌫")installRepeatingBackspace(button)
             val glidable=!symbols && language==0 && label.length==1 &&
                 label[0].isLetter() && prefs.getBoolean("glide",false)
             if(variants.isNotEmpty() || glidable)
@@ -1276,7 +1276,12 @@ class AetherImeService : InputMethodService() {
         if(lastSuggestionContext==key)return
         lastSuggestionContext=key
         if(!showPredictions) {bar.removeAllViews();return}
-        val predLang=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
+        val predLang=when {
+            translatorOpen && translateSourceChoice in 0..2 -> translateSourceChoice
+            translatorOpen && word.isNotBlank() -> KeyPopTextLanguage.detect(word,language)
+            language!=0 && prefs.getBoolean("romanMode",false) -> 0
+            else -> language
+        }
         val without=before.removeSuffix(word).trimEnd()
         val previous=Regex("[\\p{L}]+$").find(without)?.value.orEmpty()
         val values=if(word.isEmpty())lexicon.nextWords(predLang,previous)
