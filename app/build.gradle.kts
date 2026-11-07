@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 25
-        versionName = "1.0.9-rc10-gboard-wordbank-translation-send" 
+        versionCode = 26
+        versionName = "1.0.10-rc11-gboard-wordbank-translation-send" 
     }
     splits {
         abi {
@@ -24,8 +24,8 @@ android {
     }
     buildTypes {
         debug {
-            // Keep RC10 preview isolated from separately signed RC9 debug APKs; no uninstall needed.
-            applicationIdSuffix = ".previewv109"
+            // Keep RC11 preview isolated from separately signed RC9 debug APKs; no uninstall needed.
+            applicationIdSuffix = ".previewv110"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
