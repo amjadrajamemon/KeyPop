@@ -441,10 +441,14 @@ class MainActivity:Activity() {
             downloadProgress=ProgressBar(this@MainActivity,null,
                 android.R.attr.progressBarStyleHorizontal).apply{max=100;visibility=View.GONE}
             addView(downloadProgress)
-            addView(text("Automatic target language",14f,ink,true))
+            addView(text("Target for optional Translate on Send",14f,ink,true))
+            addView(text("Choose a target explicitly. The Send key stays normal "+
+                "until you also enable Translate on Send. Old saved settings do "+
+                "not automatically enable translation.",12f,muted))
             listOf("English","اردو","سنڌي").forEachIndexed{index,label->
                 action(this,label){
-                    prefs.edit().putInt("autoTarget",index).apply()
+                    prefs.edit().putInt("autoTarget",index)
+                        .putBoolean("autoTargetConfigured",true).apply()
                     Toast.makeText(this@MainActivity,"Target: "+label,Toast.LENGTH_SHORT).show()
                 }
             }
@@ -478,7 +482,10 @@ class MainActivity:Activity() {
             action(this,"Open Google Translate external alternative"){
                 startActivity(Intent(this@MainActivity,KeyPopGoogleTranslateActivity::class.java))
             }
-            option(this,"Translate on Send","autoTranslate")
+            option(this,"Translate automatically when pressing Send (opt-in)",
+                "translateOnSendExplicit",false)
+            addView(text("Requires a target language selected above. The previous "+
+                "Translate on Send preference is ignored for safety.",12f,muted))
             option(this,"Use Enter to send when chat app has no Send action",
                 "sendViaEnterFallback",false)
             addView(text("Direct Send requires an app-supported keyboard Send action. "+

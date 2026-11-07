@@ -10,6 +10,13 @@ object KeyPopTranslationSendPolicy {
             if(panelOpen)selectedTarget.coerceIn(0,2) else settingsTarget.coerceIn(0,2)
         )
 
+    /** A legacy Translate-on-Send setting is NEVER enough to authorize
+     * changing the user's message. The user must explicitly enable the new
+     * setting AND choose a target, or open the translator for this message. */
+    fun mayTranslateOnSend(panelOpen:Boolean,explicitlyEnabled:Boolean,
+                           targetConfirmed:Boolean):Boolean =
+        panelOpen || (explicitlyEnabled && targetConfirmed)
+
     /** Only a messaging field's advertised SEND action can be treated as an
      * automatic send. Search/Go must never silently submit a translated chat. */
     fun supportsSendAction(action:Int):Boolean =

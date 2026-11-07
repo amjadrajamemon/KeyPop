@@ -1108,7 +1108,7 @@ class AetherImeService : InputMethodService() {
             val show=when {
                 label=="SPACE" -> if(language==0) "English" else languages[language]
                 label=="☺," -> "☺"
-                label=="↵" && prefs.getBoolean("autoTranslate",false) &&
+                label=="↵" && mayTranslateOnSend() &&
                     !sensitive(currentInputEditorInfo) -> "⇄ Send"
                 shift && (language==0 || prefs.getBoolean("romanMode",false)) &&
                     label.length==1 && label[0].isLetter() -> label.uppercase(Locale.ROOT)
@@ -1351,7 +1351,14 @@ class AetherImeService : InputMethodService() {
             }
         }
     }
+    private fun mayTranslateOnSend():Boolean =
+        KeyPopTranslationSendPolicy.mayTranslateOnSend(
+            translatorOpen,
+            prefs.getBoolean("translateOnSendExplicit",false),
+            prefs.getBoolean("autoTargetConfigured",false))
+
     private fun translateBeforeSend() {
+        if(!mayTranslateOnSend())return
         val input=currentInputConnection ?:return
         val sendingDraft=translatorOpen && translateDraftMode
         val selected=input.getSelectedText(0)?.toString()?.takeIf{it.isNotBlank()}
@@ -1365,7 +1372,7 @@ class AetherImeService : InputMethodService() {
         val detected=KeyPopTextLanguage.detect(source,language)
         val directionSelection=KeyPopTranslationSendPolicy.select(
             translatorOpen,translateSourceChoice,translateTarget,detected,
-            prefs.getInt("autoTarget",if(language==0)1 else 0))
+            prefs.getInt("autoTarget",0))
         val from=directionSelection.source
         val to=directionSelection.target
         if(from==to) {
@@ -1836,7 +1843,7 @@ class AetherImeService : InputMethodService() {
             "?123" -> { symbols=true;draw() }
             "ABC" -> { symbols=false;draw() }
             "↵" -> {
-                if((translatorOpen || prefs.getBoolean("autoTranslate",false)) &&
+                if(mayTranslateOnSend() &&
                     !sensitive(currentInputEditorInfo) && !numeric(currentInputEditorInfo)) {
                     translateBeforeSend()
                     return
