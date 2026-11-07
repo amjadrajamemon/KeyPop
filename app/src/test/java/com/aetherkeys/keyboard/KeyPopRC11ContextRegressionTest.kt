@@ -16,8 +16,8 @@ class KeyPopRC11ContextRegressionTest {
         assertEquals("worried",ranked.first())
         assertTrue("Worrying should be in the top suggestions: $ranked",
             ranked.take(3).contains("worrying"))
-        assertFalse("Bare worry is ungrammatical in this context: $ranked",
-            ranked.take(3).contains("worry"))
+        assertFalse("Bare worry must be excluded in this context: $ranked",
+            ranked.contains("worry"))
     }
     @Test fun beAuxiliaryDoesNotBiasBareInfinitivesAcrossAllContexts() {
         assertTrue(KeyPopPredictionContext.score(
