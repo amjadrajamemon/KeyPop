@@ -44,6 +44,7 @@ class AetherImeService : InputMethodService() {
     private val clipStore by lazy { ClipStore(this) }
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
+    private var materialTopBar:LinearLayout?=null
     private val keyViews=ArrayList<Pair<Button,String>>()
     private val imagePreviewExecutor=Executors.newFixedThreadPool(2)
     private val clipboard by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
@@ -198,6 +199,16 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onCreateInputView():View {
+        // A teal Gboard theme must not silently keep the unrelated Custom geometry.
+        // Keep explicit non-Gboard presets; migrate legacy teal theme once.
+        if(!prefs.getBoolean("gboardLayoutMigration20261107",false)) {
+            val oldPreset=prefs.getInt("keyboardPreset",KeyboardPresetCatalog.CUSTOM)
+            if(!prefs.contains("keyboardPreset") ||
+                (oldPreset==KeyboardPresetCatalog.CUSTOM &&
+                    prefs.getInt("theme",0)==10))
+                KeyboardPresetCatalog.apply(this,KeyboardPresetCatalog.MATERIAL)
+            prefs.edit().putBoolean("gboardLayoutMigration20261107",true).apply()
+        }
         language=prefs.getInt("language",0).coerceIn(0,2)
         floatingShell=FrameLayout(this).apply{
             setBackgroundColor(Color.TRANSPARENT)
@@ -525,6 +536,8 @@ class AetherImeService : InputMethodService() {
         val root=current ?: return
         characterStrip?.dismiss()
         root.removeAllViews()
+        suggestionBar=null
+        materialTopBar=null
         keyViews.clear()
         renderedRows.clear()
         val s=palette()
@@ -598,6 +611,7 @@ class AetherImeService : InputMethodService() {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             root.addView(top,LinearLayout.LayoutParams(-1,d(43)))
+            materialTopBar=top
         } else {
         val toolbar=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL
@@ -819,7 +833,7 @@ class AetherImeService : InputMethodService() {
         }
         if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !translatorOpen && !emojiOpen) {
             val bar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-            root.addView(bar,LinearLayout.LayoutParams(-1,d(35)))
+            root.addView(bar,LinearLayout.LayoutParams(-1,d(if(materialToolbar)43 else 35)))
             suggestionBar=bar
             refreshSuggestions()
         }
@@ -868,7 +882,11 @@ class AetherImeService : InputMethodService() {
         if(KeyPopRowParity.hasNumberRow(prefs.getBoolean("numberRow",true),symbols,numeric(currentInputEditorInfo)))
             addRow(root, KeyPopRowParity.digits,keyHeight-5)
         rows.forEachIndexed { i, row ->
-            val keys=if(i==rows.lastIndex && !symbols && !isNumeric) listOf("⇧")+row+listOf("⌫") else row
+            val keys=when {
+                i==rows.lastIndex && !symbols && !isNumeric -> listOf("⇧")+row+listOf("⌫")
+                i==rows.lastIndex && symbols -> row+listOf("⌫")
+                else -> row
+            }
             val customRow=if(!isNumeric && !symbols && !extended && !emojiSearch)i else -1
             val customLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
             addRow(root,keys,keyHeight,layoutRow=customRow,layoutLanguage=customLanguage)
@@ -910,11 +928,15 @@ class AetherImeService : InputMethodService() {
                 label,KeyPopRowParity.hasNumberRow(
                     prefs.getBoolean("numberRow",true),symbols,numeric(currentInputEditorInfo)))
             val actualHint=if(prefs.getBoolean("hints",true))variants.firstOrNull() else null
-            // A number row and a second numeric hint row create visual duplication.
-            val caption=if(!material && !symbols && actualHint!=null && label.length==1)
+            // The digit row is a single large digit per key: alternate numbers
+            // remain accessible on hold, never as a second visible caption.
+            val letterHint=label.length==1 && label[0].isLetter() &&
+                actualHint!=null && actualHint!=label
+            val caption=if(!material && !symbols && letterHint)
                 show+"\n"+actualHint else show
             val button=makeKey(caption,heavy,weight) { press(label) }
-            if(material && label.length==1 && actualHint!=null && button is KeyPopHintKey) {
+            if(material && label.length==1 && label[0].isLetter() &&
+                actualHint!=null && actualHint!=label && button is KeyPopHintKey) {
                 button.hintText=actualHint
                 button.hintColor=palette().ink
             }
@@ -1181,71 +1203,83 @@ class AetherImeService : InputMethodService() {
         })
     }
 
+    /** One live prediction surface, sharing the Gboard-style toolbar slot. */
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
         val input=currentInputConnection ?:return
-        if(sensitive(currentInputEditorInfo)||numeric(currentInputEditorInfo))return
+        if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo)) {
+            bar.removeAllViews()
+            bar.visibility=View.GONE
+            materialTopBar?.visibility=View.VISIBLE
+            return
+        }
         val before=input.getTextBeforeCursor(140,0)?.toString().orEmpty()
         val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
+        // Show quick tools until typing starts. Do not waste an extra row on
+        // permanent generic 'I / The / Please' suggestions.
+        if(materialTopBar!=null) {
+            materialTopBar?.visibility=if(word.isEmpty())View.VISIBLE else View.GONE
+            bar.visibility=if(word.isEmpty())View.GONE else View.VISIBLE
+            if(word.isEmpty()) { bar.removeAllViews();return }
+        } else bar.visibility=View.VISIBLE
         val predLang=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
         val without=before.removeSuffix(word).trimEnd()
         val previous=Regex("[\\p{L}]+$").find(without)?.value.orEmpty()
-        val values=if(word.isBlank())lexicon.nextWords(predLang,previous)
+        val values=if(word.isEmpty())lexicon.nextWords(predLang,previous)
             else lexicon.suggestions(predLang,word,previous=previous)
-        val grammar=if(prefs.getBoolean("grammarHints",true))
-            KeyPopGrammarRules.suggest(before,predLang) else null
         val spelling=if(word.length>=4 && prefs.getBoolean("grammarHints",true))
             lexicon.correction(predLang,word) else null
+        val grammar=if(word.isNotEmpty() && prefs.getBoolean("grammarHints",true))
+            KeyPopGrammarRules.suggest(before,predLang) else null
         bar.removeAllViews()
-        var count=0
-        fun suggestion(label:String,select:()->Unit) {
-            bar.addView(chip(label,onTap=select),
-                LinearLayout.LayoutParams(0,d(34),1f).apply{
+        fun chipSuggestion(label:String,action:()->Unit) {
+            bar.addView(chip(label,onTap=action),
+                LinearLayout.LayoutParams(0,d(if(materialTopBar!=null)41 else 34),1f).apply{
                     leftMargin=d(2);rightMargin=d(2)
                 })
-            count++
         }
-        if(grammar!=null) suggestion("✓ "+grammar.label) {
-            val fresh=currentInputConnection ?:return@suggestion
-            val ending=fresh.getTextBeforeCursor(grammar.remove,0)?.toString().orEmpty()
-            if(ending.length==grammar.remove &&
-                before.endsWith(ending)) {
-                fresh.beginBatchEdit()
-                fresh.deleteSurroundingText(grammar.remove,0)
-                fresh.commitText(grammar.replacement,1)
-                fresh.endBatchEdit()
-                refreshSuggestions()
+        fun completeWord(choice:String) {
+            val connection=currentInputConnection ?:return
+            val actual=Regex("[\\p{L}]+$").find(
+                connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
+            if(actual!=word)return
+            connection.beginBatchEdit()
+            if(actual.isNotEmpty())connection.deleteSurroundingText(actual.length,0)
+            connection.commitText(choice+" ",1)
+            connection.endBatchEdit()
+            lexicon.learn(predLang,choice)
+            refreshSuggestions()
+        }
+        if(word.isEmpty()) {
+            values.distinct().take(3).forEach{candidate->
+                chipSuggestion(candidate) {completeWord(candidate)}
             }
+            return
         }
-        if(spelling!=null && spelling!=word && count<3)
-            suggestion("✓ "+spelling) {
-                val current=currentInputConnection ?:return@suggestion
-                val actual=current.getTextBeforeCursor(word.length,0)?.toString().orEmpty()
-                if(actual==word) {
-                    current.beginBatchEdit()
-                    current.deleteSurroundingText(word.length,0)
-                    current.commitText(spelling+" ",1)
-                    current.endBatchEdit()
+        val alternatives=(listOfNotNull(spelling)+values)
+            .filterNot{it.equals(word,ignoreCase=true)}
+            .distinct().take(2)
+        if(grammar!=null) {
+            chipSuggestion("✓ "+grammar.label) {
+                val connection=currentInputConnection
+                val ending=connection?.getTextBeforeCursor(grammar.remove,0)?.toString().orEmpty()
+                if(ending.length==grammar.remove && before.endsWith(ending)) {
+                    connection?.beginBatchEdit()
+                    connection?.deleteSurroundingText(grammar.remove,0)
+                    connection?.commitText(grammar.replacement,1)
+                    connection?.endBatchEdit()
                     refreshSuggestions()
                 }
             }
-        for(candidate in values.distinct()) {
-            if(count>=3)break
-            if(candidate==spelling)continue
-            suggestion(candidate) {
-                val current=currentInputConnection ?:return@suggestion
-                val actual=Regex("[\\p{L}]+$").find(
-                    current.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
-                if(actual==word) {
-                    current.beginBatchEdit()
-                    if(actual.isNotEmpty())current.deleteSurroundingText(actual.length,0)
-                    current.commitText(candidate+" ",1)
-                    current.endBatchEdit()
-                    lexicon.learn(predLang,candidate)
-                    refreshSuggestions()
-                }
-            }
+        } else if(alternatives.isNotEmpty()) {
+            val first=alternatives.first()
+            chipSuggestion(first) {completeWord(first)}
         }
+        // The exact current token stays tappable in the central slot.
+        chipSuggestion(word) {completeWord(word)}
+        val last=if(grammar!=null) alternatives.firstOrNull()
+            else alternatives.getOrNull(1)
+        if(last!=null)chipSuggestion(last) {completeWord(last)}
     }
     private fun press(value:String) {
         if(emojiOpen && emojiSearch) {

@@ -291,7 +291,11 @@ class MainActivity:Activity() {
                 }
                 item.addView(label,LinearLayout.LayoutParams(0,-2,1f))
                 item.setOnClickListener {
-                    prefs.edit().putInt("theme",index)
+                    // Choosing the Gboard-style skin must select its matching
+                    // key geometry and toolbar instead of the Custom preset.
+                    if(index==KeyboardPresetCatalog.byId(KeyboardPresetCatalog.MATERIAL)?.skin)
+                        KeyboardPresetCatalog.apply(this@MainActivity,KeyboardPresetCatalog.MATERIAL)
+                    else prefs.edit().putInt("theme",index)
                         .putInt("keyboardPreset",KeyboardPresetCatalog.CUSTOM)
                         .remove("customAccent").apply()
                     Toast.makeText(this@MainActivity,"Applied: "+skin.name,Toast.LENGTH_SHORT).show()

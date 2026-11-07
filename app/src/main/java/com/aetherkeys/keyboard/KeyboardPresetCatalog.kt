@@ -55,14 +55,12 @@ object KeyboardPresetCatalog {
         return editor.commit()
     }
     fun foot(id:Int, symbols:Boolean):List<String> {
-        if(symbols)return listOf("ABC","🌐",",","SPACE",".","?","↵","⌫")
-        if(id==MATERIAL)return listOf("?123","☺,","🌐","SPACE",".","↵")
-        return when(id){
-            GESTURE ->listOf("?123",",","🌐","SPACE",".","?","↵","⌫")
-            FACETED ->listOf("?123","🌐",",","SPACE",".","?","↵","⌫")
-            ONE_UI ->listOf("?123",",","🌐","SPACE",".","?","↵","⌫")
-            else ->listOf("?123","🌐",",","SPACE",".","?","↵","⌫")
-        }
+        // Backspace belongs to the last typing row, never a second footer key.
+        // Punctuation/symbols are available on hold of the period key.
+        if(symbols)return listOf("ABC","🌐",",","SPACE",".","↵")
+        if(id==MATERIAL || id==CUSTOM)
+            return listOf("?123","☺,","🌐","SPACE",".","↵")
+        return listOf("?123",",","🌐","SPACE",".","↵")
     }
     fun keyWeight(id:Int,label:String):Float = when(label){
         "SPACE" -> when(id) { MATERIAL->4.43f;FLOW->5.4f;GESTURE->5.8f;FACETED->5f;else->4.3f }

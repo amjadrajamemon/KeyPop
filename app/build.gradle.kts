@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 21
-        versionName = "1.0.5-rc6-settings-one-tap-packs" 
+        versionCode = 22
+        versionName = "1.0.6-rc7-gboard-live-predictions" 
     }
     splits {
         abi {
@@ -24,8 +24,8 @@ android {
     }
     buildTypes {
         debug {
-            // RC6 uses a distinct preview package to avoid CI-generated debug signing conflicts. Do not uninstall earlier builds.
-            applicationIdSuffix = ".previewv105"
+            // Isolate RC7 from differently signed RC6 debug APKs; no uninstall needed.
+            applicationIdSuffix = ".previewv106"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
