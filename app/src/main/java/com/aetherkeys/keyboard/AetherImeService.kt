@@ -1446,7 +1446,9 @@ class AetherImeService : InputMethodService() {
         val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
         val nextWords=prefs.getBoolean("predictNext",true)
         val show=word.isNotEmpty() || (nextWords && before.isNotBlank())
-        materialTopBar?.visibility=if(show)View.GONE else View.VISIBLE
+        materialTopBar?.visibility=if(KeyPopPredictionContext.toolbarVisible(
+            prefs.getBoolean("alwaysShowToolbar",true),show))
+            View.VISIBLE else View.GONE
         bar.visibility=if(show)View.VISIBLE else View.GONE
         val predLang=when {
             translatorOpen && translateSourceChoice in 0..2 -> translateSourceChoice
@@ -1477,7 +1479,7 @@ class AetherImeService : InputMethodService() {
                 val values=if(word.isEmpty())lexicon.nextWords(predLang,previous)
                     else lexicon.suggestions(predLang,word,
                         limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
-                        previous=previous)
+                        previous=previous,beforeCursor=before)
                 // The Auto-correct switch governs replacements only;
                 // spelling suggestions remain available when it is OFF.
                 val spelling=if(word.length>=3)
@@ -1515,16 +1517,21 @@ class AetherImeService : InputMethodService() {
             if(actual!=word || sensitive(currentInputEditorInfo))return
             connection.beginBatchEdit()
             if(actual.isNotEmpty())connection.deleteSurroundingText(actual.length,0)
-            val replacement=KeyPopTypingRules.preservesCase(actual,choice)
-            connection.commitText(replacement+" ",1)
+            val replacement=KeyPopPredictionContext.wordCase(choice,actual,before)
+            val after=connection.getTextAfterCursor(3,0)?.toString().orEmpty()
+            val committed=KeyPopPredictionContext.committedWord(replacement,after)
+            val accepted=connection.commitText(committed,1)
             connection.endBatchEdit()
+            if(!accepted)return
             lexicon.learn(predLang,replacement)
             refreshSuggestions()
         }
         val offers=mutableListOf<Pair<String,()->Unit>>()
         if(word.isBlank()) {
             values.distinct().take(3).forEach {candidate ->
-                offers.add(candidate to {replaceWord(candidate)})
+                offers.add(KeyPopPredictionContext.wordCase(candidate,word,before) to {
+                    replaceWord(candidate)
+                })
             }
         } else {
             val alternatives=(listOfNotNull(spelling)+values)
@@ -1543,12 +1550,12 @@ class AetherImeService : InputMethodService() {
                     }
                 })
             } else alternatives.firstOrNull()?.let {first->
-                offers.add(KeyPopTypingRules.preservesCase(word,first) to {replaceWord(first)})
+                offers.add(KeyPopPredictionContext.wordCase(first,word,before) to {replaceWord(first)})
             }
-            offers.add(word to {replaceWord(word)})
+            offers.add(KeyPopPredictionContext.wordCase(word,word,before) to {replaceWord(word)})
             val last=if(grammar!=null)alternatives.firstOrNull() else alternatives.getOrNull(1)
             last?.let{candidate->
-                offers.add(KeyPopTypingRules.preservesCase(word,candidate) to {
+                offers.add(KeyPopPredictionContext.wordCase(candidate,word,before) to {
                     replaceWord(candidate)
                 })
             }
