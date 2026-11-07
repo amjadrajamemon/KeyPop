@@ -1,0 +1,48 @@
+name: Correct KeyPop 1.0 offline-Sindhi release notes
+on:
+  push:
+    branches: [feature/v1.0.0-offline-sindhi-consolidated]
+    paths:
+      - .github/workflows/keypop-rc-release-notes.yml
+permissions:
+  contents: write
+jobs:
+  update-release-description:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Correct GitHub release status and Sindhi disclosure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/keypop-release-notes.md <<'NOTES'
+          # KeyPop 1.0.0 RC1 — Offline Sindhi Translation Android Preview
+
+          Three independent, on-device IndicTrans2 INT8 ONNX model bundles are now connected to the KeyPop keyboard translator:
+
+          - English to Sindhi in Arabic script (snd_Arab)
+          - Sindhi in Arabic script to English
+          - Direct Urdu to Sindhi and Sindhi to Urdu
+
+          The models are downloaded in one opt-in action, require approximately 978 MB of app-private storage plus headroom, and do not ship inside the APK. After installation, translation runs locally without a remote translation provider.
+
+          ## Automated validation completed
+          - Gradle Android debug compilation, unit tests, Android lint and five ABI APKs: PASSED.
+          - AOSP Android 35 emulator startup, language pack UI, advanced settings, keyboard service registration: PASSED.
+          - Three model bundles downloaded and verified as present via a real Android instrumentation test: PASSED.
+          - Wi-Fi and mobile data disabled, followed by six real non-phrasebook sentence translation tests (English/Sindhi/Urdu both directions): PASSED.
+
+          ## Limits and preview precautions
+          This is an Android DEBUG PREVIEW, not a fully quality-assured production app. The six automated translation cases prove the on-device inference path runs; they do not certify every phrase's linguistic accuracy. Physical-device performance, all Gboard visual details, voice input for Sindhi and speech-model availability are not fully validated. Offline Sindhi speech recognition is separate from offline text translation and is NOT bundled.
+
+          If upgrading from an older preview, this RC uses an isolated Android application ID and therefore is installed alongside older test versions. Open the app, enable and select KeyPop as keyboard, and use Language Packs to download the three models. Keep sufficient free storage and prefer Wi-Fi.
+
+          ARM64 suits most modern Android phones; Universal includes all supported ABIs. Five APK files are provided separately below.
+
+          Source and development tests: https://github.com/amjadrajamemon/KeyPop/pull/15
+          NOTES
+          gh release edit v1.0.0-rc1-preview --repo "$GH_REPO" \
+            --title "KeyPop 1.0 RC1 — Offline Sindhi Translation Preview" \
+            --notes-file /tmp/keypop-release-notes.md

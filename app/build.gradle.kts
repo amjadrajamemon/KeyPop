@@ -10,13 +10,40 @@ android {
         applicationId = "com.aetherkeys.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.0-visual-studio"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 21
+        versionName = "1.0.5-rc6-settings-one-tap-packs" 
     }
-    buildTypes { release { isMinifyEnabled = false } }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+    buildTypes {
+        debug {
+            // RC6 uses a distinct preview package to avoid CI-generated debug signing conflicts. Do not uninstall earlier builds.
+            applicationIdSuffix = ".previewv105"
+            versionNameSuffix = "-preview"
+        }
+        release { isMinifyEnabled = false }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+}
+
+
+dependencies {
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("androidx.core:core:1.15.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
