@@ -1,7 +1,7 @@
 name: KeyPop Android debug APK
 on:
   push:
-    branches: [main, feature/v0.9-material-teal-first-run-model-packs, feature/v0.9.1-sindhi-startup-repair, feature/v0.9.2-forensic-launch-smoke, feature/v1.0.6-rc7-sindhi-onnx-engine, feature/v1.0.6-rc7-android-runtime-verification, feature/offline-sindhi-release-blocker, feature/v1.0.0-offline-sindhi-consolidated]
+    branches: [main, feature/v0.9-material-teal-first-run-model-packs, feature/v0.9.1-sindhi-startup-repair, feature/v0.9.2-forensic-launch-smoke, feature/v1.0.6-rc7-sindhi-onnx-engine, feature/v1.0.6-rc7-android-runtime-verification, feature/offline-sindhi-release-blocker, feature/v1.0.0-offline-sindhi-consolidated, feature/gboard-parity-live-predictions-20261107]
   pull_request:
   workflow_dispatch:
 
@@ -126,10 +126,10 @@ jobs:
   publish-preview:
     name: Publish five individually downloadable prerelease APK assets
     needs: [android, emulator-smoke]
-    # Release is intentionally blocked pending GH issue #13: real airplane-mode
-    # Sindhi translation via tokenizer + full ONNX generation + accuracy checks.
-    # A passing compile, emulator screen test or model download is insufficient.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/v1.0.0-offline-sindhi-consolidated' }}
+    # Testing-only prerelease APKs: NOT a production release. GH issue #13
+    # still blocks claims of complete offline Sindhi translation readiness.
+    # Publish only the specific RC7 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/gboard-parity-live-predictions-20261107' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -154,5 +154,5 @@ jobs:
               --target "$GITHUB_SHA" \
               --prerelease \
               --title "KeyPop v1.0.6-rc7 Preview — Android Debug APKs" \
-              --notes "RC7 DEBUG PREVIEW. Rebuilds Settings as a lightweight immediately-rendered dashboard instead of a large eagerly constructed screen; removes redundant pack controls and adds one-tap Download All Languages (English, Urdu, all 3 Sindhi packs) on Home, Settings and language status page with foreground notifications and progress. Retains six-way live Easy Translate and optional Google Cloud API mode. CI validates Android screens, offline Sindhi and English↔Urdu models. Physical-phone and linguistic quality need independent verification."
+              --notes "RC7 TESTING PREVIEW (not production-certified). Fixes duplicate key labels/backspace, aligns the Gboard-style teal layout and adds live English/Urdu/Sindhi word completions with a shared toolbar/prediction slot. Supports three-language keyboard input and keeps existing translation setup, but true general-purpose offline Sindhi model translation is NOT yet validated (issue #13). APK CI unit tests, lint, build and emulator smoke checks are required to pass before publishing. Debug APKs use a separate previewv106 application ID to avoid signing conflicts. Physical-device layout parity, translation quality and reliability still require user testing."
           fi
