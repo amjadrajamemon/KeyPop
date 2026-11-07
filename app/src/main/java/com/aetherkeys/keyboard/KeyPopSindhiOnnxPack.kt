@@ -137,6 +137,21 @@ object KeyPopSindhiOnnxPack {
             connection.disconnect();part.delete();offset=0L
             connection=connect();status=connection.responseCode
         }
+        // A CDN must honor the requested starting byte. A mismatched range
+        // cannot be appended to the existing partial file.
+        if(status==206 && offset>0L) {
+            val range=connection.getHeaderField("Content-Range").orEmpty()
+            val start=Regex("bytes\\s+(\\d+)-\\d+/(?:\\d+|\\*)",
+                RegexOption.IGNORE_CASE).matchEntire(range)
+                ?.groupValues?.getOrNull(1)?.toLongOrNull()
+            if(start!=offset) {
+                connection.disconnect()
+                if(!part.delete())error("Cannot reset invalid resume range for "+name)
+                offset=0L
+                connection=connect()
+                status=connection.responseCode
+            }
+        }
         try {
             if(status!=200 && status!=206)
                 error("HTTP "+status+" downloading "+name)
