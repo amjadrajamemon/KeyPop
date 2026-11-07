@@ -153,10 +153,13 @@ object KeyPopTypingIntelligence {
                 keyboardDistance(prefix,word.take(prefix.length))
                 else 3
             if(!starts && edit>1)continue
+            val grammar=if(language==0)
+                KeyPopPredictionContext.score(beforeCursor,fragment,word) else 0
+            // A bare base verb after a strong "are you" context is an
+            // incompatible candidate, not merely a low-ranked suggestion.
+            if(grammar<=-200)continue
             candidates.add(Candidate(word,candidateScore(prefix,word,edit,
-                word in learned,word in contextual,wordTiers[word])+
-                if(language==0)KeyPopPredictionContext.score(beforeCursor,fragment,word)
-                else 0))
+                word in learned,word in contextual,wordTiers[word])+grammar))
         }
         return candidates.sortedWith(compareByDescending<Candidate>{it.score}
             .thenBy{it.text.length}.thenBy{it.text}).take(limit.coerceIn(1,8))
