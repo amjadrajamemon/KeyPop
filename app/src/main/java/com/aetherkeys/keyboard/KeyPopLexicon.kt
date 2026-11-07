@@ -105,7 +105,7 @@ class KeyPopLexicon(context:Context) {
     }
     fun suggestions(lang:Int,fragment:String,limit:Int=3,previous:String=""):List<String> {
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
-        val familiar=rankCandidates(fragment).takeIf { lang==0 }.orEmpty()
+        val familiar=if(lang==0)rankCandidates(fragment) else emptyList()
         val base=when(lang){1->urdu;2->sindhi;else->english}
         val dictionary=base.toList()+familiar.map {it.word}
         val tiers=if(lang==0)familiar.associate {it.word to it.tier} else emptyMap()
