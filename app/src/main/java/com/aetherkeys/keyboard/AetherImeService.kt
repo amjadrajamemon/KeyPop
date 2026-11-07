@@ -45,6 +45,10 @@ class AetherImeService : InputMethodService() {
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
     private var materialTopBar:LinearLayout?=null
+    private var lastSuggestionContext:String?=null
+    private val repeatHandler=Handler(Looper.getMainLooper())
+    private var repeatBackspace:Runnable?=null
+    private var didRepeatBackspace=false
     private val keyViews=ArrayList<Pair<Button,String>>()
     private val imagePreviewExecutor=Executors.newFixedThreadPool(2)
     private val clipboard by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
@@ -190,6 +194,7 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onDestroy() {
+        stopBackspaceRepeating()
         stopLiveTranslation()
         themeAnimator?.cancel();themeAnimator=null;liveBackground=null
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
@@ -240,6 +245,7 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onFinishInputView(finishingInput:Boolean) {
+        stopBackspaceRepeating()
         stopLiveTranslation()
         themeAnimator?.pause()
         KeyPopDiagnostics.flush(this)
@@ -250,6 +256,7 @@ class AetherImeService : InputMethodService() {
         val viewStart=SystemClock.elapsedRealtimeNanos()
         super.onStartInputView(info,restarting)
         stopLiveTranslation()
+        stopBackspaceRepeating()
         clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false;writingOpen=false
         googleEasyMode=false
         toolsOpen=false;resizeOpen=false
@@ -538,6 +545,7 @@ class AetherImeService : InputMethodService() {
         root.removeAllViews()
         suggestionBar=null
         materialTopBar=null
+        lastSuggestionContext=null
         keyViews.clear()
         renderedRows.clear()
         val s=palette()
@@ -831,7 +839,7 @@ class AetherImeService : InputMethodService() {
             showEmojiPanel(root)
             if(!emojiSearch)return
         }
-        if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !translatorOpen && !emojiOpen) {
+        if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !emojiOpen) {
             val bar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
             root.addView(bar,LinearLayout.LayoutParams(-1,d(if(materialToolbar)43 else 35)))
             suggestionBar=bar
@@ -945,20 +953,13 @@ class AetherImeService : InputMethodService() {
                 refreshSuggestions()
                 true
             }
-            if(label=="⌫" && prefs.getBoolean("wordDelete",true)) button.setOnLongClickListener {
-                tapFeedback(button)
-                val before=currentInputConnection?.getTextBeforeCursor(200,0)?.toString().orEmpty()
-                val match=Regex("[\\p{L}\\p{N}]+\\s*$").find(before)
-                currentInputConnection?.deleteSurroundingText(
-                    if(match!=null)before.length-match.range.first else 1,0)
-                true
-            }
+            if(label=="⌫" && !isNumeric)installRepeatingBackspace(button)
             val glidable=!symbols && language==0 && label.length==1 &&
                 label[0].isLetter() && prefs.getBoolean("glide",false)
             if(variants.isNotEmpty() || glidable)
                 installCharacterGesture(button,label,variants,glidable)
             button.contentDescription=when(label) {
-                "⌫" -> "Backspace. Hold to delete the previous word"
+                "⌫" -> "Backspace. Hold to delete faster, release to stop"
                 "⇧" -> "Shift. Double tap to lock uppercase"
                 "SPACE" -> "Spacebar. Hold to switch languages or slide to move cursor"
                 "↵" -> "Enter or app action"
@@ -983,6 +984,57 @@ class AetherImeService : InputMethodService() {
         renderedRows.add(row to (height-prefs.getInt("height",51).coerceIn(36,90)))
     }
     /** Slide on Space to move the caret; long press for an explicit language menu. */
+    /** Gboard-like deletion: tap removes one character, hold repeats and accelerates.
+     * Releasing/cancelling stops immediately, including in translation mode. */
+    private fun stopBackspaceRepeating() {
+        repeatBackspace?.let{repeatHandler.removeCallbacks(it)}
+        repeatBackspace=null
+        didRepeatBackspace=false
+    }
+    private fun installRepeatingBackspace(button:Button) {
+        button.setOnTouchListener { _,event->
+            when(event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    stopBackspaceRepeating()
+                    button.isPressed=true
+                    val ticker=object:Runnable {
+                        var repeats=0
+                        override fun run() {
+                            if(!button.isAttachedToWindow)return
+                            didRepeatBackspace=true
+                            currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
+                            repeats++
+                            // Avoid inflating suggestion views for every deleted character.
+                            if(repeats%5==0)refreshSuggestions()
+                            repeatHandler.postDelayed(this,when {
+                                repeats>34 -> 25L
+                                repeats>14 -> 40L
+                                else -> 75L
+                            })
+                        }
+                    }
+                    repeatBackspace=ticker
+                    repeatHandler.postDelayed(ticker,330L)
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    button.isPressed=false
+                    val repeated=didRepeatBackspace
+                    stopBackspaceRepeating()
+                    if(!repeated)press("⌫")
+                    else {refreshSuggestions();scheduleLiveTranslation(270)}
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    button.isPressed=false
+                    stopBackspaceRepeating()
+                    true
+                }
+                else->true
+            }
+        }
+    }
+
     private fun installSpaceGestures(button:Button) {
         var firstX=0f
         var lastX=0f
@@ -1347,7 +1399,7 @@ class AetherImeService : InputMethodService() {
                 refreshSuggestions()
             }
             "🌐" -> cycleLanguage()
-            "☺," ->{
+            "☺,","☺" ->{
                 if(!sensitive(currentInputEditorInfo)){
                     emojiOpen=true;clipsOpen=false;translatorOpen=false
                     draw()
