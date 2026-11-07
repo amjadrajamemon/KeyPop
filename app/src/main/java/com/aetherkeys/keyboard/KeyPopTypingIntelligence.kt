@@ -19,7 +19,35 @@ object KeyPopTypingIntelligence {
             "can" to listOf("you","we"),"happy" to listOf("birthday"),
             "looking" to listOf("forward"),"best" to listOf("regards"),
             "kind" to listOf("regards"),"how" to listOf("are","much"),
-            "let" to listOf("me"),"i" to listOf("am","will","have")),
+            "let" to listOf("me"),"i" to listOf("am","will","have"),
+            "it" to listOf("is","was","will"),
+            "we" to listOf("are","have","will"),
+            "they" to listOf("are","have","will"),
+            "you" to listOf("are","can","have"),
+            "are" to listOf("you","we","there"),
+            "is" to listOf("the","a","there"),
+            "this" to listOf("is","was","will"),
+            "the" to listOf("best","next","same"),
+            "please" to listOf("confirm","check","review"),
+            "i'm" to listOf("going","happy","ready"),
+            "could" to listOf("you","we"),
+            "would" to listOf("you","be"),
+            "can" to listOf("you","we","I"),
+            "do" to listOf("you","we"),
+            "want" to listOf("to","a"),
+            "need" to listOf("to","a"),
+            "going" to listOf("to"),
+            "how" to listOf("are","much","can"),
+            "what" to listOf("is","are","if"),
+            "when" to listOf("will","is","can"),
+            "where" to listOf("is","are"),
+            "should" to listOf("we","I"),
+            "will" to listOf("be","you","need"),
+            "have" to listOf("a","been","to"),
+            "thank" to listOf("you","you!"),
+            "best" to listOf("regards","wishes"),
+            "happy" to listOf("birthday","to"),
+            "good" to listOf("morning","evening","luck")),
         1 to mapOf(
             "براہ" to listOf("کرم"),"شکریہ" to listOf("بہت"),
             "السلام" to listOf("علیکم"),"آپ" to listOf("کا","کی","کے"),
@@ -45,13 +73,15 @@ object KeyPopTypingIntelligence {
         for(word in contextual+vocabulary) {
             if(!seen.add(word)||word==prefix)continue
             val starts=word.startsWith(prefix)
-            val distance=if(!starts && prefix.length>=4 && abs(word.length-prefix.length)<=1)
-                distanceAtMost2(prefix,word) else 3
+            // Fuzzy partial-word matching: a typo in 'keybor' can still suggest
+            // 'keyboard', rather than requiring a finished typo of equal length.
+            val distance=if(!starts && prefix.length>=3)
+                distanceAtMost2(prefix,word.take(prefix.length)) else 3
             if(!starts && distance>1)continue
-            val contextualBonus=if(word in contextual)45 else 0
-            val learnedBonus=if(word in learned)8 else 0
-            val score=(if(starts)70 else 10)+contextualBonus+learnedBonus-
-                abs(word.length-prefix.length)
+            val contextualBonus=if(word in contextual)48 else 0
+            val learnedBonus=if(word in learned)12 else 0
+            val score=(if(starts)95 else 54-distance*18)+contextualBonus+
+                learnedBonus-abs(word.length-prefix.length).coerceAtMost(12)
             matches.add(Candidate(word,score))
         }
         return matches.sortedWith(compareByDescending<Candidate>{it.score}
@@ -70,11 +100,21 @@ object KeyPopTypingIntelligence {
     }
     fun correction(language:Int,typed:String,learned:Set<String> = emptySet()):String? {
         val word=normalized(typed)
-        if(word.length<4 || word in learned || word in list(language))return null
-        return (list(language)+learned).asSequence().filter{
-            abs(it.length-word.length)<=1
-        }.filter{distanceAtMost2(word,it)==1}.take(8)
-            .minByOrNull{abs(it.length-word.length)}
+        if(word.length<3 || word in learned || word in list(language))return null
+        val common=if(language==0)mapOf(
+            "teh" to "the","adn" to "and","dont" to "don't","cant" to "can't",
+            "recieve" to "receive","definately" to "definitely",
+            "seperate" to "separate","langauge" to "language",
+            "thier" to "their","becuase" to "because",
+            "remeber" to "remember","wierd" to "weird") else emptyMap()
+        common[word]?.let{return it}
+        if(word.length<4)return null
+        return (list(language)+learned).asSequence()
+            .filter{abs(it.length-word.length)<=1}
+            .map{it to distanceAtMost2(word,it)}
+            .filter{it.second==1}.take(20)
+            .minWithOrNull(compareBy<Pair<String,Int>>{abs(it.first.length-word.length)}
+                .thenBy{it.first.length})?.first
     }
     fun contextualReplies(language:Int,text:String):List<String> {
         val source=normalized(text)
