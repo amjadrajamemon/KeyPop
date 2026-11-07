@@ -673,6 +673,10 @@ class AetherImeService : InputMethodService() {
         val secure=sensitive(currentInputEditorInfo)
         val isNumeric=numeric(currentInputEditorInfo)
         val materialToolbar=preset.id==KeyboardPresetCatalog.MATERIAL && !secure && !isNumeric
+        // Gboard-style arrangement: live translator above the persistent
+        // utilities row; compact preview updates without rebuilding keys.
+        if(translatorOpen && !secure && !isNumeric &&
+            prefs.getBoolean("compactTranslate",true))showTranslator(root)
         if(materialToolbar) {
             val top=LinearLayout(this).apply {
                 orientation=LinearLayout.HORIZONTAL
@@ -959,7 +963,8 @@ class AetherImeService : InputMethodService() {
         suggestionBar=null
         if(clipsOpen && !secure) { drawClips(root); return }
         if(writingOpen && !secure && !isNumeric) showWritingPanel(root)
-        if(translatorOpen && !secure && !isNumeric) showTranslator(root)
+        if(translatorOpen && !secure && !isNumeric &&
+            !prefs.getBoolean("compactTranslate",true)) showTranslator(root)
         if(emojiOpen && !secure && !isNumeric) {
             showEmojiPanel(root)
             if(!emojiSearch)return
@@ -1900,7 +1905,119 @@ class AetherImeService : InputMethodService() {
         },debounce)
     }
 
+    /** Gboard-style compact live translation panel above the always-available
+     * toolbar. It reads the active editor and never implies Google Cloud is free
+     * or a downloaded offline model; its credentials are user supplied. */
+    private fun showCompactTranslator(root:LinearLayout) {
+        val style=palette()
+        val container=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(d(5),d(5),d(5),d(4))
+            background=gradient(style.surface,style.background,11)
+        }
+        fun cell(label:String,weight:Float,click:()->Unit)=chip(label,onTap=click).apply {
+            textSize=11f;maxLines=1;isAllCaps=false
+        } to weight
+        fun add(row:LinearLayout,label:String,weight:Float,click:()->Unit) {
+            val pair=cell(label,weight,click)
+            row.addView(pair.first,LinearLayout.LayoutParams(0,d(33),pair.second).apply {
+                leftMargin=d(2);rightMargin=d(2)
+            })
+        }
+        val detected=KeyPopTextLanguage.detect(translateSource,language)
+        val from=if(translateSourceChoice<0)detected else translateSourceChoice
+        val top=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+        }
+        add(top,if(translateSourceChoice<0)"Detect language"
+            else languages[from],1.6f) {
+            translateSourceChoice=if(translateSourceChoice<0)
+                KeyPopEasyTranslateDirections.nextSource(-1,translateTarget)
+            else {
+                val next=KeyPopEasyTranslateDirections.nextSource(
+                    translateSourceChoice,translateTarget)
+                if(next<=translateSourceChoice)-1 else next
+            }
+            translateResult="";draw();scheduleLiveTranslation(60)
+        }
+        add(top,"⇄",.42f) {
+            translateSourceChoice=translateTarget
+            translateTarget=from
+            translateResult="";draw();scheduleLiveTranslation(60)
+        }
+        add(top,languages[translateTarget],1.25f) {
+            translateTarget=KeyPopEasyTranslateDirections.nextTarget(translateTarget,from)
+            translateResult="";draw();scheduleLiveTranslation(60)
+        }
+        add(top,"×",.40f) {
+            translatorOpen=false;stopLiveTranslation();draw()
+        }
+        container.addView(top)
+        val live=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+            setPadding(d(7),d(4),d(7),d(4))
+            background=gradient(style.background,style.surface,8)
+        }
+        val source=TextView(this).apply {
+            text=translateSource.ifBlank{"Type in the active app to translate"}
+            textSize=12f;setTextColor(style.ink)
+            maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
+        }
+        liveSourceView=source
+        live.addView(source,LinearLayout.LayoutParams(0,d(45),1f))
+        val arrow=TextView(this).apply {
+            text="→";textSize=18f;gravity=Gravity.CENTER;setTextColor(style.accent)
+        }
+        live.addView(arrow,LinearLayout.LayoutParams(d(22),d(45)))
+        val translated=TextView(this).apply {
+            text=translateResult.ifBlank{translationStatus.ifBlank{"Translation appears here"}}
+            textSize=12f;setTextColor(style.ink)
+            maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
+        }
+        liveResultView=translated
+        live.addView(translated,LinearLayout.LayoutParams(0,d(45),1f))
+        container.addView(live)
+        val actions=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+        }
+        add(actions,if(googleEasyMode)"Offline" else "✓ Offline",1f) {
+            googleEasyMode=false;translateResult=""
+            draw();scheduleLiveTranslation(50)
+        }
+        add(actions,if(googleEasyMode)"✓ Cloud" else "Cloud",.92f) {
+            googleEasyMode=true;translateResult=""
+            draw();scheduleLiveTranslation(50)
+        }
+        add(actions,"Copy",.67f) {
+            if(translateResult.isNotBlank()) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("KeyPop",translateResult))
+                Toast.makeText(this,"Translation copied",Toast.LENGTH_SHORT).show()
+            }
+        }
+        add(actions,"Replace",.87f) {
+            val current=currentInputConnection
+            val before=current?.getTextBeforeCursor(translateSource.length,0)?.toString()
+            if(translateResult.isNotBlank() && before==translateSource &&
+                !sensitive(currentInputEditorInfo)) {
+                current?.beginBatchEdit()
+                current?.deleteSurroundingText(translateSource.length,0)
+                current?.commitText(translateResult,1)
+                current?.endBatchEdit()
+                translatorOpen=false;stopLiveTranslation();draw()
+            }else Toast.makeText(this,
+                "Translation unavailable or input changed; nothing replaced",
+                Toast.LENGTH_SHORT).show()
+        }
+        add(actions,"Send",.65f){translateBeforeSend()}
+        container.addView(actions)
+        root.addView(container,LinearLayout.LayoutParams(-1,-2))
+    }
+
     private fun showTranslator(root:LinearLayout) {
+        if(prefs.getBoolean("compactTranslate",true)) {
+            showCompactTranslator(root)
+            return
+        }
         val style=palette()
         val panel=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
