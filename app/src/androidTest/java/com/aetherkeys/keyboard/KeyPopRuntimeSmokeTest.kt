@@ -29,8 +29,8 @@ class KeyPopRuntimeSmokeTest {
             scenario.onActivity { activity->
                 val text=visibleText(activity.window.decorView)
                 for(label in listOf("Keyboard Setup","Enable KeyPop keyboard",
-                    "Choose KeyPop as active keyboard","Language packs and model status",
-                    "Download All Languages")) {
+                    "Choose KeyPop as active keyboard",
+                    "Choose language packs · download selected directions")) {
                     assertTrue("Missing home control: "+label,text.contains(label))
                 }
             }
@@ -40,8 +40,9 @@ class KeyPopRuntimeSmokeTest {
         ActivityScenario.launch(KeyPopModelManagerActivity::class.java).use {scenario->
             scenario.onActivity {activity->
                 val text=visibleText(activity.window.decorView)
-                for(label in listOf("Language Pack Manager","ENGLISH","URDU",
-                    "SINDHI","Download All Languages")) {
+                for(label in listOf("Choose translation directions","English → Urdu",
+                    "Urdu → English","English → Sindhi","Sindhi → English",
+                    "Urdu → Sindhi","Sindhi → Urdu","Download selected packs")) {
                     assertTrue("Missing language pack control: "+label,text.contains(label))
                 }
                 assertTrue("Obsolete redundant Sindhi manual buttons still visible",
@@ -81,8 +82,8 @@ class KeyPopRuntimeSmokeTest {
                 clickable?.performClick()
                 assertTrue("Translation settings screen was blank",
                     find(activity.window.decorView,"TRANSLATION ENGINE")!=null)
-                assertTrue("Missing all-language action within translation",
-                    find(activity.window.decorView,"Download All Languages")!=null)
+                assertTrue("Missing direction-selective download action within translation",
+                    find(activity.window.decorView,"Choose and download translation packs")!=null)
             }
         }
     }
