@@ -73,8 +73,12 @@ class KeyPopRuntimeSmokeTest {
                     assertTrue("Missing visible settings section: "+label,
                         find(activity.window.decorView,label)!=null)
                 val translation=find(activity.window.decorView,"Translation")
-                assertTrue("Translation section does not open",translation?.hasOnClickListeners()==true)
-                translation?.performClick()
+                // The whole navigation card is the touch target, not only its text label.
+                var clickable:View?=translation
+                while(clickable!=null && !clickable.hasOnClickListeners())
+                    clickable=clickable.parent as? View
+                assertTrue("Translation section does not open",clickable!=null)
+                clickable?.performClick()
                 assertTrue("Translation settings screen was blank",
                     find(activity.window.decorView,"TRANSLATION ENGINE")!=null)
                 assertTrue("Missing all-language action within translation",
