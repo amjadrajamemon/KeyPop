@@ -75,7 +75,7 @@ class MainActivity:Activity() {
         val button=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
             gravity=Gravity.CENTER_VERTICAL
-            minHeight=dp(49)
+            minimumHeight=dp(49)
             setPadding(dp(12),dp(9),dp(12),dp(9))
             background=shape(0xFF244B60.toInt(),12,0xFF4D8494.toInt())
             isClickable=true;isFocusable=true
@@ -91,7 +91,7 @@ class MainActivity:Activity() {
         content.addView(View(this),LinearLayout.LayoutParams(1,dp(12)))
     }
     private fun option(parent:LinearLayout,title:String,key:String,default:Boolean=false){
-        val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;minHeight=dp(48)}
+        val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(48)}
         val label=text(title,14f,ink)
         row.addView(label,LinearLayout.LayoutParams(0,-2,1f))
         val toggle=Switch(this).apply{
