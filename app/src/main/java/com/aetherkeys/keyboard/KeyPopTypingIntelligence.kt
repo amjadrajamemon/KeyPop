@@ -167,8 +167,13 @@ object KeyPopTypingIntelligence {
     fun correction(language:Int,typed:String,learned:Set<String> = emptySet()):String? {
         val word=normalized(typed)
         if(language!=0 || word.length !in 3..32)return null
-        if(word in learned || word in list(language))return null
-        return commonTypos[word]
+        if(word in list(language))return null
+        // A previously *passively learned* typo must not suppress a high-
+        // confidence correction (an explicit personal dictionary entry will
+        // override this earlier, in KeyPopLexicon).
+        commonTypos[word]?.let{return it}
+        if(word in learned)return null
+        return null
     }
     fun contextualReplies(language:Int,text:String):List<String> {
         val source=normalized(text)
