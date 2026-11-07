@@ -24,8 +24,8 @@ android {
     }
     buildTypes {
         debug {
-            // RC6 uses a distinct preview package to avoid CI-generated debug signing conflicts. Do not uninstall earlier builds.
-            applicationIdSuffix = ".previewv105"
+            // Isolate RC7 from differently signed RC6 debug APKs; no uninstall needed.
+            applicationIdSuffix = ".previewv106"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }
