@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 28
-        versionName = "1.0.12-rc13-explicit-translation-consent" 
+        versionCode = 29
+        versionName = "1.0.13-rc14-install-safe-preview" 
     }
     splits {
         abi {
@@ -24,8 +24,12 @@ android {
     }
     buildTypes {
         debug {
-            // Keep RC11 preview isolated from separately signed RC9 debug APKs; no uninstall needed.
-            applicationIdSuffix = ".previewv110"
+            // RC11–RC13 used previewv110, but GitHub-hosted runners produced
+            // different ephemeral debug signing certificates per build.
+            // A distinct ID lets RC14 install without uninstalling the old
+            // keyboard or erasing its privately stored clipboard history.
+            // Future same-ID updates require a stable release signing key.
+            applicationIdSuffix = ".previewv114"
             versionNameSuffix = "-preview"
         }
         release { isMinifyEnabled = false }

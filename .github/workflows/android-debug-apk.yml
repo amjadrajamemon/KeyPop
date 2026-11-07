@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - feature/rc13-explicit-translation-consent-20261107
+      - feature/rc14-side-by-side-install-20261107
   pull_request:
   workflow_dispatch:
 
@@ -45,51 +45,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.12-rc13-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.13-rc14-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.12-rc13-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.12-rc13-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.13-rc14-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.13-rc14-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-all-five-apks
+          name: KeyPop-v1.0.13-rc14-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-instrumentation
-          path: dist/KeyPop-v1.0.12-rc13-androidTest.apk
+          name: KeyPop-v1.0.13-rc14-instrumentation
+          path: dist/KeyPop-v1.0.13-rc14-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-ARM64
-          path: dist/KeyPop-v1.0.12-rc13-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.13-rc14-ARM64
+          path: dist/KeyPop-v1.0.13-rc14-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-ARM32
-          path: dist/KeyPop-v1.0.12-rc13-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.13-rc14-ARM32
+          path: dist/KeyPop-v1.0.13-rc14-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-x86
-          path: dist/KeyPop-v1.0.12-rc13-x86-debug.apk
+          name: KeyPop-v1.0.13-rc14-x86
+          path: dist/KeyPop-v1.0.13-rc14-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-x86_64
-          path: dist/KeyPop-v1.0.12-rc13-x86_64-debug.apk
+          name: KeyPop-v1.0.13-rc14-x86_64
+          path: dist/KeyPop-v1.0.13-rc14-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-Universal
-          path: dist/KeyPop-v1.0.12-rc13-universal-debug.apk
+          name: KeyPop-v1.0.13-rc14-Universal
+          path: dist/KeyPop-v1.0.13-rc14-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -102,11 +102,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-x86_64
+          name: KeyPop-v1.0.13-rc14-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-instrumentation
+          name: KeyPop-v1.0.13-rc14-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -126,7 +126,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-emulator-forensic-evidence
+          name: KeyPop-v1.0.13-rc14-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -136,15 +136,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC13 parity branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc13-explicit-translation-consent-20261107' }}
+    # Publish only the specific RC14 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc14-side-by-side-install-20261107' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.12-rc13-all-five-apks
+          name: KeyPop-v1.0.13-rc14-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -153,8 +153,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.12-rc13-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc13-explicit-translation-consent-20261107" --jq '.commit.sha')"
+          TAG="v1.0.13-rc14-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc14-side-by-side-install-20261107" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
@@ -166,6 +166,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.12-rc13 Preview — Android Debug APKs" \
-              --notes "KeyPop RC13 DEBUG PREVIEW: Prevent unsolicited translation when pressing a normal chat Send key. Automatic translation requires BOTH an explicitly enabled Translate on Send setting and a target language newly selected in settings; legacy saved autoTranslate values are ignored. Opening the translation panel still allows manual translations in all supported directions. The original text remains visible in the chat editor. Includes RC12 improvements: dedicated screenshot preview, safe image paste/share, encrypted SQLite clipboard history with no arbitrary time/item count eviction, and search/pinning. Google Cloud still needs an authorized API key; offline Sindhi validation remains experimental. Preview/debug build, not Play production release."
+              --title "KeyPop v1.0.13-rc14 Preview — Android Debug APKs" \
+              --notes "KeyPop RC14 DEBUG PREVIEW: fixes Android INSTALL_FAILED_UPDATE_INCOMPATIBLE when installing over RC11–RC13 previews with different GitHub Actions-generated debug signing certificates. Package ID changed to com.aetherkeys.keyboard.previewv114 so RC14 installs side by side without removing the old package or its private clipboard/settings data. Android emulator CI installs RC13 first and checks BOTH package IDs remain installed after RC14 installation. Choose RC14 in Android keyboard settings after install; existing keyboard settings do not migrate automatically between package IDs. Future in-place upgrades require a stable privately stored signing key. Includes RC13 explicit translation consent and RC12 screenshot and clipboard fixes. Debug preview, not a Play production build."
           fi
