@@ -315,7 +315,9 @@ class MainActivity:Activity() {
         heading("Typing & Size","Adjust keyboard behavior and dimensions")
         addBlock{
             range(this,"Key height","height",36,90,51)
-            range(this,"Key size","font",12,24,17)
+            range(this,"Key font size","font",12,32,19)
+            range(this,"Suggestion font size","suggestionFont",12,24,17)
+            range(this,"Suggestion strip height","suggestionHeight",38,64,45)
             range(this,"Key spacing","spacing",1,10,4)
             range(this,"Keyboard width %","keyboardWidthPercent",65,100,100)
             range(this,"Key corner radius","round",3,26,13)
