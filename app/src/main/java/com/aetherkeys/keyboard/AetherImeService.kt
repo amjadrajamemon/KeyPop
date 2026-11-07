@@ -1300,10 +1300,11 @@ class AetherImeService : InputMethodService() {
         // Settings default. Formerly Send used autoTarget (Urdu) even while
         // the live panel explicitly displayed English → Sindhi.
         val detected=KeyPopTextLanguage.detect(source,language)
-        val from=if(translatorOpen && translateSourceChoice in 0..2)
-            translateSourceChoice else detected
-        val to=if(translatorOpen)translateTarget
-            else prefs.getInt("autoTarget",if(language==0)1 else 0).coerceIn(0,2)
+        val directionSelection=KeyPopTranslationSendPolicy.select(
+            translatorOpen,translateSourceChoice,translateTarget,detected,
+            prefs.getInt("autoTarget",if(language==0)1 else 0))
+        val from=directionSelection.source
+        val to=directionSelection.target
         if(from==to) {
             Toast.makeText(this,"Select different source and target languages",
                 Toast.LENGTH_LONG).show()
@@ -1344,9 +1345,9 @@ class AetherImeService : InputMethodService() {
                     Toast.LENGTH_LONG).show()
             }
         }
-        if(translatorOpen && translateResult.isNotBlank() &&
-            previewSource==source && previewDirection==direction &&
-            previewGoogle==requestedGoogle) {
+        if(KeyPopTranslationSendPolicy.canReusePreview(
+            translatorOpen,translateResult,source,previewSource,
+            direction,previewDirection,requestedGoogle,previewGoogle)) {
             callback(Result.success(translateResult))
             return
         }
