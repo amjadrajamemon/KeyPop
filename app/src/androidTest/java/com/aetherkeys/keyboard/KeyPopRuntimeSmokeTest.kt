@@ -45,7 +45,8 @@ class KeyPopRuntimeSmokeTest {
                 val text=visibleText(activity.window.decorView)
                 for(label in listOf("Choose translation directions","English → Urdu",
                     "Urdu → English","English → Sindhi","Sindhi → English",
-                    "Urdu → Sindhi","Sindhi → Urdu","Download selected packs")) {
+                    "Urdu → Sindhi","Sindhi → Urdu","Download selected packs",
+                    "Automatic network retry: up to three attempts. Interrupted Sindhi files are preserved and resume without restarting from zero.")) {
                     assertTrue("Missing language pack control: "+label,text.contains(label))
                 }
                 assertTrue("Obsolete redundant Sindhi manual buttons still visible",
@@ -108,6 +109,13 @@ class KeyPopRuntimeSmokeTest {
                 assertTrue("Typing settings inaccessible",category!=null)
                 category?.performClick()
                 val prefs=activity.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                for(label in listOf("Key font size","Suggestion font size",
+                    "Suggestion strip height")) {
+                    assertTrue("Missing responsive font adjustment: $label",
+                        find(activity.window.decorView,label+": 19")!=null ||
+                        find(activity.window.decorView,label+": 17")!=null ||
+                        find(activity.window.decorView,label+": 45")!=null)
+                }
                 for((label,key) in listOf(
                     "Auto-correct spelling" to "autoCorrect",
                     "Auto punctuation" to "autoPunctuate",
