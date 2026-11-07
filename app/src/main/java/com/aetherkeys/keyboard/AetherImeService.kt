@@ -1557,7 +1557,9 @@ class AetherImeService : InputMethodService() {
             val button=bar.getChildAt(i) as Button
             val offer=offers.getOrNull(i)
             if(offer==null) {
-                button.visibility=View.GONE
+                // Keep three equal-width positions like Gboard; a single
+                // typed word must never inflate into one giant full-width key.
+                button.visibility=View.INVISIBLE
             } else {
                 button.visibility=View.VISIBLE
                 button.textSize=size.toFloat()
