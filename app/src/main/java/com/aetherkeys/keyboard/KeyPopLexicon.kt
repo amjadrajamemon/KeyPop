@@ -4,10 +4,38 @@ import android.content.Context
 import java.util.Locale
 
 /**
- * Lightweight private local suggestion engine. Common-word lists are deliberately small:
- * this is an extensible fallback, NOT a claim of Gboard-quality language models.
+ * Offline local word-completion engine. A redistributable SCOWL familiarity-tier
+ * lexicon supplies ~39k word forms; the first two letters index each lookup
+ * to avoid scanning the full dictionary on every input event.
+ * This does not copy Gboard's proprietary ranking or language model.
  */
 class KeyPopLexicon(context:Context) {
+    private val application=context.applicationContext
+    private data class RankedWord(val word:String,val tier:Int)
+    private val scowlIndex by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        val index=HashMap<String,MutableList<RankedWord>>()
+        // First load occurs in KeyPop's prediction executor, never in draw().
+        runCatching {
+            application.assets.open("keypop_english_scowl.txt").bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    val tab=line.indexOf('\t')
+                    if(tab<=0)return@forEach
+                    val tier=line.substring(0,tab).toIntOrNull()?:return@forEach
+                    val word=line.substring(tab+1)
+                    if(word.length !in 2..24 || word.any { !it.isLetter() })return@forEach
+                    index.getOrPut(word.take(2)){ArrayList()}.add(RankedWord(word,tier))
+                }
+            }
+        }
+        index
+    }
+    private fun rankCandidates(fragment:String):List<RankedWord> {
+        val input=fragment.trim().lowercase(Locale.ROOT)
+        if(input.isBlank())return emptyList()
+        if(input.length>=2)return scowlIndex[input.take(2)].orEmpty()
+        return scowlIndex.asSequence().filter { it.key.startsWith(input) }
+            .flatMap { it.value.asSequence() }.filter { it.tier<=10 }.toList()
+    }
     private val store=context.getSharedPreferences("keypop_lexicon",Context.MODE_PRIVATE)
     private val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
     private val english=("the and that have for not with you this but his from they say her she"+
@@ -77,8 +105,12 @@ class KeyPopLexicon(context:Context) {
     }
     fun suggestions(lang:Int,fragment:String,limit:Int=3,previous:String=""):List<String> {
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+        val familiar=rankCandidates(fragment).takeIf { lang==0 }.orEmpty()
+        val base=when(lang){1->urdu;2->sindhi;else->english}
+        val dictionary=base.toList()+familiar.map {it.word}
+        val tiers=if(lang==0)familiar.associate {it.word to it.tier} else emptyMap()
         return KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
-            learned+words(lang),limit)
+            learned,limit,dictionary,tiers)
     }
     fun nextWords(lang:Int,previous:String):List<String> =
         KeyPopTypingIntelligence.nextWords(lang,previous)
