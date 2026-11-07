@@ -103,35 +103,24 @@ class KeyPopHomeActivity : Activity() {
                 cornerRadius=dp(10).toFloat()
             }
         },LinearLayout.LayoutParams(-1,-2))
-        addButton(column,"Download All Languages · English + Urdu + Sindhi") {
-            if(android.os.Build.VERSION.SDK_INT>=33 &&
-                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=
-                android.content.pm.PackageManager.PERMISSION_GRANTED)
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),716)
-            KeyPopModelDownloadService.startAllLanguages(this)
-            Toast.makeText(this,"Language pack download started. Check the download notification.",
-                Toast.LENGTH_LONG).show()
-        }
-        addButton(column,"Language packs and model status") {
+        addButton(column,"Choose language packs · download selected directions") {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
         }
         addButton(column,"Settings · Themes · Layouts · Translation") {
             startActivity(Intent(this,MainActivity::class.java)
                 .putExtra("openSection","settingsHome"))
         }
-        column.addView(text("Offline Sindhi neural models download after your consent. Full sentence translation stays on your phone.",13f,muted))
+        column.addView(text("English ↔ Urdu works offline with downloaded Google ML Kit packs. Sindhi model files are experimental and must pass independent translation checks.",13f,muted))
         val settings=getSharedPreferences("keypop",MODE_PRIVATE)
         if(!settings.getBoolean("firstSindhiOfferV100",false)) {
             settings.edit().putBoolean("firstSindhiOfferV100",true).apply()
             column.post {
                 if(!isFinishing && !isDestroyed) {
                     AlertDialog.Builder(this)
-                        .setTitle("Download all offline language packs?")
-                        .setMessage("One tap starts English, Urdu and all three Sindhi translation packs (~978 MB plus English/Urdu). Wi-Fi and 1.2 GB free storage recommended.")
-                        .setPositiveButton("Download All") {_,_->
-                            KeyPopModelDownloadService.startAllLanguages(this)
-                            Toast.makeText(this,"Downloading offline language packs",
-                                Toast.LENGTH_LONG).show()
+                        .setTitle("Choose offline translation packs")
+                        .setMessage("Select only the English, Urdu or Sindhi translation directions you need. Review the list and download with progress tracking.")
+                        .setPositiveButton("Choose packs") {_,_->
+                            startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
                         }
                         .setNegativeButton("Later",null).show()
                 }
