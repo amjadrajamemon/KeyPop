@@ -1429,7 +1429,9 @@ class AetherImeService : InputMethodService() {
                     else lexicon.suggestions(predLang,word,
                         limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
                         previous=previous)
-                val spelling=if(word.length>=3 && prefs.getBoolean("autoCorrect",true))
+                // The Auto-correct switch governs replacements only;
+                // spelling suggestions remain available when it is OFF.
+                val spelling=if(word.length>=3)
                     lexicon.correction(predLang,word) else null
                 val grammar=if(word.isNotEmpty() && prefs.getBoolean("grammarHints",true))
                     KeyPopGrammarRules.suggest(before,predLang) else null
