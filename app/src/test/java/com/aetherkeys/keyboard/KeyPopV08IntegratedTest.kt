@@ -22,8 +22,11 @@ class KeyPopV08IntegratedTest {
                 assertFalse(p.name,normal.contains("?"))
                 assertTrue(KeyPopAlternates.forKey(".",0).contains("?"))
             } else {
-                assertTrue(p.name,normal.contains(","))
-                assertTrue(p.name,normal.contains("?"))
+                // Other presets still expose comma either directly or by holding
+                // the emoji/comma key, while question mark lives on the period hold.
+                assertTrue(p.name,normal.contains(",") || normal.contains("☺,"))
+                assertFalse(p.name,normal.contains("?"))
+                assertTrue(KeyPopAlternates.forKey(".",0).contains("?"))
             }
         }
     }
