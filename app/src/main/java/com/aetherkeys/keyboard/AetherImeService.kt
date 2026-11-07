@@ -238,6 +238,7 @@ class AetherImeService : InputMethodService() {
             prefs.edit().putBoolean("gboardLayoutMigration20261107",true).apply()
         }
         language=prefs.getInt("language",0).coerceIn(0,2)
+        liveTranslationEnabled=prefs.getBoolean("liveTranslateDefault",true)
         floatingShell=FrameLayout(this).apply{
             setBackgroundColor(Color.TRANSPARENT)
             // The navigation bar is a system-owned area. Keep the last key above it.
@@ -1484,7 +1485,9 @@ class AetherImeService : InputMethodService() {
                 val values=if(word.isEmpty())lexicon.nextWords(predLang,previous)
                     else lexicon.suggestions(predLang,word,
                         limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
-                        previous=previous,beforeCursor=before)
+                        previous=previous,
+                        beforeCursor=if(prefs.getBoolean("contextPredictions",true))
+                            before else "")
                 // The Auto-correct switch governs replacements only;
                 // spelling suggestions remain available when it is OFF.
                 val spelling=if(word.length>=3)
@@ -1524,7 +1527,9 @@ class AetherImeService : InputMethodService() {
             if(actual.isNotEmpty())connection.deleteSurroundingText(actual.length,0)
             val replacement=KeyPopPredictionContext.wordCase(choice,actual,before)
             val after=connection.getTextAfterCursor(3,0)?.toString().orEmpty()
-            val committed=KeyPopPredictionContext.committedWord(replacement,after)
+            val committed=if(prefs.getBoolean("suggestionSpace",true))
+                KeyPopPredictionContext.committedWord(replacement,after)
+                else replacement
             val accepted=connection.commitText(committed,1)
             connection.endBatchEdit()
             if(!accepted)return
