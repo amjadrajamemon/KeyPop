@@ -11,6 +11,9 @@ import android.os.IBinder
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -43,6 +46,44 @@ class KeyPopModelDownloadService:Service() {
     }
 
     private val main=Handler(Looper.getMainLooper())
+    private var waitingForNetwork:ConnectivityManager.NetworkCallback?=null
+    private fun stopNetworkWait() {
+        val callback=waitingForNetwork?:return
+        waitingForNetwork=null
+        runCatching {
+            (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                .unregisterNetworkCallback(callback)
+        }
+    }
+    private fun hasNetworkConnection():Boolean {
+        val cm=getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val caps=cm.getNetworkCapabilities(cm.activeNetwork)
+        return caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)==true
+    }
+    /** Wait for connectivity without discarding partial transfer files. */
+    private fun retryWhenOnline(resume:()->Unit):Boolean {
+        if(hasNetworkConnection())return false
+        stopNetworkWait()
+        val cm=getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val callback=object:ConnectivityManager.NetworkCallback(){
+            override fun onAvailable(network:Network) {
+                main.post {
+                    if(waitingForNetwork===this) {
+                        stopNetworkWait()
+                        resume()
+                    }
+                }
+            }
+        }
+        waitingForNetwork=callback
+        return try {
+            cm.registerDefaultNetworkCallback(callback)
+            true
+        }catch(e:Exception) {
+            waitingForNetwork=null
+            false
+        }
+    }
     private var transferPlan:List<String> = emptyList()
     private var previousBytes=0L
     private var previousElapsed=0L
@@ -134,6 +175,7 @@ class KeyPopModelDownloadService:Service() {
         notifier.notify(NOTIFICATION_ID,notice(message+" · "+details,progress,active,failed))
     }
     private fun done(message:String,failed:Boolean,startId:Int) {
+        stopNetworkWait()
         update(message,if(failed)lastPercent else 100,false,failed,true)
         busy.set(false)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -216,6 +258,10 @@ class KeyPopModelDownloadService:Service() {
                         "${delay/1000}s (partial download retained)",
                         progressPosition(index),true,force=true)
                     main.postDelayed({step(index,retry+1)},delay)
+                }else if(transient(message) && retryWhenOnline{step(index,0)}) {
+                    update("Offline: waiting for network. Pack $position · $key will "+
+                        "automatically resume when internet returns.",progressPosition(index),
+                        true,force=true)
                 }else done("Pack $key failed after ${retry+1} attempts: $message. "+
                     "Partial model files are saved; tap Download to resume.",true,startId)
             }
@@ -253,6 +299,11 @@ class KeyPopModelDownloadService:Service() {
         }
         update("Preparing $packCount selected offline packs…",0,true,force=true)
         step(0)
+    }
+    override fun onDestroy() {
+        stopNetworkWait()
+        main.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
         prepareChannel()
