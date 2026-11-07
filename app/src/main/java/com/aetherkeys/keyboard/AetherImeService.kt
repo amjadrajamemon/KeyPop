@@ -1344,7 +1344,9 @@ class AetherImeService : InputMethodService() {
                 if(current!=null && !sensitive(currentInputEditorInfo)) {
                     val stillCurrent=if(sendingDraft)translateDraft
                         else current.getTextBeforeCursor(source.length,0)?.toString().orEmpty()
-                    if(stillCurrent!=source || (translatorOpen &&
+                    if(stillCurrent!=source ||
+                        (sendingDraft && (!translatorOpen || !translateDraftMode)) ||
+                        (translatorOpen &&
                         (translateTarget!=to ||
                          (translateSourceChoice in 0..2 && translateSourceChoice!=from) ||
                          googleEasyMode!=requestedGoogle))) {
@@ -1356,6 +1358,9 @@ class AetherImeService : InputMethodService() {
                         val accepted=current.commitText(translated,1)
                         current.endBatchEdit()
                         if(!accepted) {
+                            // Restore the original editor text if a host rejected
+                            // the translated insertion after we removed it.
+                            if(!sendingDraft)current.commitText(source,1)
                             Toast.makeText(this,"Editor refused translation; nothing sent",
                                 Toast.LENGTH_SHORT).show()
                             return@onSuccess
