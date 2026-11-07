@@ -57,9 +57,7 @@ class KeyPopModelDownloadService:Service() {
         transferPlan.asSequence().mapNotNull{key->
             KeyPopSindhiOnnxPack.bundles.firstOrNull{it.id==key}
         }.sumOf{KeyPopSindhiOnnxPack.estimatedBytes(it)}
-    private fun measuredDetails():String {
-        val loaded=currentBytes()
-        val estimate=estimatedBytes()
+    private fun measuredDetails(loaded:Long,estimate:Long):String {
         val now=SystemClock.elapsedRealtime()
         val seconds=(now-previousElapsed)/1000.0
         if(previousElapsed>0L && seconds>=0.5) {
@@ -119,9 +117,9 @@ class KeyPopModelDownloadService:Service() {
         lastShownElapsed=now
         val progress=if(percent<0)lastPercent else percent.coerceIn(0,100)
         lastPercent=progress
-        val details=measuredDetails()
         val loaded=currentBytes()
         val estimate=estimatedBytes()
+        val details=measuredDetails(loaded,estimate)
         getSharedPreferences(PREFS,MODE_PRIVATE).edit()
             .putBoolean("active",active)
             .putBoolean("finished",!active)
