@@ -44,6 +44,8 @@ class MainActivity:Activity() {
     private lateinit var content:LinearLayout
     private lateinit var scroller:ScrollView
     private var section="settingsHome"
+    private var previewThemeIndex=-1
+    private var previewLayoutIndex=-1
     private var downloadMessage:TextView?=null
     private var downloadProgress:ProgressBar?=null
     private val ticker=Handler(Looper.getMainLooper())
@@ -194,19 +196,29 @@ class MainActivity:Activity() {
     }
     private fun dashboard(){
         heading("KeyPop Settings","Your keyboard, your settings")
-        addBlock{
-            addView(text("YOUR KEYBOARD",12f,accent,true))
-            action(this,"Keyboard Setup","Enable, choose and test KeyPop"){navigate("onboarding")}
-            action(this,"Offline Packs","Select translation directions and monitor downloaded MB, speed and ETA"){navigate("languagePacks")}
-            action(this,"Themes","15 keyboard styles"){navigate("themes")}
-            action(this,"Layouts","Keyboard presets and arrangement"){navigate("layouts")}
+        addBlock {
+            addView(text("01   GET STARTED",12f,accent,true))
+            action(this,"Keyboard Setup","Activate KeyPop and test your keyboard"){navigate("onboarding")}
+            action(this,"Offline Packs","Manage downloaded translation languages"){navigate("languagePacks")}
         }
-        addBlock{
-            addView(text("PREFERENCES",12f,accent,true))
-            action(this,"Typing & Size","Key dimensions, feedback, suggestions"){navigate("typing")}
-            action(this,"Translation","Easy Translate, Google Cloud, default language"){navigate("translation")}
-            action(this,"Clipboard & Security","Private data and saved logins"){navigate("security")}
-            action(this,"Tools","Personal dictionary, layout lab and more"){navigate("tools")}
+        addBlock {
+            addView(text("02   TYPING INTELLIGENCE",12f,accent,true))
+            action(this,"Typing & Size",
+                "Corrections, predictions, grammar, toolbar and key sizes"){navigate("typing")}
+        }
+        addBlock {
+            addView(text("03   APPEARANCE",12f,accent,true))
+            action(this,"Themes","Preview a complete color and visual style"){navigate("themes")}
+            action(this,"Layouts","Preview and apply keyboard geometry"){navigate("layouts")}
+        }
+        addBlock {
+            addView(text("04   TRANSLATION & LANGUAGES",12f,accent,true))
+            action(this,"Translation","Compact live mode, cloud or offline engines"){navigate("translation")}
+        }
+        addBlock {
+            addView(text("05   PRIVACY & UTILITIES",12f,accent,true))
+            action(this,"Clipboard & Security","Private history and saved logins"){navigate("security")}
+            action(this,"Tools","Dictionary, advanced layout editor and diagnostics"){navigate("tools")}
         }
     }
     private fun setup(){
@@ -261,93 +273,149 @@ class MainActivity:Activity() {
         showTransfer()
     }
     private fun themes(){
-        heading("Themes","Select a style to apply to your keyboard")
+        heading("Themes","Preview first, then apply your chosen appearance")
+        val current=prefs.getInt("theme",0).coerceIn(0,KeyPopSkins.all.lastIndex)
+        if(previewThemeIndex !in KeyPopSkins.all.indices)previewThemeIndex=current
         addBlock {
-            KeyPopSkins.all.forEachIndexed{index,skin->
-                val item=LinearLayout(this@MainActivity).apply{
+            addView(text("ACTIVE · "+KeyPopSkins.all[current].name,12f,accent,true))
+            addView(text("PREVIEW · "+KeyPopSkins.all[previewThemeIndex].name,16f,ink,true))
+            action(this,"Apply selected theme") {
+                val selected=previewThemeIndex
+                if(selected==KeyboardPresetCatalog.byId(KeyboardPresetCatalog.MATERIAL)?.skin)
+                    KeyboardPresetCatalog.apply(this@MainActivity,KeyboardPresetCatalog.MATERIAL)
+                else prefs.edit().putInt("theme",selected)
+                    .putInt("keyboardPreset",KeyboardPresetCatalog.CUSTOM)
+                    .remove("customAccent").apply()
+                Toast.makeText(this@MainActivity,"Theme applied",Toast.LENGTH_SHORT).show()
+                navigate("themes")
+            }
+        }
+        addBlock {
+            addView(text("CHOOSE A STYLE",13f,accent,true))
+            KeyPopSkins.all.forEachIndexed {index,skin ->
+                val item=LinearLayout(this@MainActivity).apply {
                     orientation=LinearLayout.HORIZONTAL
                     gravity=Gravity.CENTER_VERTICAL
-                    setPadding(dp(8),dp(6),dp(8),dp(6))
+                    minimumHeight=dp(56)
+                    setPadding(dp(8),dp(5),dp(8),dp(5))
+                    background=shape(if(index==previewThemeIndex)
+                        0xFF244B60.toInt() else card,10,
+                        if(index==previewThemeIndex)accent else edge)
                 }
-                val swatch=View(this@MainActivity).apply{
+                item.addView(View(this@MainActivity).apply {
                     background=shape(skin.key,11,skin.accent)
-                }
-                item.addView(swatch,LinearLayout.LayoutParams(dp(48),dp(43)))
-                val label=LinearLayout(this@MainActivity).apply{
-                    orientation=LinearLayout.VERTICAL;setPadding(dp(12),0,0,0)
+                },LinearLayout.LayoutParams(dp(44),dp(42)))
+                val label=LinearLayout(this@MainActivity).apply {
+                    orientation=LinearLayout.VERTICAL
+                    setPadding(dp(12),0,0,0)
                     addView(text(skin.name,14f,ink,true))
                     addView(text(skin.subtitle,12f,muted))
                 }
                 item.addView(label,LinearLayout.LayoutParams(0,-2,1f))
+                if(index==previewThemeIndex)
+                    item.addView(text("✓",20f,accent,true))
                 item.setOnClickListener {
-                    // Choosing the Gboard-style skin must select its matching
-                    // key geometry and toolbar instead of the Custom preset.
-                    if(index==KeyboardPresetCatalog.byId(KeyboardPresetCatalog.MATERIAL)?.skin)
-                        KeyboardPresetCatalog.apply(this@MainActivity,KeyboardPresetCatalog.MATERIAL)
-                    else prefs.edit().putInt("theme",index)
-                        .putInt("keyboardPreset",KeyboardPresetCatalog.CUSTOM)
-                        .remove("customAccent").apply()
-                    Toast.makeText(this@MainActivity,"Applied: "+skin.name,Toast.LENGTH_SHORT).show()
+                    previewThemeIndex=index
                     navigate("themes")
                 }
                 item.isClickable=true
-                addView(item)
+                addView(item,LinearLayout.LayoutParams(-1,-2).apply{
+                    bottomMargin=dp(5)
+                })
             }
         }
     }
     private fun layouts(){
-        heading("Layouts","Apply the keyboard arrangement you prefer")
-        addBlock{
-            KeyboardPresetCatalog.all.forEach{preset->
-                action(this,preset.name,preset.description){
-                    val applied=KeyboardPresetCatalog.apply(this@MainActivity,preset.id)
-                    Toast.makeText(this@MainActivity,
-                        if(applied)"Applied: "+preset.name else "Could not apply layout",
-                        Toast.LENGTH_SHORT).show()
+        heading("Layouts","Review key arrangement before applying")
+        if(previewLayoutIndex !in KeyboardPresetCatalog.all.indices)
+            previewLayoutIndex=KeyboardPresetCatalog.selected(this).id
+        val selected=KeyboardPresetCatalog.byId(previewLayoutIndex)
+            ?:KeyboardPresetCatalog.all.first()
+        addBlock {
+            addView(text("SELECTED PREVIEW · "+selected.name,14f,accent,true))
+            addView(KeyboardPresetPreview(this@MainActivity,selected),
+                LinearLayout.LayoutParams(-1,dp(154)))
+            action(this,"Apply selected layout"){
+                val applied=KeyboardPresetCatalog.apply(this@MainActivity,selected.id)
+                Toast.makeText(this@MainActivity,
+                    if(applied)"Layout applied" else "Unable to apply layout",
+                    Toast.LENGTH_SHORT).show()
+                navigate("layouts")
+            }
+        }
+        addBlock {
+            addView(text("AVAILABLE ARRANGEMENTS",13f,accent,true))
+            KeyboardPresetCatalog.all.forEach {preset->
+                action(this,(if(preset.id==previewLayoutIndex)"✓  " else "")+
+                    preset.name,preset.description) {
+                    previewLayoutIndex=preset.id
+                    navigate("layouts")
                 }
             }
-            action(this,"Open Layout Lab"){
+            action(this,"Advanced Layout Editor"){
                 startActivity(Intent(this@MainActivity,KeyPopLayoutStudioActivity::class.java))
             }
         }
     }
     private fun typing(){
-        heading("Typing & Size","Adjust keyboard behavior and dimensions")
-        addBlock{
-            range(this,"Key height","height",36,90,51)
-            range(this,"Key font size","font",12,32,19)
+        heading("Typing & Size","Configure behavior first, then appearance and feedback")
+        addBlock {
+            addView(text("01   PREDICTIONS & GRAMMAR",13f,accent,true))
+            option(this,"Word suggestions","suggestions",true)
+            option(this,"Aggressive predictions","aggressivePredictions",true)
+            option(this,"Predict next word","predictNext",true)
+            option(this,"Learn my words on this device","learningEnabled",true)
+            option(this,"Auto-correct spelling","autoCorrect",true)
+            option(this,"Grammar-aware suggestions","contextPredictions",true)
+            option(this,"Grammar hints (suggest only)","grammarHints",true)
+            option(this,"Apply grammar fixes automatically","autoGrammarApply",false)
+        }
+        addBlock {
+            addView(text("02   PUNCTUATION & CAPITALS",13f,accent,true))
+            option(this,"Auto punctuation","autoPunctuate",true)
+            option(this,"Double-space punctuation","doubleSpace",true)
+            option(this,"Capitalize sentence beginnings","autoCap",true)
+            option(this,"Auto-space after selected suggestions","suggestionSpace",true)
+        }
+        addBlock {
+            addView(text("03   TOOLBAR & SUGGESTIONS",13f,accent,true))
+            option(this,"Always show toolbar while typing","alwaysShowToolbar",true)
+            addView(text("When disabled, the Material toolbar gives way to suggestions "+
+                "while you type. When enabled, both remain visible.",12f,muted))
             range(this,"Suggestion font size","suggestionFont",12,24,17)
             range(this,"Suggestion strip height","suggestionHeight",38,64,45)
+        }
+        addBlock {
+            addView(text("04   KEYS & GEOMETRY",13f,accent,true))
+            range(this,"Key height","height",36,90,51)
+            range(this,"Key font size","font",12,32,19)
             range(this,"Key spacing","spacing",1,10,4)
             range(this,"Keyboard width %","keyboardWidthPercent",65,100,100)
             range(this,"Key corner radius","round",3,26,13)
             option(this,"Number row","numberRow",true)
-            option(this,"Word suggestions","suggestions",true)
-            option(this,"Aggressive predictions","aggressivePredictions",true)
-            option(this,"Learn my words on this device","learningEnabled",true)
-            option(this,"Predict next word","predictNext",true)
-            option(this,"Auto-correct spelling","autoCorrect",true)
-            option(this,"Auto punctuation","autoPunctuate",true)
-            option(this,"Grammar hints (suggest only)","grammarHints",true)
-            option(this,"Apply grammar fixes automatically","autoGrammarApply",false)
             option(this,"Roman Urdu / Sindhi","romanMode")
-            option(this,"Double-space punctuation","doubleSpace",true)
+        }
+        addBlock {
+            addView(text("05   FEEDBACK & ACCESSIBILITY",13f,accent,true))
             option(this,"Haptic feedback","haptics")
             option(this,"Keyboard sounds","sound")
             option(this,"Spacebar cursor gesture","spaceCursor",true)
             option(this,"High contrast","highContrast")
         }
-        addBlock{
-            addView(text("RECENT SCREENSHOTS",15f,ink,true))
+        addBlock {
+            addView(text("06   RECENT SCREENSHOTS",13f,accent,true))
             option(this,"Show copied screenshots on keyboard","screenshotClipOffer",true)
-            option(this,"Suggest recent gallery screenshots (opt-in)","autoScreenshotSuggestions",false)
-            addView(text("Copied image previews can appear automatically. Gallery suggestions require your permission and check only for recent screenshots. Images are never uploaded.",12f,muted))
-            action(this,"Allow screenshot access (optional)"){
+            option(this,"Suggest recent gallery screenshots (opt-in)",
+                "autoScreenshotSuggestions",false)
+            addView(text("Copied previews stay local. Gallery suggestions require "+
+                "permission and only inspect recently created screenshots.",12f,muted))
+            action(this,"Allow screenshot access (optional)") {
                 val permission=if(Build.VERSION.SDK_INT>=33)
                     Manifest.permission.READ_MEDIA_IMAGES
                 else Manifest.permission.READ_EXTERNAL_STORAGE
                 if(checkSelfPermission(permission)==PackageManager.PERMISSION_GRANTED)
-                    Toast.makeText(this@MainActivity,"Screenshot access already allowed",Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity,"Screenshot access already allowed",
+                        Toast.LENGTH_SHORT).show()
                 else requestPermissions(arrayOf(permission),733)
             }
         }
@@ -355,6 +423,16 @@ class MainActivity:Activity() {
     private fun translation(){
         heading("TRANSLATION ENGINE","English ⇄ Urdu ⇄ Sindhi · all six directions")
         addBlock {
+            addView(text("01   LIVE TRANSLATION",13f,accent,true))
+            option(this,"Compact Gboard-style translation bar","compactTranslate",true)
+            option(this,"Show live translation while typing","liveTranslateDefault",true)
+            addView(text("Cloud mode translates over the internet with your Google Cloud "+
+                "API key and consent. Offline mode needs downloaded language models. "+
+                "Gboard's private translation service is not exposed to other keyboards.",
+                12f,muted))
+        }
+        addBlock {
+            addView(text("02   OFFLINE MODELS & DEFAULTS",13f,accent,true))
             addView(text("KeyPop Offline is the default. Use ⇄ on the keyboard for live translation, language swapping, Insert, Replace and Copy.",13f,muted))
             action(this,"Choose and download translation packs"){startDownload()}
             downloadMessage=text("",13f,accent);addView(downloadMessage)
@@ -370,7 +448,7 @@ class MainActivity:Activity() {
             }
         }
         addBlock {
-            addView(text("GOOGLE CLOUD · OPTIONAL",14f,accent,true))
+            addView(text("03   OPTIONAL CLOUD TRANSLATION",14f,accent,true))
             addView(text("Google's offline ML Kit engine needs no account. Google Cloud is a separate paid service: signing in to a Google account alone cannot enable it. Cloud use requires a billing-enabled Google Cloud project and authorized access. The optional API key below is kept for advanced users.",13f,muted))
             val field=EditText(this@MainActivity).apply{
                 hint=if(KeyPopCloudTranslation.configured(this@MainActivity))
