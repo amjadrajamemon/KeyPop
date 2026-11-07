@@ -1,7 +1,7 @@
 name: KeyPop Android debug APK
 on:
   push:
-    branches: [main, feature/v0.9-material-teal-first-run-model-packs, feature/v0.9.1-sindhi-startup-repair, feature/v0.9.2-forensic-launch-smoke, feature/v1.0.7-rc8-sindhi-onnx-engine, feature/v1.0.7-rc8-android-runtime-verification, feature/offline-sindhi-release-blocker, feature/v1.0.0-offline-sindhi-consolidated, feature/gboard-parity-live-predictions-20261107, feature/rc8-fast-typing-translate-packs-20261107]
+    branches: [main, feature/v0.9-material-teal-first-run-model-packs, feature/v0.9.1-sindhi-startup-repair, feature/v0.9.2-forensic-launch-smoke, feature/v1.0.8-rc9-sindhi-onnx-engine, feature/v1.0.8-rc9-android-runtime-verification, feature/offline-sindhi-release-blocker, feature/v1.0.0-offline-sindhi-consolidated, feature/gboard-parity-live-predictions-20261107, feature/rc8-fast-typing-translate-packs-20261107, feature/rc9-smart-autocorrect-resumable-downloads-20261107]
   pull_request:
   workflow_dispatch:
 
@@ -37,51 +37,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.7-rc8-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.8-rc9-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.7-rc8-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.7-rc8-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.8-rc9-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.8-rc9-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-all-five-apks
+          name: KeyPop-v1.0.8-rc9-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-instrumentation
-          path: dist/KeyPop-v1.0.7-rc8-androidTest.apk
+          name: KeyPop-v1.0.8-rc9-instrumentation
+          path: dist/KeyPop-v1.0.8-rc9-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-ARM64
-          path: dist/KeyPop-v1.0.7-rc8-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.8-rc9-ARM64
+          path: dist/KeyPop-v1.0.8-rc9-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-ARM32
-          path: dist/KeyPop-v1.0.7-rc8-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.8-rc9-ARM32
+          path: dist/KeyPop-v1.0.8-rc9-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-x86
-          path: dist/KeyPop-v1.0.7-rc8-x86-debug.apk
+          name: KeyPop-v1.0.8-rc9-x86
+          path: dist/KeyPop-v1.0.8-rc9-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-x86_64
-          path: dist/KeyPop-v1.0.7-rc8-x86_64-debug.apk
+          name: KeyPop-v1.0.8-rc9-x86_64
+          path: dist/KeyPop-v1.0.8-rc9-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-Universal
-          path: dist/KeyPop-v1.0.7-rc8-universal-debug.apk
+          name: KeyPop-v1.0.8-rc9-Universal
+          path: dist/KeyPop-v1.0.8-rc9-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -94,11 +94,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-x86_64
+          name: KeyPop-v1.0.8-rc9-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-instrumentation
+          name: KeyPop-v1.0.8-rc9-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -118,7 +118,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-emulator-forensic-evidence
+          name: KeyPop-v1.0.8-rc9-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -128,15 +128,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC8 parity branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc8-fast-typing-translate-packs-20261107' }}
+    # Publish only the specific RC9 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc9-smart-autocorrect-resumable-downloads-20261107' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.7-rc8-all-five-apks
+          name: KeyPop-v1.0.8-rc9-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -145,7 +145,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.7-rc8-preview"
+          TAG="v1.0.8-rc9-preview"
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/*-debug.apk --repo "$GH_REPO" --clobber
           else
@@ -153,6 +153,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.7-rc8 Preview — Android Debug APKs" \
-              --notes "KeyPop v1.0.7 RC8 DEBUG PREVIEW (not production-certified): faster repeated backspace, dedicated Gboard-style comma key, translation-mode word predictions, more aggressive offline spelling and grammar suggestions, punctuation and auto-correct toggles, six-direction selectable language packs with foreground progress. Google Cloud still requires a separately billed Google Cloud project and authorized credentials: consumer Google sign-in alone cannot enable it. ML Kit supports offline English/Urdu. Downloading Sindhi ONNX files does not verify usable full-sentence translation; issue #13 remains unresolved. Build, unit tests, lint and emulator-smoke must pass before publishing. Physical-device typing latency and pixel parity still require user testing."
+              --title "KeyPop v1.0.8-rc9 Preview — Android Debug APKs" \
+              --notes "KeyPop v1.0.8 RC9 DEBUG PREVIEW (not production certified): faster off-main suggestions with debounced and reusable chips; spelling corrections including tge→the and shoukd→should, while preserving valid word/screenshots; independent adjustable key and suggestion font sizes; Gboard-like staggered second row, large backspace and shift, dedicated comma; optional screenshot clipboard preview with secure insert/share; selective model packs show downloaded/remaining MB, speed, ETA, auto retries and resume with HTTP range checks and connectivity awareness. Total Sindhi bytes are estimates, Google ML Kit download bytes/ETA are not exposed by the API. Downloaded Sindhi ONNX files are not yet proven to give usable full-sentence translation (issue #13). Emulator checks cannot guarantee pixel-perfect real-device parity or fully verify network interruption behavior."
           fi
