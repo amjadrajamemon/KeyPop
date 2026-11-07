@@ -24,6 +24,13 @@ object KeyPopTypingRules {
         toggle && textAllowsAutomaticChanges(inputType)
     fun autoPunctuationEnabled(toggle:Boolean,inputType:Int):Boolean =
         toggle && textAllowsAutomaticChanges(inputType)
+    /** Undo only the just-applied correction, never arbitrary editor text.
+     * The editor and suffix are checked by the IME before applying this. */
+    fun canUndoRecentCorrection(before:String,original:String,corrected:String,
+                                elapsedMs:Long):Boolean =
+        original.isNotEmpty() && corrected.isNotEmpty() &&
+            elapsedMs in 0L..5000L &&
+            before.endsWith(corrected+" ")
     fun preservesCase(original:String,corrected:String):String {
         if(original.isEmpty())return corrected
         return when {
