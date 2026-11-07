@@ -17,8 +17,8 @@ class KeyPopV08IntegratedTest {
             val normal=KeyboardPresetCatalog.foot(p.id,false)
             assertTrue(p.name,normal.contains("."))
             if(p.id==KeyboardPresetCatalog.MATERIAL) {
-                assertTrue(p.name,normal.contains("☺,"))
-                assertFalse(p.name,normal.contains(","))
+                assertTrue(p.name,normal.contains("☺"))
+                assertTrue(p.name,normal.contains(","))
                 assertFalse(p.name,normal.contains("?"))
                 assertTrue(KeyPopAlternates.forKey(".",0).contains("?"))
             } else {
