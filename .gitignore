@@ -8,3 +8,12 @@ local.properties
 *.apk
 *.aab
 .DS_Store
+
+# Permanent signing credentials must never enter source control
+*.jks
+*.keystore
+*.p12
+*.pfx
+**/keypop-recovery.txt
+**/keypop-signing.properties
+**/signing.properties

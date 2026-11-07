@@ -3,6 +3,13 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Release-signing secrets are supplied by the protected GitHub Actions
+// environment 'keypop-signing'. Never check a private keystore into Git.
+val stableSigningFile = System.getenv("KEYPOP_SIGNING_KEYSTORE_PATH")
+val stableSigningPassword = System.getenv("KEYPOP_SIGNING_STORE_PASSWORD")
+val stableSigningAlias = System.getenv("KEYPOP_SIGNING_KEY_ALIAS")
+val stableSigningKeyPassword = System.getenv("KEYPOP_SIGNING_KEY_PASSWORD")
+
 android {
     namespace = "com.aetherkeys.keyboard"
     compileSdk = 36
@@ -11,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 29
-        versionName = "1.0.13-rc14-install-safe-preview" 
+        versionCode = 30
+        versionName = "1.0.14-rc15-stable-signing" 
     }
     splits {
         abi {
@@ -22,17 +29,29 @@ android {
             isUniversalApk = true
         }
     }
+    signingConfigs {
+        create("keypopStable") {
+            if (!stableSigningFile.isNullOrBlank())
+                storeFile = file(stableSigningFile)
+            storePassword = stableSigningPassword
+            keyAlias = stableSigningAlias
+            keyPassword = stableSigningKeyPassword
+        }
+    }
     buildTypes {
         debug {
-            // RC11–RC13 used previewv110, but GitHub-hosted runners produced
-            // different ephemeral debug signing certificates per build.
-            // A distinct ID lets RC14 install without uninstalling the old
-            // keyboard or erasing its privately stored clipboard history.
-            // Future same-ID updates require a stable release signing key.
-            applicationIdSuffix = ".previewv114"
-            versionNameSuffix = "-preview"
+            // Debug builds retain an ephemeral test-only signature and their
+            // OWN app identity. Never distribute them as an upgrade path.
+            applicationIdSuffix = ".previewv115"
+            versionNameSuffix = "-debug-test-only"
         }
-        release { isMinifyEnabled = false }
+        release {
+            // Keep this package suffix and key unchanged in every future
+            // signed update. RC11–RC14 remain separately installed.
+            applicationIdSuffix = ".stablev1"
+            signingConfig = signingConfigs.getByName("keypopStable")
+            isMinifyEnabled = false
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
