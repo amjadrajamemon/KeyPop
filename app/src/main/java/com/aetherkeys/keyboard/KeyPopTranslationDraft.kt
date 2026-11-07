@@ -11,7 +11,7 @@ object KeyPopTranslationDraft {
     fun edit(current:String,key:String,shift:Boolean=false,autoCap:Boolean=true,
              autoPunctuation:Boolean=true):String {
         if(key=="⌫")return current.dropLast(1)
-        if(key=="SPACE")return current+" "
+        if(key=="SPACE")return if(current.endsWith(' '))current else current+" "
         if(key.length!=1)return current
         val letter=key[0]
         if(autoPunctuation && letter in setOf('.',',','!','?','؛','،','؟','۔',':') &&
