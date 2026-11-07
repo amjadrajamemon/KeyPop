@@ -9,6 +9,7 @@ import java.util.Locale
  */
 class KeyPopLexicon(context:Context) {
     private val store=context.getSharedPreferences("keypop_lexicon",Context.MODE_PRIVATE)
+    private val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
     private val english=("the and that have for not with you this but his from they say her she"+
         " will one all would there their what about which when make can like time just know"+
         " take people into year your good some could them see other than then now look only"+
@@ -55,7 +56,7 @@ class KeyPopLexicon(context:Context) {
     fun clearLearned(lang:Int) {store.edit().remove("learned_"+lang).apply()}
 
     fun learn(lang:Int,word:String) {
-        if(!store.getBoolean("learningEnabled",false))return
+        if(!prefs.getBoolean("learningEnabled",true))return
         val value=word.trim().lowercase(Locale.ROOT)
         if(value.length !in 2..32 || value.any{!it.isLetter()})return
         val old=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
