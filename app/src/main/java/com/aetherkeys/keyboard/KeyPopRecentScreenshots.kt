@@ -31,10 +31,13 @@ object KeyPopRecentScreenshots {
     fun latest(context:Context):Uri? {
         if(!context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
                 .getBoolean("autoScreenshotSuggestions",false) || !granted(context))return null
-        val projection=arrayOf(MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DISPLAY_NAME,
-            MediaStore.Images.Media.DATE_ADDED,
-            MediaStore.Images.Media.RELATIVE_PATH)
+        val projection=if(Build.VERSION.SDK_INT>=29)
+            arrayOf(MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.DATE_ADDED,
+                MediaStore.Images.Media.RELATIVE_PATH)
+        else arrayOf(MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DISPLAY_NAME,MediaStore.Images.Media.DATE_ADDED)
         val since=System.currentTimeMillis()/1000L-MAX_AGE_SECONDS
         val cursor=context.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             projection,MediaStore.Images.Media.DATE_ADDED+" >= ?",
