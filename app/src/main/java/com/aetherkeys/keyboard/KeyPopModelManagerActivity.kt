@@ -8,6 +8,8 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -46,7 +48,13 @@ class KeyPopModelManagerActivity:Activity() {
             orientation=LinearLayout.VERTICAL
             setPadding(dp(18),dp(21),dp(18),dp(24))
         }
+        ViewCompat.setOnApplyWindowInsetsListener(column){view,insets->
+            val bars=insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(dp(18),dp(18)+bars.top,dp(18),dp(24)+bars.bottom)
+            insets
+        }
         scroll.addView(column);setContentView(scroll)
+        ViewCompat.requestApplyInsets(scroll)
         column.addView(label("KEYPOP  /  OFFLINE LANGUAGES",13f,teal))
         column.addView(label("Language Pack Manager",24f))
         column.addView(label("English · اردو · سنڌي",17f,teal))

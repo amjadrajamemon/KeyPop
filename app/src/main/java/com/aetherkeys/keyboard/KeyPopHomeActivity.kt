@@ -8,6 +8,8 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.provider.Settings
 import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
@@ -66,8 +68,14 @@ class KeyPopHomeActivity : Activity() {
             orientation=LinearLayout.VERTICAL
             setPadding(dp(20),dp(18),dp(20),dp(26))
         }
+        ViewCompat.setOnApplyWindowInsetsListener(column){view,insets->
+            val bars=insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(dp(20),dp(18)+bars.top,dp(20),dp(26)+bars.bottom)
+            insets
+        }
         scroll.addView(column)
         setContentView(scroll)
+        ViewCompat.requestApplyInsets(scroll)
 
         column.addView(text("KEYPOP  ·  v1.0.5 RC6",29f,teal,true))
         column.addView(text("Keyboard Setup",24f,ink,true))

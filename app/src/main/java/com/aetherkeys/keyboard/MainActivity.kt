@@ -10,6 +10,8 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -130,7 +132,13 @@ class MainActivity:Activity() {
             orientation=LinearLayout.VERTICAL
             setPadding(dp(17),dp(24),dp(17),dp(26))
         }
+        ViewCompat.setOnApplyWindowInsetsListener(content){view,insets->
+            val bars=insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(dp(17),dp(18)+bars.top,dp(17),dp(22)+bars.bottom)
+            insets
+        }
         scroller.addView(content)
+        ViewCompat.requestApplyInsets(scroller)
         // Attach the window before building any optional settings subsection.
         setContentView(scroller)
         section=intent.getStringExtra("openSection")?:"settingsHome"
