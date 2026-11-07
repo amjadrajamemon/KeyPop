@@ -1318,7 +1318,9 @@ class AetherImeService : InputMethodService() {
     }
     private fun translateBeforeSend() {
         val input=currentInputConnection ?:return
-        val source=input.getTextBeforeCursor(1500,0)?.toString().orEmpty()
+        val sendingDraft=translatorOpen && translateDraftMode
+        val source=if(sendingDraft)translateDraft
+            else input.getTextBeforeCursor(1500,0)?.toString().orEmpty()
         if(source.isBlank())return
         // The visibly selected Easy Translate pair takes precedence over the
         // Settings default. Formerly Send used autoTarget (Urdu) even while
@@ -1340,7 +1342,8 @@ class AetherImeService : InputMethodService() {
             result.onSuccess { translated ->
                 val current=currentInputConnection
                 if(current!=null && !sensitive(currentInputEditorInfo)) {
-                    val stillCurrent=current.getTextBeforeCursor(source.length,0)?.toString().orEmpty()
+                    val stillCurrent=if(sendingDraft)translateDraft
+                        else current.getTextBeforeCursor(source.length,0)?.toString().orEmpty()
                     if(stillCurrent!=source || (translatorOpen &&
                         (translateTarget!=to ||
                          (translateSourceChoice in 0..2 && translateSourceChoice!=from) ||
@@ -1349,9 +1352,20 @@ class AetherImeService : InputMethodService() {
                             Toast.LENGTH_SHORT).show()
                     } else {
                         current.beginBatchEdit()
-                        current.deleteSurroundingText(source.length,0)
-                        current.commitText(translated,1)
+                        if(!sendingDraft)current.deleteSurroundingText(source.length,0)
+                        val accepted=current.commitText(translated,1)
                         current.endBatchEdit()
+                        if(!accepted) {
+                            Toast.makeText(this,"Editor refused translation; nothing sent",
+                                Toast.LENGTH_SHORT).show()
+                            return@onSuccess
+                        }
+                        if(sendingDraft) {
+                            translateDraft=""
+                            translatorOpen=false
+                            stopLiveTranslation()
+                            draw()
+                        }
                         val action=(currentInputEditorInfo?.imeOptions ?:0) and EditorInfo.IME_MASK_ACTION
                         if(action==EditorInfo.IME_ACTION_SEND ||
                            action==EditorInfo.IME_ACTION_SEARCH ||
@@ -1992,8 +2006,14 @@ class AetherImeService : InputMethodService() {
         val top=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
         }
+        add(top,if(translateDraftMode)"✎ Draft" else "App text",.75f) {
+            translateDraftMode=!translateDraftMode
+            translateSource=editorTranslationText()
+            translateResult=""
+            draw();scheduleLiveTranslation(50)
+        }
         add(top,if(translateSourceChoice<0)"Detect language"
-            else languages[from],1.6f) {
+            else languages[from],1.42f) {
             translateSourceChoice=if(translateSourceChoice<0)
                 KeyPopEasyTranslateDirections.nextSource(-1,translateTarget)
             else {
@@ -2022,7 +2042,10 @@ class AetherImeService : InputMethodService() {
             background=gradient(style.background,style.surface,8)
         }
         val source=TextView(this).apply {
-            text=translateSource.ifBlank{"Type in the active app to translate"}
+            text=translateSource.ifBlank{
+                if(translateDraftMode)"Type here to translate…"
+                else "Type in the active app to translate"
+            }
             textSize=12f;setTextColor(style.ink)
             maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
         }
@@ -2059,14 +2082,20 @@ class AetherImeService : InputMethodService() {
         }
         add(actions,"Replace",.87f) {
             val current=currentInputConnection
-            val before=current?.getTextBeforeCursor(translateSource.length,0)?.toString()
-            if(translateResult.isNotBlank() && before==translateSource &&
+            val draft=translateDraftMode
+            val before=if(draft)translateDraft
+                else current?.getTextBeforeCursor(translateSource.length,0)?.toString()
+            if(current!=null && translateResult.isNotBlank() && before==translateSource &&
                 !sensitive(currentInputEditorInfo)) {
-                current?.beginBatchEdit()
-                current?.deleteSurroundingText(translateSource.length,0)
-                current?.commitText(translateResult,1)
-                current?.endBatchEdit()
-                translatorOpen=false;stopLiveTranslation();draw()
+                current.beginBatchEdit()
+                if(!draft)current.deleteSurroundingText(translateSource.length,0)
+                val accepted=current.commitText(translateResult,1)
+                current.endBatchEdit()
+                if(accepted) {
+                    translateDraft=""
+                    translatorOpen=false;stopLiveTranslation();draw()
+                }else Toast.makeText(this,"Editor rejected translation",
+                    Toast.LENGTH_SHORT).show()
             }else Toast.makeText(this,
                 "Translation unavailable or input changed; nothing replaced",
                 Toast.LENGTH_SHORT).show()
