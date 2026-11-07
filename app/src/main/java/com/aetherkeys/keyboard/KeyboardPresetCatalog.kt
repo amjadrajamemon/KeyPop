@@ -59,13 +59,15 @@ object KeyboardPresetCatalog {
         // Punctuation/symbols are available on hold of the period key.
         if(symbols)return listOf("ABC","🌐",",","SPACE",".","↵")
         if(id==MATERIAL || id==CUSTOM)
-            return listOf("?123","☺,","🌐","SPACE",".","↵")
+            return listOf("?123",",","☺","🌐","SPACE",".","↵")
         return listOf("?123",",","🌐","SPACE",".","↵")
     }
     fun keyWeight(id:Int,label:String):Float = when(label){
         "SPACE" -> when(id) { MATERIAL->4.43f;FLOW->5.4f;GESTURE->5.8f;FACETED->5f;else->4.3f }
         "?123","ABC" -> if(id==GESTURE)1.1f else if(id==MATERIAL)1.57f else 1.4f
-        "☺," -> if(id==MATERIAL)1.0f else 1.12f
+        "," -> if(id==MATERIAL)0.85f else 1f
+        "☺" -> if(id==MATERIAL)0.85f else 1.0f
+        "☺," -> if(id==MATERIAL)0.85f else 1.12f
         "↵" ->if(id==MATERIAL)1.58f else 1f
         "." ->if(id==MATERIAL)1f else 1f
         "?" ->if(id==MATERIAL)0.7f else 1f
