@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PKG="com.aetherkeys.keyboard.previewv109"
+PKG="com.aetherkeys.keyboard.previewv110"
 SERVICE="$PKG/com.aetherkeys.keyboard.AetherImeService"
 # Derive the actual file names published by this build, not a stale version.
 APK="$(find dist -maxdepth 1 -name 'KeyPop-*-x86_64-debug.apk' -type f | head -1)"
@@ -18,7 +18,7 @@ test -s "$APK"; test -s "$TEST_APK"
 AAPT="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" -name aapt -type f | sort -V | tail -1)"
 test -n "$AAPT"
 "$AAPT" dump badging "$APK" > forensic-evidence/apk-badging.txt
-if ! grep -q "previewv109" forensic-evidence/apk-badging.txt; then
+if ! grep -q "previewv110" forensic-evidence/apk-badging.txt; then
     echo "Unexpected APK package identity; dump:" >&2
     head -30 forensic-evidence/apk-badging.txt >&2
     exit 1
@@ -46,7 +46,7 @@ adb install -r "$TEST_APK"
 adb logcat -c
 echo "[2/6] Assert Android Activity views and privacy-safe Google Translate handoff intents"
 adb shell am instrument -w -r \
-  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest,com.aetherkeys.keyboard.KeyPopRC10DictionarySmokeTest \
+  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest,com.aetherkeys.keyboard.KeyPopRC10DictionarySmokeTest,com.aetherkeys.keyboard.KeyPopRC11InstrumentedTest \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
   | tee forensic-evidence/instrumentation.txt
 grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/instrumentation.txt
