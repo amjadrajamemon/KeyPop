@@ -28,6 +28,8 @@ class KeyPopModelManagerActivity:Activity() {
     private val teal=0xFF79E9D6.toInt()
     private lateinit var info:TextView
     private lateinit var progress:ProgressBar
+    private lateinit var progressLabel:TextView
+    private lateinit var metrics:TextView
     private lateinit var english:TextView
     private lateinit var urdu:TextView
     private lateinit var sindhi:TextView
@@ -122,10 +124,20 @@ class KeyPopModelManagerActivity:Activity() {
             topMargin=dp(10);bottomMargin=dp(8)
         })
         info=label("No transfer started.",14f,teal);column.addView(info)
+        progressLabel=label("0% complete",14f,white)
+        column.addView(progressLabel)
         progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{
             max=100;visibility=View.GONE
         }
         column.addView(progress,LinearLayout.LayoutParams(-1,dp(24)))
+        metrics=label("",14f,muted).apply {
+            setPadding(dp(12),dp(8),dp(12),dp(8))
+            background=GradientDrawable().apply {
+                setColor(0xFF172F39.toInt());cornerRadius=dp(9).toFloat()
+            }
+        }
+        column.addView(metrics,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})
+        column.addView(label("Automatic network retry: up to three attempts. Interrupted Sindhi files are preserved and resume without restarting from zero.",12f,muted))
         column.addView(label("Installed model status",16f))
         english=label("English · checking…",13f,muted);column.addView(english)
         urdu=label("Urdu · checking…",13f,muted);column.addView(urdu)
@@ -168,6 +180,38 @@ class KeyPopModelManagerActivity:Activity() {
         progress.visibility=if(active||finished)View.VISIBLE else View.GONE
         progress.isIndeterminate=active&&pct<0
         if(pct>=0)progress.progress=pct.coerceIn(0,100)
+        progressLabel.text=when {
+            active -> "$pct% complete · downloading / resuming"
+            finished && state.getBoolean("failed",false) -> "Paused at $pct% · tap Download to resume"
+            finished -> "Download completed · 100%"
+            else -> "No download currently running"
+        }
+        val downloaded=state.getLong("downloadedBytes",0L)
+        val estimated=state.getLong("estimatedBytes",0L)
+        val rate=java.lang.Double.longBitsToDouble(state.getLong(
+            "speedBytesBits",java.lang.Double.doubleToRawLongBits(0.0)))
+        val started=state.getLong("startedAt",0L)
+        val elapsed=if(started>0L)(System.currentTimeMillis()-started).coerceAtLeast(0L)/1000L else 0L
+        if(estimated>0L) {
+            val time=KeyPopTransferMetrics.etaSeconds(downloaded,estimated,rate)
+                ?.let{KeyPopTransferMetrics.elapsed(it)}?:"Calculating…"
+            metrics.text="Downloaded: "+KeyPopTransferMetrics.mb(downloaded)+" MB\n"+
+                "Estimated total: ~"+KeyPopTransferMetrics.mb(estimated)+" MB\n"+
+                "Remaining: ~"+KeyPopTransferMetrics.mb(
+                    KeyPopTransferMetrics.remaining(downloaded,estimated))+" MB\n"+
+                "Speed: "+(if(rate>1024)KeyPopTransferMetrics.mb(rate.toLong())+" MB/s"
+                    else "Measuring…")+"\n"+
+                "Elapsed: "+KeyPopTransferMetrics.elapsed(elapsed)+"\n"+
+                "Estimated time left: "+time+"\n"+
+                "Model bytes are approximate; Google ML Kit does not expose exact download size."
+        } else if(active) {
+            metrics.text="Google ML Kit download in progress. The ML Kit API does not provide "+
+                "exact transferred MB, speed or ETA.\nElapsed: "+
+                KeyPopTransferMetrics.elapsed(elapsed)
+        } else {
+            metrics.text="Choose language packs above. Exact model bytes and ETA appear "+
+                "where supplied by the model host."
+        }
         if(finished)updateSindhi()
     }
     override fun onResume() {
