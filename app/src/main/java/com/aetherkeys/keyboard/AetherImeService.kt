@@ -56,6 +56,9 @@ class AetherImeService : InputMethodService() {
     private val repeatHandler=Handler(Looper.getMainLooper())
     private var repeatBackspace:Runnable?=null
     private var didRepeatBackspace=false
+    private data class AppliedCorrection(val original:String,val corrected:String,
+        val editor:String,val time:Long)
+    private var lastAppliedCorrection:AppliedCorrection?=null
     private val keyViews=ArrayList<Pair<Button,String>>()
     private val imagePreviewExecutor=Executors.newFixedThreadPool(2)
     @Volatile private var recentScreenshotUri:Uri?=null
@@ -260,6 +263,7 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onFinishInputView(finishingInput:Boolean) {
+        lastAppliedCorrection=null
         stopBackspaceRepeating()
         predictionGeneration++
         predictionPending?.let{predictionHandler.removeCallbacks(it)}
@@ -271,6 +275,7 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
+        lastAppliedCorrection=null
         val viewStart=SystemClock.elapsedRealtimeNanos()
         super.onStartInputView(info,restarting)
         stopLiveTranslation()
@@ -1459,6 +1464,7 @@ class AetherImeService : InputMethodService() {
             })
         }
         fun replaceWord(choice:String) {
+            lastAppliedCorrection=null
             val connection=currentInputConnection ?:return
             val actual=Regex("[\\p{L}]+$").find(
                 connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
@@ -1528,6 +1534,7 @@ class AetherImeService : InputMethodService() {
         }
     }
     private fun press(value:String) {
+        if(value!="⌫" && value!="SPACE")lastAppliedCorrection=null
         if(emojiOpen && emojiSearch) {
             when(value) {
                 "⌫" -> emojiQuery=emojiQuery.dropLast(1)
@@ -1541,7 +1548,23 @@ class AetherImeService : InputMethodService() {
             draw();return
         }
         when(value) {
-            "⌫" -> currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
+            "⌫" -> {
+                val connection=currentInputConnection
+                val entry=lastAppliedCorrection
+                val preceding=if(entry!=null)
+                    connection?.getTextBeforeCursor(entry.corrected.length+1,0)?.toString()
+                        .orEmpty() else ""
+                if(entry!=null && entry.editor==currentInputEditorInfo?.packageName &&
+                    KeyPopTypingRules.canUndoRecentCorrection(preceding,entry.original,
+                        entry.corrected,SystemClock.elapsedRealtime()-entry.time)) {
+                    connection?.beginBatchEdit()
+                    connection?.deleteSurroundingText(entry.corrected.length+1,0)
+                    connection?.commitText(entry.original,1)
+                    connection?.endBatchEdit()
+                } else connection?.deleteSurroundingTextInCodePoints(1,0)
+                lastAppliedCorrection=null
+                refreshSuggestions()
+            }
             "⇧" -> {
                 if(language==0 || (prefs.getBoolean("romanMode",false) && language!=0)) {
                     val now=System.currentTimeMillis()
@@ -1553,6 +1576,7 @@ class AetherImeService : InputMethodService() {
                 updateShiftKeys()
             }
             "SPACE" -> {
+                lastAppliedCorrection=null
                 if(!sensitive(currentInputEditorInfo)) {
                     if(language!=0 && prefs.getBoolean("romanMode",false)) {
                         val roman=currentInputConnection?.getTextBeforeCursor(60,0)?.toString()
@@ -1606,6 +1630,9 @@ class AetherImeService : InputMethodService() {
                             val final=KeyPopTypingRules.preservesCase(word,corrected)
                             currentInputConnection?.commitText(final,1)
                             lexicon.learn(predLang,final)
+                            lastAppliedCorrection=AppliedCorrection(word,final,
+                                currentInputEditorInfo?.packageName.orEmpty(),
+                                SystemClock.elapsedRealtime())
                         } else lexicon.learn(predLang,word)
                     }
                 }
