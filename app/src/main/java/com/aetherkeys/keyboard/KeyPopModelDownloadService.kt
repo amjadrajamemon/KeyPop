@@ -24,11 +24,16 @@ class KeyPopModelDownloadService:Service() {
                 Intent(context,KeyPopModelDownloadService::class.java)
                     .putExtra(EXTRA_BUNDLE,bundleId?:"all"))
         }
-        /** One click starts English, Urdu AND all three Sindhi model bundles. */
-        fun startAllLanguages(context:Context) {
+        /** Legacy all-packs shortcut remains available for existing callers. */
+        fun startAllLanguages(context:Context) =
+            startSelected(context,KeyPopPackSelection.directions.keys)
+        fun startSelected(context:Context,directions:Collection<String>) {
+            val selected=directions.filter{it in KeyPopPackSelection.directions}.distinct()
+            require(selected.isNotEmpty()){"Choose at least one translation direction"}
             ContextCompat.startForegroundService(context,
                 Intent(context,KeyPopModelDownloadService::class.java)
-                    .putExtra(EXTRA_BUNDLE,"all_languages"))
+                    .putExtra(EXTRA_BUNDLE,"selected")
+                    .putStringArrayListExtra("directions",ArrayList(selected)))
         }
     }
 
@@ -124,6 +129,47 @@ class KeyPopModelDownloadService:Service() {
             }
         }
     }
+    /** Sequential selected-model downloads with clear per-pack progress. */
+    private fun downloadSelected(startId:Int,selected:Set<String>) {
+        val plan=KeyPopPackSelection.required(selected)
+        if(plan.isEmpty()) {done("Choose at least one translation direction.",true,startId);return}
+        fun progressPosition(index:Int,part:Double=0.0):Int =
+            ((100.0*(index+part.coerceIn(0.0,1.0))/plan.size)).toInt().coerceIn(0,99)
+        fun step(index:Int) {
+            if(index>=plan.size) {
+                done("Selected packs downloaded. Confirm translation accuracy before use.",false,startId)
+                return
+            }
+            val key=plan[index]
+            val position="${index+1}/${plan.size}"
+            update("Installing pack $position: $key",progressPosition(index),true)
+            if(key=="en" || key=="ur") {
+                KeyPopLanguageModels.downloadText(key,false){ok,message->
+                    if(ok)step(index+1)
+                    else done("Pack $key failed: $message",true,startId)
+                }
+                return
+            }
+            val bundle=KeyPopSindhiOnnxPack.bundles.firstOrNull{it.id==key}
+            if(bundle==null) {done("Unknown language pack: $key",true,startId);return}
+            val started=KeyPopSindhiOnnxPack.download(this,bundle) { p->
+                if(p.complete) {
+                    if(p.failed)done("Pack $key failed: "+p.message,true,startId)
+                    else step(index+1)
+                } else {
+                    val part=((p.index-1).coerceAtLeast(0)+
+                        (if(p.total!=null && p.total>0L)
+                            (p.bytes.toDouble()/p.total).coerceIn(0.0,1.0) else 0.0))/
+                        p.count.coerceAtLeast(1)
+                    update("Pack $position · "+bundle.name+" · "+
+                        p.fileName+" · "+(p.bytes/1048576L)+" MB",
+                        progressPosition(index,part),true)
+                }
+            }
+            if(!started)done("Another download is active. Retry selected packs.",true,startId)
+        }
+        step(0)
+    }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
         prepareChannel()
         if(!busy.compareAndSet(false,true))return START_NOT_STICKY
@@ -131,7 +177,10 @@ class KeyPopModelDownloadService:Service() {
         val requested=intent?.getStringExtra(EXTRA_BUNDLE)?:"all"
         update("Connecting to language model server…",-1,true)
         runCatching {
-            if(requested=="all_languages")allLanguages(startId)
+            if(requested=="selected")
+                downloadSelected(startId,intent?.getStringArrayListExtra("directions")
+                    .orEmpty().toSet())
+            else if(requested=="all_languages")allLanguages(startId)
             else sindhi(startId,false,if(requested=="all")null else requested)
         }.onFailure{
             done("Unable to start transfer: "+(it.localizedMessage?:"unknown"),true,startId)
