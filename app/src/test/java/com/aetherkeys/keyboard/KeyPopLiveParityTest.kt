@@ -20,7 +20,7 @@ class KeyPopLiveParityTest {
     }
 
     @Test fun gboardFooterUsesCompactPunctuationAndLanguageKeys() {
-        assertEquals(listOf("?123","☺,","🌐","SPACE",".","↵"),
+        assertEquals(listOf("?123",",","☺","🌐","SPACE",".","↵"),
             KeyboardPresetCatalog.foot(KeyboardPresetCatalog.MATERIAL,false))
         assertEquals(10,KeyPopRowParity.digits.distinct().size)
     }
