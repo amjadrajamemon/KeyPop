@@ -77,6 +77,7 @@ class AetherImeService : InputMethodService() {
     private var resizeOpen=false
     private val renderedRows=ArrayList<Pair<LinearLayout,Int>>()
     private var navSafeBottomPx=0
+    private var lastImeOrientation=0
     private var translatorOpen=false
     private var writingOpen=false
     private var writingSource=""
@@ -234,6 +235,46 @@ class AetherImeService : InputMethodService() {
         super.onDestroy()
     }
 
+    private fun navBottomFromInsets(insets:WindowInsetsCompat?):Int {
+        if(insets==null)return 0
+        val bars=WindowInsetsCompat.Type.navigationBars()
+        return maxOf(insets.getInsets(bars).bottom,
+            runCatching{insets.getInsetsIgnoringVisibility(bars).bottom}.getOrDefault(0))
+    }
+    /** Some OEM IME windows initially report zero navbar insets and later
+     * report the actual 3-button navbar. Keep the biggest safe value for the
+     * current orientation instead of oscillating below the system controls. */
+    private fun navigationFloorPx():Int {
+        val minimum=d(14)
+        return runCatching {
+            val id=resources.getIdentifier("config_navBarInteractionMode","integer","android")
+            val threeButton=id!=0 && resources.getInteger(id)==0
+            if(!threeButton)return@runCatching minimum
+            val heightId=resources.getIdentifier("navigation_bar_height","dimen","android")
+            if(heightId==0)return@runCatching d(48)
+            resources.getDimensionPixelSize(heightId).coerceIn(d(24),d(64))
+        }.getOrDefault(minimum)
+    }
+    private fun applyNavigationInsets(insets:WindowInsetsCompat?=null) {
+        val shell=floatingShell ?:return
+        val orientation=resources.configuration.orientation
+        if(lastImeOrientation!=orientation) {
+            lastImeOrientation=orientation
+            navSafeBottomPx=0
+        }
+        val reported=maxOf(navBottomFromInsets(insets),
+            navBottomFromInsets(ViewCompat.getRootWindowInsets(shell)),
+            navBottomFromInsets(window.window?.decorView?.let {
+                ViewCompat.getRootWindowInsets(it)
+            }))
+        val safe=KeyboardSizingRules.stableSafeBottom(
+            navSafeBottomPx,reported,navigationFloorPx())
+        if(safe!=navSafeBottomPx || shell.paddingBottom!=safe) {
+            navSafeBottomPx=safe
+            shell.setPadding(0,0,0,safe)
+            shell.requestLayout()
+        }
+    }
     override fun onCreateInputView():View {
         // A teal Gboard theme must not silently keep the unrelated Custom geometry.
         // Keep explicit non-Gboard presets; migrate legacy teal theme once.
@@ -247,26 +288,35 @@ class AetherImeService : InputMethodService() {
         }
         language=prefs.getInt("language",0).coerceIn(0,2)
         liveTranslationEnabled=prefs.getBoolean("liveTranslateDefault",true)
+        navSafeBottomPx=0
+        lastImeOrientation=resources.configuration.orientation
         floatingShell=FrameLayout(this).apply{
             setBackgroundColor(Color.TRANSPARENT)
-            // The navigation bar is a system-owned area. Keep the last key above it.
-            setPadding(0,0,0,d(12))
+            // Reserve an initial safe bottom before asynchronous insets arrive.
+            navSafeBottomPx=navigationFloorPx()
+            setPadding(0,0,0,navSafeBottomPx)
         }
         current=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         val shell=floatingShell!!
         characterStrip=KeyPopCharacterStrip(this,shell)
         shell.addView(current,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
-        ViewCompat.setOnApplyWindowInsetsListener(shell) { view,insets ->
-            val bottom=insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val safe=KeyboardSizingRules.safeBottom(bottom,d(12))
-            if(navSafeBottomPx!=safe) {
-                navSafeBottomPx=safe
-                view.setPadding(0,0,0,safe)
-                applyFloatingLayout()
-            }
+        ViewCompat.setOnApplyWindowInsetsListener(shell) { _,insets ->
+            applyNavigationInsets(insets)
             insets
         }
-        ViewCompat.requestApplyInsets(shell)
+        shell.addOnAttachStateChangeListener(object:View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v:View) {
+                // requestApplyInsets before attachment is ignored on some
+                // Redmi / Android 15 IME sessions.
+                ViewCompat.requestApplyInsets(v)
+                v.post {applyNavigationInsets()}
+            }
+            override fun onViewDetachedFromWindow(v:View) = Unit
+        })
+        shell.post {
+            ViewCompat.requestApplyInsets(shell)
+            applyNavigationInsets()
+        }
         draw()
         return shell
     }
@@ -314,6 +364,10 @@ class AetherImeService : InputMethodService() {
             pendingSpeech=null;pendingSpeechSend=false
         }
         draw()
+        floatingShell?.post {
+            floatingShell?.let { ViewCompat.requestApplyInsets(it) }
+            applyNavigationInsets()
+        }
         refreshRecentScreenshotAsync()
         KeyPopDiagnostics.observeKeyboardBuild(this,SystemClock.elapsedRealtimeNanos()-viewStart)
     }
@@ -379,8 +433,8 @@ class AetherImeService : InputMethodService() {
         params.leftMargin=if(percent>=100 && !floating)0 else left
         params.bottomMargin=d(lift+if(floating)prefs.getInt("floatY",16).coerceIn(0,90) else 0)
         params.gravity=Gravity.BOTTOM or Gravity.LEFT
-        shell.minimumHeight=if(floating)minOf(d(480),
-            (resources.displayMetrics.heightPixels*.7f).toInt()) else 0
+        // Never force a large minimum height on floating/docked mode switches.
+        shell.minimumHeight=0
         root.elevation=if(floating)d(14).toFloat() else 0f
         root.layoutParams=params
         shell.requestLayout()
@@ -552,7 +606,13 @@ class AetherImeService : InputMethodService() {
         }
         action("✓ Done",1f){resizeOpen=false;draw()}
         panel.addView(actions)
-        root.addView(panel)
+        val available=resources.displayMetrics.heightPixels
+        val panelHeight=KeyboardSizingRules.boundedPanelHeight(available,d(360))
+        root.addView(ScrollView(this).apply {
+            isFillViewport=false
+            overScrollMode=View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(panel)
+        },LinearLayout.LayoutParams(-1,panelHeight))
     }
     private fun updateThemeAnimation() {
         val enabled=prefs.getBoolean("animatedThemes",false) &&
@@ -1009,7 +1069,11 @@ class AetherImeService : InputMethodService() {
             // Gboard-style tools replace the letter area rather than stack above it.
             return
         }
-        if(resizeOpen)showResizePanel(root)
+        if(resizeOpen) {
+            // Do not stack an entire resize editor above all letter rows.
+            showResizePanel(root)
+            return
+        }
         suggestionBar=null
         if(clipsOpen && !secure) { drawClips(root); return }
         if(writingOpen && !secure && !isNumeric) showWritingPanel(root)

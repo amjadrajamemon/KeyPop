@@ -1,8 +1,8 @@
-name: KeyPop RC15 install-safe debug APK
+name: KeyPop RC16 install-safe debug APK
 on:
   push:
     branches:
-      - feature/rc15-debug-download-20261108
+      - feature/rc16-nav-inset-height-stability-20261108
   pull_request:
   workflow_dispatch:
 
@@ -44,51 +44,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.14-rc15-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.15-rc16-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.14-rc15-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.14-rc15-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.15-rc16-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.15-rc16-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-all-five-apks
+          name: KeyPop-v1.0.15-rc16-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-instrumentation
-          path: dist/KeyPop-v1.0.14-rc15-androidTest.apk
+          name: KeyPop-v1.0.15-rc16-instrumentation
+          path: dist/KeyPop-v1.0.15-rc16-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-ARM64
-          path: dist/KeyPop-v1.0.14-rc15-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.15-rc16-ARM64
+          path: dist/KeyPop-v1.0.15-rc16-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-ARM32
-          path: dist/KeyPop-v1.0.14-rc15-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.15-rc16-ARM32
+          path: dist/KeyPop-v1.0.15-rc16-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-x86
-          path: dist/KeyPop-v1.0.14-rc15-x86-debug.apk
+          name: KeyPop-v1.0.15-rc16-x86
+          path: dist/KeyPop-v1.0.15-rc16-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-x86_64
-          path: dist/KeyPop-v1.0.14-rc15-x86_64-debug.apk
+          name: KeyPop-v1.0.15-rc16-x86_64
+          path: dist/KeyPop-v1.0.15-rc16-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-Universal
-          path: dist/KeyPop-v1.0.14-rc15-universal-debug.apk
+          name: KeyPop-v1.0.15-rc16-Universal
+          path: dist/KeyPop-v1.0.15-rc16-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -101,11 +101,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-x86_64
+          name: KeyPop-v1.0.15-rc16-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-instrumentation
+          name: KeyPop-v1.0.15-rc16-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -125,7 +125,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-emulator-forensic-evidence
+          name: KeyPop-v1.0.15-rc16-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -135,15 +135,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC15 parity branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc15-debug-download-20261108' }}
+    # Publish only the specific RC16 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc16-nav-inset-height-stability-20261108' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.14-rc15-all-five-apks
+          name: KeyPop-v1.0.15-rc16-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -152,8 +152,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.14-rc15-debug-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc15-debug-download-20261108" --jq '.commit.sha')"
+          TAG="v1.0.15-rc16-debug-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc16-nav-inset-height-stability-20261108" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
@@ -165,6 +165,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.14-rc15 Debug Preview — Android APKs" \
-              --notes "KeyPop RC15 DEBUG PREVIEW: newest tested changes through RC13 (translation-send opt-in, visible editor typing), RC12 (screenshot position and encrypted clipboard archive), and RC14 (side-by-side conflict-free installation). This build uses Android debug signing and package com.aetherkeys.keyboard.previewv115, different from RC14 previewv114. It is not a permanently signed production release. It installs alongside older KeyPop versions and starts with separate private settings/clipboard history/model downloads. For now, use this APK while permanent signing remains paused."
+              --title "KeyPop v1.0.15-rc16 Debug Preview — Android APKs" \
+              --notes "KeyPop RC16 DEBUG PREVIEW: fixes intermittent keyboard window height expansion and overlap with Android navigation buttons on Redmi / Android 15. Requests navigation insets after IME view attachment and on each input start, reserves stable navbar bottom padding, supports three-button navigation fallback, removes an artificial 480dp floating-shell minimum height, and places resize controls in a bounded scroll viewport that replaces rather than stacks on key rows. Includes unit regression tests. Installs alongside RC15 using package com.aetherkeys.keyboard.previewv116, with separate app-private clipboard and settings. This is an unsigned-for-production debug preview; permanent signing remains paused."
           fi
