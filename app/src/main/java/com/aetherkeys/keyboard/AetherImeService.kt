@@ -35,6 +35,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.PopupMenu
 import android.widget.HorizontalScrollView
 import android.widget.TextView
 import android.widget.SeekBar
@@ -50,6 +51,8 @@ class AetherImeService : InputMethodService() {
     private val clipStore by lazy { ClipStore(this) }
     private val clipExecutor=Executors.newSingleThreadExecutor()
     private var clipPage=0
+    private var clipTab=0
+    private var clipPanelGeneration=0
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
     private var materialTopBar:LinearLayout?=null
@@ -2558,135 +2561,259 @@ class AetherImeService : InputMethodService() {
         }
         root.addView(panel)
     }
+    /** Compact, asynchronous clipboard UI. Text clips and screenshots are
+     * separate tabs; the keyboard's keypress thread never decrypts images. */
     private fun drawClips(root:LinearLayout) {
-        val s=palette()
-        val title=TextView(this).apply {
-            text="ENCRYPTED CLIPBOARD  ·  NEWEST FIRST  ·  HOLD TO PIN"
-            textSize=10f;setTextColor(s.ink);setPadding(d(9),d(10),0,d(9))
+        val style=palette()
+        val generation=++clipPanelGeneration
+        fun text(label:String,size:Float=13f)=TextView(this).apply {
+            this.text=label;textSize=size;setTextColor(style.ink)
+            setPadding(d(5),d(4),d(5),d(4))
         }
-        root.addView(title)
-        if(!prefs.getBoolean("history",false)) {
-            root.addView(chip("Enable persistent clipboard history") {
-                prefs.edit().putBoolean("history",true).apply()
-                Toast.makeText(this,"Clipboard history enabled for future copies",
-                    Toast.LENGTH_LONG).show()
-                draw()
-            },LinearLayout.LayoutParams(-1,d(42)))
-            root.addView(TextView(this).apply {
-                text="Opt in to save observed copies. Android does not let "+
-                    "inactive keyboards read every background clipboard event."
-                textSize=11f;setTextColor(s.ink)
-            })
+        val heading=LinearLayout(this).apply{
+            orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
         }
-        val options=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
-        options.addView(chip(if(pinnedOnly) "📌 Pinned" else "All clips") {
-            pinnedOnly=!pinnedOnly;clipPage=0;draw()
-        },LinearLayout.LayoutParams(0,d(35),1f))
-        options.addView(chip("Search / manage") {
-            startActivity(Intent(this,KeyPopClipboardActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        },LinearLayout.LayoutParams(0,d(35),1.7f))
-        root.addView(options)
-        val items=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-        val listed=try{clipStore.page(20,clipPage*20,pinnedOnly)}catch(_:Exception){
-            root.addView(TextView(this).apply{
-                text="Clipboard could not be decrypted. Data was not erased."
-                setTextColor(s.ink);setPadding(d(10),d(10),d(10),d(10))
-            });return
-        }
-        if(listed.isEmpty()) items.addView(TextView(this).apply {
-            text="No saved text yet. Screenshots appear in the image archive below."
-            setTextColor(s.ink);setPadding(d(9),d(20),d(9),d(20))
-        })
-        listed.forEach { item ->
-            val button=makeKey((if(item.pinned) "📌 " else "")+item.text.take(65)) {
-                currentInputConnection?.commitText(item.text,1);clipsOpen=false;draw()
-            }
-            button.setOnLongClickListener { clipStore.pin(item.id,!item.pinned);draw();true }
-            items.addView(button,LinearLayout.LayoutParams(-1,d(46)).apply{bottomMargin=d(5)})
-        }
-        val total=runCatching{clipStore.count(pinnedOnly)}.getOrDefault(0L)
-        val pages=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        pages.addView(chip("← Newer") {
-            if(clipPage>0){clipPage--;draw()}
+        heading.addView(text("Clipboard",17f),LinearLayout.LayoutParams(0,d(37),1f))
+        heading.addView(chip("Done ×"){clipsOpen=false;draw()},
+            LinearLayout.LayoutParams(d(84),d(34)))
+        root.addView(heading)
+
+        val tabs=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        tabs.addView(chip(if(clipTab==0)"● Text" else "Text") {
+            if(clipTab!=0){clipTab=0;clipPage=0;draw()}
         },LinearLayout.LayoutParams(0,d(38),1f))
-        pages.addView(TextView(this).apply {
-            text="Page ${clipPage+1} · $total clips"
-            gravity=Gravity.CENTER;setTextColor(s.ink);textSize=12f
-        },LinearLayout.LayoutParams(0,d(38),1.3f))
-        pages.addView(chip("Older →") {
-            if((clipPage+1)*20<total){clipPage++;draw()}
+        tabs.addView(chip(if(clipTab==1)"● Screenshots" else "Screenshots") {
+            if(clipTab!=1){clipTab=1;draw()}
         },LinearLayout.LayoutParams(0,d(38),1f))
-        items.addView(pages)
-        val savedImages=try{KeyPopImageStore(this).list()}catch(_:Exception){emptyList()}
-        val images=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-        for(image in savedImages.take(8)) {
-            val line=LinearLayout(this).apply{
-                orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+        root.addView(tabs)
+
+        val content=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(d(5),d(7),d(5),d(3))
+            addView(text("Loading history…",12f))
+        }
+        root.addView(ScrollView(this).apply {
+            isVerticalScrollBarEnabled=false
+            addView(content)
+        },LinearLayout.LayoutParams(-1,d(205)))
+
+        val footer=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        if(clipTab==0) {
+            footer.addView(chip("Search / manage text"){
+                startActivity(Intent(this,KeyPopClipboardActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },LinearLayout.LayoutParams(-1,d(38)))
+        }else{
+            footer.addView(chip("View all"){
+                startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },LinearLayout.LayoutParams(0,d(38),1f))
+            footer.addView(chip("＋ Import"){
+                startActivity(Intent(this,KeyPopImageImportActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },LinearLayout.LayoutParams(0,d(38),1f))
+        }
+        root.addView(footer)
+        if(clipTab==0) {
+            if(!prefs.getBoolean("history",false)) {
+                content.removeAllViews()
+                content.addView(text("No saved text clips yet",16f))
+                content.addView(text("Enable history to retain future copies.",12f))
+                content.addView(chip("Enable clipboard history"){
+                    prefs.edit().putBoolean("history",true).apply()
+                    clipPage=0;draw()
+                },LinearLayout.LayoutParams(-1,d(43)))
+                return
             }
-            val preview=android.widget.ImageView(this).apply{
-                contentDescription="Saved screenshot image preview"
-                scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFF26344B.toInt())
-                setPadding(d(1),d(1),d(1),d(1))
-            }
-            line.addView(preview,LinearLayout.LayoutParams(d(49),d(42)))
-            imagePreviewExecutor.submit {
-                val bitmap=runCatching{KeyPopImageStore(this).thumbnail(image,110)}.getOrNull()
-                if(bitmap!=null)android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    if(preview.isAttachedToWindow)preview.setImageBitmap(bitmap)
-                    else bitmap.recycle()
+            val page=clipPage
+            val pinned=pinnedOnly
+            clipExecutor.execute {
+                val result=runCatching {
+                    Pair(clipStore.page(12,page*12,pinned),clipStore.count(pinned))
                 }
-            }
-            val label=(if(image.pinned)"📌 " else "")+
-                "📷 "+image.label.take(45)
-            line.addView(chip(label,2f) {
-                val uri=KeyPopImageStore(this).uriForShare(image)
-                if(uri==null){Toast.makeText(this,"Image unavailable",Toast.LENGTH_SHORT).show()}
-                else {
-                    val input=currentInputConnection
-                    val content=InputContentInfo(uri,ClipDescription("KeyPop image",arrayOf(image.mime)),null)
-                    val inserted=try{
-                        input?.commitContent(content,InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION,null)
-                    }catch(_:Exception){false}
-                    if(inserted==true){clipsOpen=false;draw()}
-                    else {
-                        clipboard.setPrimaryClip(ClipData.newUri(contentResolver,"KeyPop image",uri))
-                        val share=Intent(Intent.ACTION_SEND).apply {
-                            type=image.mime;putExtra(Intent.EXTRA_STREAM,uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                predictionHandler.post {
+                    if(!clipsOpen || clipTab!=0 || generation!=clipPanelGeneration)return@post
+                    content.removeAllViews()
+                    result.onFailure {
+                        content.addView(text("Unable to read saved text; no clips were deleted."))
+                    }.onSuccess { (clips,total)->
+                        content.addView(text(if(pinned)"Pinned text clips"
+                            else total.toString()+" saved text clips",12f))
+                        if(clips.isEmpty()) {
+                            content.addView(text(if(pinned)"No pinned clips yet"
+                                else "No saved text yet",15f))
+                            content.addView(text(if(pinned)"Pin a clip in your history."
+                                else "Copy text while KeyPop is active.",12f))
                         }
-                        startActivity(Intent.createChooser(share,"Share saved image")
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        for(clip in clips) {
+                            val row=LinearLayout(this).apply {
+                                orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+                            }
+                            val label=(if(clip.pinned)"📌 " else "")+
+                                clip.text.replace('\n',' ').take(60)
+                            row.addView(chip(label){
+                                currentInputConnection?.commitText(clip.text,1)
+                                clipsOpen=false;draw()
+                            },LinearLayout.LayoutParams(0,d(44),1f))
+                            val menuButton=chip("⋮"){}
+                            row.addView(menuButton,LinearLayout.LayoutParams(d(43),d(44)))
+                            menuButton.setOnClickListener {
+                                PopupMenu(this,menuButton).apply {
+                                    menu.add("Copy").setOnMenuItemClickListener {
+                                        clipboard.setPrimaryClip(
+                                            ClipData.newPlainText("KeyPop clip",clip.text));true
+                                    }
+                                    menu.add(if(clip.pinned)"Unpin" else "Pin")
+                                        .setOnMenuItemClickListener {
+                                            clipExecutor.execute {
+                                                runCatching{clipStore.pin(clip.id,!clip.pinned)}
+                                                predictionHandler.post{if(clipsOpen)draw()}
+                                            };true
+                                        }
+                                    menu.add("Delete").setOnMenuItemClickListener {
+                                        clipExecutor.execute {
+                                            runCatching{clipStore.delete(clip.id)}
+                                            predictionHandler.post{if(clipsOpen)draw()}
+                                        };true
+                                    }
+                                    show()
+                                }
+                            }
+                            content.addView(row)
+                        }
+                        if(total>12) {
+                            val pages=LinearLayout(this).apply {
+                                orientation=LinearLayout.HORIZONTAL
+                            }
+                            if(page>0)pages.addView(chip("← Newer") {
+                                clipPage--;draw()
+                            },LinearLayout.LayoutParams(0,d(35),1f))
+                            if((page+1)*12<total)pages.addView(chip("Load more →") {
+                                clipPage++;draw()
+                            },LinearLayout.LayoutParams(0,d(35),1f))
+                            content.addView(pages)
+                        }
                     }
                 }
-            },LinearLayout.LayoutParams(0,d(40),2f))
-            line.addView(chip(if(image.pinned)"Unpin" else "Pin") {
-                KeyPopImageStore(this).pin(image.id);draw()
-            },LinearLayout.LayoutParams(0,d(40),1f))
-            line.addView(chip("Delete") {
-                KeyPopImageStore(this).delete(image.id);draw()
-            },LinearLayout.LayoutParams(0,d(40),1f))
-            images.addView(line)
+            }
+        }else{
+            imagePreviewExecutor.execute {
+                val result=runCatching{KeyPopImageStore(this).search("")}
+                predictionHandler.post {
+                    if(!clipsOpen || clipTab!=1 || generation!=clipPanelGeneration)return@post
+                    content.removeAllViews()
+                    result.onFailure {
+                        content.addView(text("Image history is unavailable. Nothing was deleted."))
+                    }.onSuccess { all->
+                        if(all.isEmpty()) {
+                            content.addView(text("No screenshots saved yet",15f))
+                            content.addView(text("Enable screenshot access or import an image.",12f))
+                            content.addView(chip("Enable screenshot detection"){
+                                startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            },LinearLayout.LayoutParams(-1,d(38)))
+                        } else {
+                            content.addView(text(all.size.toString()+" saved screenshots",12f))
+                            for(image in all.take(8)) {
+                                val row=LinearLayout(this).apply {
+                                    orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+                                }
+                                val thumbnail=ImageView(this).apply {
+                                    contentDescription="Saved screenshot, tap to paste"
+                                    scaleType=ImageView.ScaleType.CENTER_CROP
+                                    setBackgroundColor(0xFF294D58.toInt())
+                                    setOnClickListener{pasteArchivedScreenshot(image)}
+                                }
+                                row.addView(thumbnail,LinearLayout.LayoutParams(d(55),d(49)))
+                                imagePreviewExecutor.execute {
+                                    val bitmap=runCatching{
+                                        KeyPopImageStore(this).thumbnail(image,112)
+                                    }.getOrNull()
+                                    if(bitmap!=null)predictionHandler.post{
+                                        if(thumbnail.isAttachedToWindow)thumbnail.setImageBitmap(bitmap)
+                                        else bitmap.recycle()
+                                    }
+                                }
+                                val caption=(if(image.pinned)"📌 " else "")+"Saved "+
+                                    java.text.DateFormat.getTimeInstance(
+                                        java.text.DateFormat.SHORT)
+                                        .format(java.util.Date(image.time))
+                                row.addView(chip(caption){pasteArchivedScreenshot(image)},
+                                    LinearLayout.LayoutParams(0,d(44),1f))
+                                val more=chip("⋮"){}
+                                row.addView(more,LinearLayout.LayoutParams(d(43),d(44)))
+                                more.setOnClickListener{
+                                    PopupMenu(this,more).apply {
+                                        menu.add("Paste").setOnMenuItemClickListener{
+                                            pasteArchivedScreenshot(image);true
+                                        }
+                                        menu.add("Share").setOnMenuItemClickListener{
+                                            shareArchivedScreenshot(image);true
+                                        }
+                                        menu.add(if(image.pinned)"Unpin" else "Pin")
+                                            .setOnMenuItemClickListener{
+                                                imagePreviewExecutor.execute{
+                                                    runCatching{
+                                                        KeyPopImageStore(this@AetherImeService).pin(image.id)
+                                                    }
+                                                    predictionHandler.post{if(clipsOpen)draw()}
+                                                };true
+                                            }
+                                        menu.add("Delete").setOnMenuItemClickListener{
+                                            imagePreviewExecutor.execute{
+                                                runCatching{
+                                                    KeyPopImageStore(this@AetherImeService).delete(image.id)
+                                                }
+                                                predictionHandler.post{if(clipsOpen)draw()}
+                                            };true
+                                        }
+                                        show()
+                                    }
+                                }
+                                content.addView(row,LinearLayout.LayoutParams(-1,d(54)))
+                            }
+                        }
+                    }
+                }
+            }
         }
-        items.addView(images)
-        root.addView(ScrollView(this).apply { addView(items) },LinearLayout.LayoutParams(-1,d(215)))
-        root.addView(chip("📷 Screenshot history · All saved images") {
-            startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        },LinearLayout.LayoutParams(-1,d(37)))
-        root.addView(chip("＋ Import screenshot / image") {
-            startActivity(Intent(this,KeyPopImageImportActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        },LinearLayout.LayoutParams(-1,d(37)))
-        val actions=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
-        val back=makeKey("←  Keyboard") { clipsOpen=false;draw() }
-        val erase=makeKey("Hold: clear unpinned") {
-            Toast.makeText(this,"Hold to remove unpinned clips",Toast.LENGTH_SHORT).show()
-        }
-        erase.setOnLongClickListener { clipStore.clearUnpinned();draw();true }
-        actions.addView(back,LinearLayout.LayoutParams(0,d(43),1f).apply{rightMargin=d(4)})
-        actions.addView(erase,LinearLayout.LayoutParams(0,d(43),1f).apply{leftMargin=d(4)})
-        root.addView(actions)
     }
+    private fun pasteArchivedScreenshot(image:KeyPopImageClip) {
+        imagePreviewExecutor.execute{
+            val uri=runCatching{KeyPopImageStore(this).uriForShare(image)}.getOrNull()
+            predictionHandler.post {
+                if(uri==null) {
+                    Toast.makeText(this,"Screenshot unavailable",Toast.LENGTH_SHORT).show()
+                    return@post
+                }
+                val content=InputContentInfo(uri,
+                    ClipDescription("KeyPop screenshot",arrayOf(image.mime)),null)
+                val success=runCatching{
+                    currentInputConnection?.commitContent(content,
+                        InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION,null)
+                }.getOrDefault(false)
+                if(success==true){clipsOpen=false;draw()}
+                else {
+                    clipboard.setPrimaryClip(ClipData.newUri(contentResolver,"KeyPop screenshot",uri))
+                    Toast.makeText(this,"Screenshot copied for pasting",
+                        Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    private fun shareArchivedScreenshot(image:KeyPopImageClip) {
+        imagePreviewExecutor.execute {
+            val uri=runCatching{KeyPopImageStore(this).uriForShare(image)}.getOrNull()
+            predictionHandler.post {
+                if(uri==null)return@post
+                val share=Intent(Intent.ACTION_SEND).apply {
+                    type=image.mime;putExtra(Intent.EXTRA_STREAM,uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(share,"Share screenshot")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+    }
+
 }

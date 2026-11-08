@@ -29,8 +29,10 @@ class KeyPopRC19ScreenshotSetupInstrumentedTest {
     @Test fun clipboardManagerShowsScreenshotHistoryLink() {
         ActivityScenario.launch(KeyPopClipboardActivity::class.java).use {scene->
             scene.onActivity{activity->
-                assertTrue(textExists(activity.window.decorView,"Saved screenshots"))
-                assertTrue(textExists(activity.window.decorView,"All screenshots"))
+                assertTrue(textExists(activity.window.decorView,"Screenshots"))
+                assertTrue(textExists(activity.window.decorView,"Text clips"))
+                assertFalse(textExists(activity.window.decorView,
+                    "No saved text yet. Screenshot images are displayed above."))
             }
         }
     }

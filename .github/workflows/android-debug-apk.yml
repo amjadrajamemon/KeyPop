@@ -1,8 +1,8 @@
-name: KeyPop RC19 install-safe debug APK
+name: KeyPop RC20 install-safe debug APK
 on:
   push:
     branches:
-      - feature/rc19-screenshot-capture-no-gif-20261108
+      - feature/rc20-clipboard-ui-redesign-20261108
   pull_request:
   workflow_dispatch:
 
@@ -44,51 +44,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.18-rc19-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.19-rc20-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.18-rc19-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.18-rc19-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.19-rc20-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.19-rc20-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-all-five-apks
+          name: KeyPop-v1.0.19-rc20-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-instrumentation
-          path: dist/KeyPop-v1.0.18-rc19-androidTest.apk
+          name: KeyPop-v1.0.19-rc20-instrumentation
+          path: dist/KeyPop-v1.0.19-rc20-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-ARM64
-          path: dist/KeyPop-v1.0.18-rc19-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.19-rc20-ARM64
+          path: dist/KeyPop-v1.0.19-rc20-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-ARM32
-          path: dist/KeyPop-v1.0.18-rc19-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.19-rc20-ARM32
+          path: dist/KeyPop-v1.0.19-rc20-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-x86
-          path: dist/KeyPop-v1.0.18-rc19-x86-debug.apk
+          name: KeyPop-v1.0.19-rc20-x86
+          path: dist/KeyPop-v1.0.19-rc20-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-x86_64
-          path: dist/KeyPop-v1.0.18-rc19-x86_64-debug.apk
+          name: KeyPop-v1.0.19-rc20-x86_64
+          path: dist/KeyPop-v1.0.19-rc20-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-Universal
-          path: dist/KeyPop-v1.0.18-rc19-universal-debug.apk
+          name: KeyPop-v1.0.19-rc20-Universal
+          path: dist/KeyPop-v1.0.19-rc20-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -101,11 +101,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-x86_64
+          name: KeyPop-v1.0.19-rc20-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-instrumentation
+          name: KeyPop-v1.0.19-rc20-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -125,7 +125,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-emulator-forensic-evidence
+          name: KeyPop-v1.0.19-rc20-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -135,15 +135,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC19 parity branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc19-screenshot-capture-no-gif-20261108' }}
+    # Publish only the specific RC20 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc20-clipboard-ui-redesign-20261108' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.18-rc19-all-five-apks
+          name: KeyPop-v1.0.19-rc20-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -152,8 +152,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.18-rc19-debug-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc19-screenshot-capture-no-gif-20261108" --jq '.commit.sha')"
+          TAG="v1.0.19-rc20-debug-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc20-clipboard-ui-redesign-20261108" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
@@ -165,6 +165,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.18-rc19 Debug Preview — Android APKs" \
-              --notes "KeyPop RC19 DEBUG PREVIEW: addresses screenshots never appearing in KeyPop. Adds visible one-tap screenshot permission onboarding for Android 14/15, including partial-vs-full Photos access explanation. MediaStore screenshot recognition detects recent Redmi/Xiaomi captures on keyboard open and live gallery changes, then (with explicit opt-in) saves distinct images to a persistent encrypted screenshot archive independent of the Android clipboard. Clipboard manager now displays screenshot thumbnails and an all-images searchable archive with pin, copy, share and delete. The old GIF and sticker shelf plus GIF imports are removed; existing prior-package data is not deleted. Preserves RC18 responsive typing and the Gboard-style keyboard screenshot strip, including Paste and Share where Android editor permissions allow. Installation package com.aetherkeys.keyboard.previewv119 avoids conflict with older previews. This is a debug prerelease; screenshots require full Photos permission and automatic monitoring is limited by Android's input service lifetime."
+              --title "KeyPop v1.0.19-rc20 Debug Preview — Android APKs" \
+              --notes "KeyPop RC20 DEBUG PREVIEW: professionally redesigned clipboard interface. In-keyboard clipboard and full clipboard manager now have separate Text and Screenshots tabs, compact headers, descriptive empty states, hidden empty pagination, context-sensitive actions, unobtrusive item overflow menus, searchable text history, and screenshot thumbnail cards instead of stacks of oversized Pin/Delete buttons. Full screenshot archive also uses a compact two-column grid, image action menus and background thumbnail decoding. Screenshot recognition and encrypted image archive from RC19, password-encrypted text-history backup and restore, and responsive RC18 typing are preserved. Private history is not automatically migrated across debug package identities. Debug preview package com.aetherkeys.keyboard.previewv120 installs independently; signing remains temporary. User-granted full Photos permission remains necessary for automatic screenshot detection."
           fi
