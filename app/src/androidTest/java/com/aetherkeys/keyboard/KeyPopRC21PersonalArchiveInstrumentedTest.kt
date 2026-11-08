@@ -21,7 +21,8 @@ class KeyPopRC21PersonalArchiveInstrumentedTest {
             repeat(3){model.observe(0,"Why are you ","worried")}
             model.observe(0,"Why are you ","worrying")
             assertEquals("worried",model.candidates(0,"Why are you ","wor",3).first())
-            assertFalse(model.candidates(0,"I might ","wor",3).contains("worried"))
+            // Global personal frequency also suggests prior words in new contexts.
+            assertTrue(model.candidates(0,"I might ","wor",3).contains("worried"))
             val added=model.learnFromSavedClip(0,
                 "Please review the report before Thursday morning.")
             assertTrue(added>2)
