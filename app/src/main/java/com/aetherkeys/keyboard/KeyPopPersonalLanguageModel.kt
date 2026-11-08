@@ -104,7 +104,7 @@ class KeyPopPersonalLanguageModel(context:Context) {
             !prefs.getBoolean("personalHistoryLearning",true) ||
             !canLearn(before,committed))return
         val word=normalize(committed)
-        val history=words(before.removeSuffix(before.takeLastWhile{it.isLetter()})))
+        val history=words(before.removeSuffix(before.takeLastWhile{it.isLetter()}))
         if(history.isEmpty())return
         val db=helper.writableDatabase
         db.beginTransaction()
