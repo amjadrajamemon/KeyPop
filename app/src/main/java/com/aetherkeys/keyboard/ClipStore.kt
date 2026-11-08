@@ -124,7 +124,9 @@ class ClipStore(context:Context) {
     }
     @Synchronized fun save(text:String) {
         // Per-item bound only; there is NO count cap and NO automatic eviction.
-        if(text.isBlank() || text.length>1000000)return
+        // No item-count/retention limit; only a generous per-entry safety
+        // ceiling (16 million characters) to guard against memory exhaustion.
+        if(text.isBlank() || text.length>16_000_000)return
         migrateIfNeeded()
         insert(helper.writableDatabase,ClipItem(text,false,System.currentTimeMillis()))
     }
@@ -149,6 +151,34 @@ class ClipStore(context:Context) {
     }
     @Synchronized fun search(query:String,pinnedOnly:Boolean=false):List<ClipItem> =
         query(pinnedOnly).filter { it.text.contains(query,ignoreCase=true) }
+    /** Visit records in a SQLite cursor so a backup does not have to load
+     * years of clipboard history into RAM. Oldest first for natural restore. */
+    @Synchronized fun visitForBackup(visit:(ClipItem)->Unit):Int {
+        migrateIfNeeded()
+        var count=0
+        helper.readableDatabase.query("clips",
+            arrayOf("_id","cipher","pinned","copied_at"),
+            null,null,null,null,"_id ASC").use {cursor->
+            while(cursor.moveToNext()) {
+                visit(record(cursor))
+                count++
+            }
+        }
+        return count
+    }
+    /** Preserve timestamp, duplicates and pinned state when importing a
+     * password-encrypted backup; append instead of erasing existing history. */
+    @Synchronized fun restoreBatch(items:List<ClipItem>):Int {
+        if(items.isEmpty())return 0
+        migrateIfNeeded()
+        val db=helper.writableDatabase
+        db.beginTransaction()
+        try {
+            items.forEach { insert(db,it) }
+            db.setTransactionSuccessful()
+        } finally {db.endTransaction()}
+        return items.size
+    }
     @Synchronized fun clear() {
         migrateIfNeeded()
         helper.writableDatabase.delete("clips",null,null)

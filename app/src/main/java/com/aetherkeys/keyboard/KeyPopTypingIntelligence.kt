@@ -92,7 +92,20 @@ object KeyPopTypingIntelligence {
         "mesage" to "message","messge" to "message",
         "vreate" to "create","vreated" to "created",
         "screensots" to "screenshots",
-        "screnshots" to "screenshots","screenshto" to "screenshot"
+        "screnshots" to "screenshots","screenshto" to "screenshot",
+        "keyboardd" to "keyboard","grammer" to "grammar",
+        "speling" to "spelling","prediciton" to "prediction",
+        "sugetions" to "suggestions","suggetions" to "suggestions",
+        "autocorect" to "autocorrect","improvemnts" to "improvements",
+        "clipboardd" to "clipboard","cliboard" to "clipboard",
+        "definetely" to "definitely","intermitent" to "intermittent",
+        "didnt" to "didn't","isnt" to "isn't","arent" to "aren't",
+        "wont" to "won't","havent" to "haven't","werent" to "weren't",
+        "writting" to "writing","recieved" to "received",
+        "shoudlnt" to "shouldn't","couldnt" to "couldn't",
+        "seperately" to "separately","applicaton" to "application",
+        "possibile" to "possible","translaton" to "translation",
+        "correctionn" to "correction","sreen" to "screen"
     )
     private val frequentEnglish=setOf("the","and","you","your","should","would",
         "could","more","this","that","with","what","where","when",
@@ -167,16 +180,33 @@ object KeyPopTypingIntelligence {
             .thenBy{it.text.length}.thenBy{it.text}).take(limit.coerceIn(1,8))
             .map{it.text}
     }
-    /** Next-word predictions when the cursor follows a space; always available offline. */
-    fun nextWords(language:Int,previous:String):List<String> {
+    /** Conservative sentence-aware next-word predictions. Intent is to rank
+     * plausible words, not insert speculative text without user consent. */
+    fun nextWords(language:Int,previous:String,beforeCursor:String=""):List<String> {
         val last=normalized(previous)
         val contextual=follow[language]?.get(last).orEmpty()
+        val sentence=beforeCursor.trimEnd().lowercase(Locale.ROOT)
+        val phrase=if(language!=0)emptyList() else when {
+            Regex("\\b(why|how) are you$").containsMatchIn(sentence) ->
+                listOf("worried","worrying","okay")
+            Regex("\\bi (have|had)$").containsMatchIn(sentence) ->
+                listOf("been","done","worked")
+            Regex("\\b(i am|i'm)$").containsMatchIn(sentence) ->
+                listOf("going","working","ready")
+            Regex("\\b(can|could|would) you$").containsMatchIn(sentence) ->
+                listOf("please","help","send")
+            Regex("\\bplease$").containsMatchIn(sentence) ->
+                listOf("check","confirm","share")
+            Regex("\\b(we|they) are$").containsMatchIn(sentence) ->
+                listOf("working","ready","waiting")
+            else ->emptyList()
+        }
         val defaults=when(language) {
             1 ->listOf("آپ","میں","براہ","جی","شکریہ","یہ")
             2 ->listOf("توهان","مان","مهرباني","ڇا","ٺيڪ","اسان")
             else ->listOf("I","The","Please","Thanks","We","Hello")
         }
-        return (contextual+defaults).distinct().take(3)
+        return (phrase+contextual+defaults).distinct().take(3)
     }
     /** Preserve valid vocabulary and plural forms. Fuzzy guesses are suggestions,
      * NOT forced replacement. Explicit high-confidence typos auto-correct. */

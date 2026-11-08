@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 31
-        versionName = "1.0.15-rc16-nav-inset-stability" 
+        versionCode = 32
+        versionName = "1.0.16-rc17-screenshots-predictions-clipboard" 
     }
     splits {
         abi {
@@ -42,7 +42,7 @@ android {
         debug {
             // Debug builds retain an ephemeral test-only signature and their
             // OWN app identity. Never distribute them as an upgrade path.
-            applicationIdSuffix = ".previewv116"
+            applicationIdSuffix = ".previewv117"
             versionNameSuffix = "-debug-test-only"
         }
         release {

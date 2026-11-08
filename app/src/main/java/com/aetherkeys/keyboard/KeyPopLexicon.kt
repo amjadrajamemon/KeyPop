@@ -124,7 +124,11 @@ class KeyPopLexicon(context:Context) {
         if(KeyPopTypingIntelligence.correction(lang,value)!=null)return
         val old=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         if(value in old)return
-        val updated=(old+value).toList().takeLast(2000).toSet()
+        // Do not silently teach invalid spellings as correct dictionary words.
+        // Explicit personal-dictionary entries remain available for names.
+        if(lang==0 && scowlIndex[value.take(2)].orEmpty().none {it.word==value} &&
+            value !in english)return
+        val updated=(old+value).toList().takeLast(15000).toSet()
         store.edit().putStringSet("learned_"+lang,updated).apply()
     }
     fun suggestions(lang:Int,fragment:String,limit:Int=3,previous:String="",
@@ -137,16 +141,38 @@ class KeyPopLexicon(context:Context) {
         return KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
             learned,limit,dictionary,tiers,beforeCursor)
     }
-    fun nextWords(lang:Int,previous:String):List<String> =
-        KeyPopTypingIntelligence.nextWords(lang,previous)
-    fun correction(lang:Int,word:String):String? {
+    fun nextWords(lang:Int,previous:String,beforeCursor:String=""):List<String> =
+        KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor)
+    fun correction(lang:Int,word:String,beforeCursor:String=""):String? {
         val normalized=word.trim().lowercase(Locale.ROOT)
         val manual=store.getStringSet("manual_"+lang,emptySet()).orEmpty()
         if(normalized in manual)return null
         val base=when(lang){1->urdu;2->sindhi;else->english}
         if(normalized in base)return null
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
-        return KeyPopTypingIntelligence.correction(lang,word,learned)
+        KeyPopTypingIntelligence.correction(lang,word,learned)?.let{return it}
+        if(lang!=0 || normalized.length !in 4..20 || !normalized.all{it in 'a'..'z'} ||
+            normalized in learned)return null
+        // Protect actual SCOWL words (including plurals), even if the
+        // small curated lexicon did not include them.
+        if(scowlIndex[normalized.take(2)].orEmpty().any{it.word==normalized})
+            return null
+        val context=KeyPopPredictionContext.parse(beforeCursor,word)
+        data class Scored(val word:String,val value:Int)
+        val ranked=rankCandidates(normalized).asSequence()
+            .filter{it.tier<=20 && it.word!=normalized &&
+                KeyPopTypingIntelligence.keyboardDistance(normalized,it.word)==1}
+            .map {
+                val grammar=KeyPopPredictionContext.score(context,normalized,it.word)
+                Scored(it.word,(if(it.tier<=10)120 else 70)+grammar)
+            }
+            .sortedWith(compareByDescending<Scored>{it.value}.thenBy{it.word})
+            .take(3).toList()
+        val best=ranked.firstOrNull()?:return null
+        val next=ranked.getOrNull(1)
+        // Automatic edits must be unambiguous. Otherwise expose suggestions
+        // to the user (e.g. worke could mean worker OR worked).
+        return if(next==null || best.value-next.value>=80) best.word else null
     }
     fun glide(lang:Int,path:List<String>):String? {
         if(lang!=0 || path.size<3)return null

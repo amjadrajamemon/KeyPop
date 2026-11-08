@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PKG="com.aetherkeys.keyboard.previewv116"
+PKG="com.aetherkeys.keyboard.previewv117"
 SERVICE="$PKG/com.aetherkeys.keyboard.AetherImeService"
 # Derive the actual file names published by this build, not a stale version.
 APK="$(find dist -maxdepth 1 -name 'KeyPop-*-x86_64-debug.apk' -type f | head -1)"
@@ -18,7 +18,7 @@ test -s "$APK"; test -s "$TEST_APK"
 AAPT="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" -name aapt -type f | sort -V | tail -1)"
 test -n "$AAPT"
 "$AAPT" dump badging "$APK" > forensic-evidence/apk-badging.txt
-if ! grep -q "previewv116" forensic-evidence/apk-badging.txt; then
+if ! grep -q "previewv117" forensic-evidence/apk-badging.txt; then
     echo "Unexpected APK package identity; dump:" >&2
     head -30 forensic-evidence/apk-badging.txt >&2
     exit 1
@@ -42,26 +42,26 @@ if [ "$ready" != "1" ]; then
 fi
 echo "[1/6] Install the application and Android instrumentation tests"
 # Regression for the reported INSTALL_FAILED_UPDATE_INCOMPATIBLE.
-# Install the last released RC15 APK on the *same* emulator first, then
-# install RC16 without uninstalling RC15. Both must remain installed.
-OLD_APK="dist/KeyPop-v1.0.14-rc15-x86_64-debug.apk"
+# Install the last released RC16 APK on the *same* emulator first, then
+# install RC17 without uninstalling RC16. Both must remain installed.
+OLD_APK="dist/KeyPop-v1.0.15-rc16-x86_64-debug.apk"
 echo "[coexistence] Download the prior signed preview"
 curl -fLsS --retry 3 --connect-timeout 30 \
-  "https://github.com/amjadrajamemon/KeyPop/releases/download/v1.0.14-rc15-debug-preview/KeyPop-v1.0.14-rc15-x86_64-debug.apk" \
+  "https://github.com/amjadrajamemon/KeyPop/releases/download/v1.0.15-rc16-debug-preview/KeyPop-v1.0.15-rc16-x86_64-debug.apk" \
   -o "$OLD_APK"
 test -s "$OLD_APK"
 adb install -r "$OLD_APK"
-adb shell pm path com.aetherkeys.keyboard.previewv115 | grep -q package:
-echo "[coexistence] Install RC16 beside the previous RC15 preview"
-adb install -r "$APK"
-adb shell pm path com.aetherkeys.keyboard.previewv115 | grep -q package:
 adb shell pm path com.aetherkeys.keyboard.previewv116 | grep -q package:
-echo "PASS: old RC15 and new RC16 coexist without a signature conflict"
+echo "[coexistence] Install RC17 beside the previous RC16 preview"
+adb install -r "$APK"
+adb shell pm path com.aetherkeys.keyboard.previewv116 | grep -q package:
+adb shell pm path com.aetherkeys.keyboard.previewv117 | grep -q package:
+echo "PASS: old RC16 and new RC17 coexist without a signature conflict"
 adb install -r "$TEST_APK"
 adb logcat -c
 echo "[2/6] Assert Android Activity views and privacy-safe Google Translate handoff intents"
 adb shell am instrument -w -r \
-  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest,com.aetherkeys.keyboard.KeyPopRC10DictionarySmokeTest,com.aetherkeys.keyboard.KeyPopRC11InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC12InstrumentedTest \
+  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest,com.aetherkeys.keyboard.KeyPopRC10DictionarySmokeTest,com.aetherkeys.keyboard.KeyPopRC11InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC12InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC17ClipboardBackupInstrumentedTest \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
   | tee forensic-evidence/instrumentation.txt
 grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/instrumentation.txt

@@ -368,7 +368,11 @@ class MainActivity:Activity() {
             option(this,"Auto-correct spelling","autoCorrect",true)
             option(this,"Grammar-aware suggestions","contextPredictions",true)
             option(this,"Grammar hints (suggest only)","grammarHints",true)
-            option(this,"Apply grammar fixes automatically","autoGrammarApply",false)
+            option(this,"Apply high-confidence grammar fixes on Space",
+                "autoGrammarApply",true)
+            addView(text("Auto-grammar handles conservative rules such as "+
+                "'I are' → 'I am'. Ambiguous edits stay suggestions; "+
+                "passwords, URLs and special text fields are excluded.",12f,muted))
         }
         addBlock {
             addView(text("02   PUNCTUATION & CAPITALS",13f,accent,true))
@@ -405,11 +409,14 @@ class MainActivity:Activity() {
         addBlock {
             addView(text("06   RECENT SCREENSHOTS",13f,accent,true))
             option(this,"Show copied screenshots on keyboard","screenshotClipOffer",true)
-            option(this,"Suggest recent gallery screenshots (opt-in)",
-                "autoScreenshotSuggestions",false)
-            addView(text("Screenshots appear in a dedicated preview strip above the toolbar. "+
-                "Paste inserts into apps supporting image content; Share is separate. "+
-                "Gallery suggestions are opt-in.",12f,muted))
+            option(this,"Suggest new screenshots automatically (requires access)",
+                "autoScreenshotSuggestions",true)
+            addView(text("Like Gboard, a newly captured screenshot can appear "+
+                "as a small thumbnail with Paste, Share, Save and Dismiss. "+
+                "KeyPop listens for new screenshots only while its keyboard is "+
+                "open. To detect images NOT on the clipboard, Android requires "+
+                "full photo access: choose 'Allow all photos'. Some apps "+
+                "cannot accept image insertion from a keyboard.",12f,muted))
             action(this,"Allow screenshot access (optional)") {
                 val permission=if(Build.VERSION.SDK_INT>=33)
                     Manifest.permission.READ_MEDIA_IMAGES
@@ -497,10 +504,17 @@ class MainActivity:Activity() {
     private fun privacy(){
         heading("Clipboard & Security","Privacy and local data")
         addBlock {
-            option(this,"Clipboard history (opt-in)","history")
-            addView(text("Locally encrypted text archive, with no automatic age "+
-                "or item-count limit. Storage space and Android clipboard access "+
-                "rules apply; uninstalling or clearing app data erases the archive.",12f,muted))
+            option(this,"Clipboard history — retain every observed copy","history")
+            option(this,"Also save copied images to encrypted vault","historyImages")
+            addView(text("Every observed text copy is retained (including repeats "+
+                "and multi-item copies), with no age or item-count expiration. "+
+                "Saved images are also retained when image history is enabled; "+
+                "storage capacity and Android background clipboard limits still "+
+                "apply. Passwords marked sensitive are excluded.",12f,muted))
+            addView(text("Keep history across future APK package changes: "+
+                "Clipboard manager → Encrypted backup, then Restore history "+
+                "after installing the new app. A private archive does not "+
+                "migrate automatically with a different package ID.",12f,muted))
             option(this,"High contrast labels","highContrast")
             option(this,"Private performance metrics","performanceMetrics")
             action(this,"Manage saved passwords"){

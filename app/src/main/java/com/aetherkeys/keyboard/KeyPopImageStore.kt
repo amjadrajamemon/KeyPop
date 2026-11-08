@@ -20,7 +20,7 @@ import javax.crypto.spec.GCMParameterSpec
 data class KeyPopImageClip(val id:String,val time:Long,val mime:String,val pinned:Boolean,
     val label:String="")
 
-/** Encrypted image vault, bounded at 12 MiB per image and without automatic photo-library access. */
+/** Encrypted image vault, bounded at 32 MiB per image (memory safety), without automatic gallery access. */
 class KeyPopImageStore(private val context:Context) {
     private val folder=File(context.filesDir,"clip-images").apply{mkdirs()}
     private val prefs=context.getSharedPreferences("keypop_clip_images",Context.MODE_PRIVATE)
@@ -77,7 +77,7 @@ class KeyPopImageStore(private val context:Context) {
                 val read=stream.read(buf)
                 if(read<0)break
                 out.write(buf,0,read)
-                if(out.size()>12*1024*1024)return false
+                if(out.size()>32*1024*1024)return false
             }
             out.toByteArray()
         }

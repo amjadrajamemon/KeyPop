@@ -6,6 +6,8 @@ import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.content.ClipboardManager
 import android.content.Context
+import android.database.ContentObserver
+import android.provider.MediaStore
 import android.os.Handler
 import android.os.Looper
 import android.content.Intent
@@ -66,6 +68,9 @@ class AetherImeService : InputMethodService() {
     @Volatile private var recentScreenshotUri:Uri?=null
     @Volatile private var screenshotMime="image/png"
     private var screenshotRefreshToken=0
+    private var dismissedScreenshotUri:Uri?=null
+    private var screenshotObserver:ContentObserver?=null
+    private var screenshotDebounce:Runnable?=null
     private val clipboard by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
     private val languages=listOf("ENGLISH","اردو","سنڌي")
     private var language=0
@@ -195,14 +200,27 @@ class AetherImeService : InputMethodService() {
         if (!sensitive(currentInputEditorInfo) && prefs.getBoolean("history",false)) {
             try {
                 val clip=clipboard.primaryClip
-                if(clip!=null && clip.itemCount>0 &&
-                    clip.description.hasMimeType("text/*")) {
-                    val markedSensitive=Build.VERSION.SDK_INT>=33 &&
-                        clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true
-                    if(!markedSensitive) {
-                        val captured=clip.getItemAt(0).text?.toString()
-                        if(!captured.isNullOrBlank())
-                            clipExecutor.execute {runCatching{clipStore.save(captured)}}
+                val markedSensitive=Build.VERSION.SDK_INT>=33 &&
+                    clip?.description?.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true
+                if(clip!=null && clip.itemCount>0 && !markedSensitive) {
+                    // Preserve ALL text items from every observed copy event,
+                    // including repeated copies; no number/age eviction.
+                    if(clip.description.hasMimeType("text/*")) {
+                        val copies=(0 until clip.itemCount).mapNotNull {
+                            clip.getItemAt(it).text?.toString()?.takeIf(String::isNotBlank)
+                        }
+                        if(copies.isNotEmpty())clipExecutor.execute {
+                            copies.forEach {runCatching{clipStore.save(it)}}
+                        }
+                    }
+                    // Images are separately opt-in to avoid silently archiving
+                    // private screenshots while the keyboard is visible.
+                    if(clip.description.hasMimeType("image/*") &&
+                        prefs.getBoolean("historyImages",false)) {
+                        val uris=(0 until clip.itemCount).mapNotNull {clip.getItemAt(it).uri}
+                        if(uris.isNotEmpty())clipExecutor.execute {
+                            uris.forEach {runCatching{KeyPopImageStore(this).save(it)}}
+                        }
                     }
                 }
             } catch (_:Exception) { /* Never break typing on inaccessible clipboard. */ }
@@ -225,6 +243,7 @@ class AetherImeService : InputMethodService() {
         stopBackspaceRepeating()
         stopLiveTranslation()
         screenshotRefreshToken++
+        stopScreenshotObserver()
         themeAnimator?.cancel();themeAnimator=null;liveBackground=null
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
         try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
@@ -327,6 +346,7 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onFinishInputView(finishingInput:Boolean) {
+        stopScreenshotObserver()
         lastAppliedCorrection=null
         stopBackspaceRepeating()
         predictionGeneration++
@@ -364,6 +384,7 @@ class AetherImeService : InputMethodService() {
             pendingSpeech=null;pendingSpeechSend=false
         }
         draw()
+        startScreenshotObserver()
         floatingShell?.post {
             floatingShell?.let { ViewCompat.requestApplyInsets(it) }
             applyNavigationInsets()
@@ -639,8 +660,34 @@ class AetherImeService : InputMethodService() {
         } else if(themeAnimator?.isPaused==true)themeAnimator?.resume()
     }
 
-    /** Refresh clipboard-image and opt-in gallery screenshot offer only when the
-     * keyboard opens or the clipboard changes, never on each typed character. */
+    /** Screenshots saved by Android normally do NOT change the clipboard.
+     * Observe MediaStore while the keyboard is visible, without polling. */
+    private fun startScreenshotObserver() {
+        stopScreenshotObserver()
+        if(sensitive(currentInputEditorInfo) ||
+            !prefs.getBoolean("autoScreenshotSuggestions",true) ||
+            !KeyPopRecentScreenshots.granted(this))return
+        val observer=object:ContentObserver(predictionHandler) {
+            override fun onChange(selfChange:Boolean) {
+                screenshotDebounce?.let {predictionHandler.removeCallbacks(it)}
+                val task=Runnable {refreshRecentScreenshotAsync()}
+                screenshotDebounce=task
+                predictionHandler.postDelayed(task,400)
+            }
+        }
+        try {
+            contentResolver.registerContentObserver(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,true,observer)
+            screenshotObserver=observer
+        }catch(_:Exception) {}
+    }
+    private fun stopScreenshotObserver() {
+        screenshotDebounce?.let {predictionHandler.removeCallbacks(it)}
+        screenshotDebounce=null
+        screenshotObserver?.let{runCatching{contentResolver.unregisterContentObserver(it)}}
+        screenshotObserver=null
+    }
+    /** Refresh on screenshot media change, keyboard open or clipboard change. */
     private fun refreshRecentScreenshotAsync() {
         if(sensitive(currentInputEditorInfo)) {
             recentScreenshotUri=null
@@ -650,7 +697,7 @@ class AetherImeService : InputMethodService() {
         imagePreviewExecutor.execute {
             var uri:Uri?=null
             var mime="image/png"
-            try {
+            runCatching {
                 val clip=clipboard.primaryClip
                 val markedSensitive=Build.VERSION.SDK_INT>=33 &&
                     clip?.description?.extras?.getBoolean("android.content.extra.IS_SENSITIVE")==true
@@ -659,17 +706,18 @@ class AetherImeService : InputMethodService() {
                     uri=clip.getItemAt(0).uri
                     if(uri!=null)mime=contentResolver.getType(uri)?:"image/png"
                 }
-                if(uri==null && prefs.getBoolean("autoScreenshotSuggestions",false)) {
-                    uri=KeyPopRecentScreenshots.latest(this)
-                    if(uri!=null)mime=contentResolver.getType(uri)?:"image/png"
-                }
-            } catch(_:Exception){ /* Inaccessible clipboard or media is not an IME failure. */ }
+            }
+            if(uri==null)runCatching {
+                uri=KeyPopRecentScreenshots.latest(this)
+                if(uri!=null)mime=contentResolver.getType(uri)?:"image/png"
+            }
             val found=uri
             Handler(Looper.getMainLooper()).post {
                 if(token==screenshotRefreshToken && !sensitive(currentInputEditorInfo) &&
                     current!=null) {
-                    val changed=recentScreenshotUri!=found
-                    recentScreenshotUri=found
+                    val visible=found?.takeUnless {it==dismissedScreenshotUri}
+                    val changed=recentScreenshotUri!=visible
+                    recentScreenshotUri=visible
                     screenshotMime=mime
                     if(changed)draw()
                 }
@@ -735,25 +783,40 @@ class AetherImeService : InputMethodService() {
             background=gradient(style.surface,style.background,10)
         }
         val thumbnail=ImageView(this).apply {
-            contentDescription="Recent screenshot preview, tap to paste"
+            contentDescription="Just captured screenshot: tap to paste"
             scaleType=ImageView.ScaleType.CENTER_CROP
             setBackgroundColor(style.background)
             setOnClickListener{insertRecentScreenshot(uri,mime)}
         }
-        strip.addView(thumbnail,LinearLayout.LayoutParams(d(76),d(48)).apply {
-            rightMargin=d(7)
+        strip.addView(thumbnail,LinearLayout.LayoutParams(d(65),d(45)).apply {
+            rightMargin=d(5)
         })
         val caption=TextView(this).apply {
-            text="Recent screenshot";textSize=12f;setTextColor(style.ink)
+            text="Screenshot";textSize=11f;setTextColor(style.ink)
             maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
         }
         strip.addView(caption,LinearLayout.LayoutParams(0,d(45),1f))
         val paste=chip("Paste") {insertRecentScreenshot(uri,mime)}
-        paste.contentDescription="Paste screenshot in active app"
-        strip.addView(paste,LinearLayout.LayoutParams(d(66),d(42)))
+        paste.contentDescription="Paste screenshot if the current app supports image insertion"
+        strip.addView(paste,LinearLayout.LayoutParams(d(55),d(42)))
         val share=chip("Share") {shareRecentScreenshot(uri,mime)}
-        strip.addView(share,LinearLayout.LayoutParams(d(66),d(42)))
-        root.addView(strip,LinearLayout.LayoutParams(-1,d(57)))
+        strip.addView(share,LinearLayout.LayoutParams(d(55),d(42)))
+        strip.addView(chip("Save") {
+            imagePreviewExecutor.execute {
+                val stored=runCatching{KeyPopImageStore(this).save(uri)}.getOrDefault(false)
+                predictionHandler.post {
+                    Toast.makeText(this,if(stored)"Saved in encrypted image archive"
+                        else "Could not save screenshot",Toast.LENGTH_SHORT).show()
+                }
+            }
+        },LinearLayout.LayoutParams(d(51),d(42)))
+        strip.addView(chip("×") {
+            dismissedScreenshotUri=uri
+            recentScreenshotUri=null
+            draw()
+        }.apply{contentDescription="Dismiss this screenshot offer"},
+            LinearLayout.LayoutParams(d(32),d(42)))
+        root.addView(strip,LinearLayout.LayoutParams(-1,d(56)))
         showScreenshotPreview(thumbnail,uri)
     }
 
@@ -892,7 +955,10 @@ class AetherImeService : InputMethodService() {
         }
 
         if(toolsOpen) {
-            val panel=LinearLayout(this).apply {
+            val panel=KeyPopSwipePanel(this) { direction ->
+                toolsPage=(toolsPage+direction+3)%3
+                draw()
+            }.apply {
                 orientation=LinearLayout.VERTICAL
                 setPadding(d(8),d(8),d(8),d(8))
                 background=KeyPopGlass.background(this@AetherImeService,s)
@@ -949,6 +1015,19 @@ class AetherImeService : InputMethodService() {
                     "⬚  Floating" to {
                         prefs.edit().putBoolean("floating",!prefs.getBoolean("floating",false)).apply()
                         toolsOpen=false;draw()
+                    },
+                    "📷  Screenshots" to {
+                        toolsOpen=false
+                        startActivity(Intent(this,MainActivity::class.java)
+                            .putExtra("openSection","typing")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        draw()
+                    },
+                    "▤  Full archive" to {
+                        toolsOpen=false
+                        startActivity(Intent(this,KeyPopClipboardActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        draw()
                     }
                 ))
                 1 -> grid(listOf(
@@ -1065,7 +1144,7 @@ class AetherImeService : InputMethodService() {
                 LinearLayout.LayoutParams(d(56),d(37)))
             panel.addView(pagination)
             root.addView(panel,LinearLayout.LayoutParams(-1,
-                d(if(toolsPage==0)276 else if(toolsPage==1)300 else 345)))
+                d(if(toolsPage==0)304 else if(toolsPage==1)300 else 345)))
             // Gboard-style tools replace the letter area rather than stack above it.
             return
         }
@@ -1639,7 +1718,7 @@ class AetherImeService : InputMethodService() {
         val task=Runnable {
             if(predictionExecutor.isShutdown)return@Runnable
             predictionExecutor.execute {
-                val values=if(word.isEmpty())lexicon.nextWords(predLang,previous)
+                val values=if(word.isEmpty())lexicon.nextWords(predLang,previous,before)
                     else lexicon.suggestions(predLang,word,
                         limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
                         previous=previous,
@@ -1871,10 +1950,10 @@ class AetherImeService : InputMethodService() {
                         val inputType=currentInputEditorInfo?.inputType?:0
                         val corrected=if(KeyPopTypingRules.autocorrectEnabled(
                                 prefs.getBoolean("autoCorrect",true),inputType))
-                            lexicon.correction(predLang,word) else null
+                            lexicon.correction(predLang,word,before) else null
                         // Grammar hints are suggestions, not forced edits. Optional
                         // auto-grammar has its own setting and respects autocorrect off.
-                        val grammar=if(prefs.getBoolean("autoGrammarApply",false) &&
+                        val grammar=if(prefs.getBoolean("autoGrammarApply",true) &&
                             KeyPopTypingRules.autocorrectEnabled(
                                 prefs.getBoolean("autoCorrect",true),inputType) &&
                             prefs.getBoolean("grammarHints",true))
@@ -2380,6 +2459,19 @@ class AetherImeService : InputMethodService() {
             textSize=10f;setTextColor(s.ink);setPadding(d(9),d(10),0,d(9))
         }
         root.addView(title)
+        if(!prefs.getBoolean("history",false)) {
+            root.addView(chip("Enable persistent clipboard history") {
+                prefs.edit().putBoolean("history",true).apply()
+                Toast.makeText(this,"Clipboard history enabled for future copies",
+                    Toast.LENGTH_LONG).show()
+                draw()
+            },LinearLayout.LayoutParams(-1,d(42)))
+            root.addView(TextView(this).apply {
+                text="Opt in to save observed copies. Android does not let "+
+                    "inactive keyboards read every background clipboard event."
+                textSize=11f;setTextColor(s.ink)
+            })
+        }
         val options=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
         options.addView(chip(if(pinnedOnly) "📌 Pinned" else "All clips") {
             pinnedOnly=!pinnedOnly;clipPage=0;draw()

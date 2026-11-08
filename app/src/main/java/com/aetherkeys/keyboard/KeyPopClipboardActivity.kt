@@ -5,6 +5,9 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.text.InputType
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -37,6 +40,8 @@ class KeyPopClipboardActivity:Activity() {
     private var offset=0
     private var generation=0
     private val pageSize=60
+    private val exportRequest=811
+    private val importRequest=812
     private fun d(n:Int)=(n*resources.displayMetrics.density).toInt()
     private fun label(value:String,size:Float=14f,color:Int=ink)=TextView(this).apply{
         text=value;textSize=size;setTextColor(color);setPadding(d(3),d(5),d(3),d(5))
@@ -97,6 +102,26 @@ class KeyPopClipboardActivity:Activity() {
                 }.show()
         },LinearLayout.LayoutParams(0,d(48),1.3f))
         root.addView(options)
+        val backups=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
+        backups.addView(button("Encrypted backup") {
+            val chooser=Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type="application/octet-stream"
+                putExtra(Intent.EXTRA_TITLE,"KeyPop-clipboard-history.kpb")
+            }
+            startActivityForResult(chooser,exportRequest)
+        },LinearLayout.LayoutParams(0,d(47),1f))
+        backups.addView(button("Restore history") {
+            val chooser=Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type="*/*"
+            }
+            startActivityForResult(chooser,importRequest)
+        },LinearLayout.LayoutParams(0,d(47),1f))
+        root.addView(backups)
+        root.addView(label("Backups use your own password and work across KeyPop "+
+            "installations. Keep the password safe. Image and GIF vault items are "+
+            "not yet included in this TEXT archive.",11f,muted))
         status=label("Loading saved clips…",12f,accent)
         root.addView(status)
         items=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
@@ -107,6 +132,55 @@ class KeyPopClipboardActivity:Activity() {
         root.addView(loadMore,LinearLayout.LayoutParams(-1,d(46)))
         setContentView(root)
         refresh(true)
+    }
+    @Deprecated("Android activity result callback")
+    override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
+        super.onActivityResult(requestCode,resultCode,data)
+        if(resultCode!=Activity.RESULT_OK || data?.data==null ||
+            requestCode !in setOf(exportRequest,importRequest))return
+        promptBackupPassword(data.data!!,requestCode==exportRequest)
+    }
+    private fun promptBackupPassword(uri:Uri,isExport:Boolean) {
+        val password=EditText(this).apply {
+            hint="Password (minimum 8 characters)"
+            inputType=InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setPadding(d(14),d(8),d(14),d(8))
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if(isExport)"Encrypt clipboard backup" else "Unlock clipboard backup")
+            .setMessage("Only you know this password. Losing it means the "+
+                "backup cannot be restored. Do not share it.")
+            .setView(password)
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton(if(isExport)"Save encrypted backup" else "Restore clips") {_,_->
+                val pass=password.text.toString()
+                password.text.clear()
+                if(pass.length<8) {
+                    Toast.makeText(this,"Password needs at least 8 characters",
+                        Toast.LENGTH_LONG).show()
+                }else {
+                    status.text=if(isExport)"Encrypting clipboard archive…" else
+                        "Verifying and importing backup…"
+                    worker.execute {
+                        runCatching {
+                            if(isExport)KeyPopClipboardBackup.export(this,uri,pass)
+                            else KeyPopClipboardBackup.restore(this,uri,pass)
+                        }.onSuccess {count->
+                            runOnUiThread {
+                                if(!isFinishing) {
+                                    Toast.makeText(this,if(isExport)
+                                        "$count text clips backed up securely"
+                                        else "$count text clips restored; originals preserved",
+                                        Toast.LENGTH_LONG).show()
+                                    refresh(true)
+                                }
+                            }
+                        }.onFailure { error->showError(error) }
+                    }
+                }
+            }.show()
     }
     private fun showError(error:Throwable) {
         runOnUiThread{Toast.makeText(this,error.localizedMessage?:"Clipboard unavailable",
