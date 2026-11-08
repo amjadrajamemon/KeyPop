@@ -17,6 +17,8 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -35,6 +37,8 @@ class KeyPopClipboardActivity:Activity() {
     private lateinit var items:LinearLayout
     private lateinit var status:TextView
     private lateinit var loadMore:Button
+    private lateinit var screenshotRow:LinearLayout
+    private lateinit var screenshotCount:TextView
     private var query=""
     private var onlyPinned=false
     private var offset=0
@@ -64,6 +68,22 @@ class KeyPopClipboardActivity:Activity() {
             setPadding(d(13),d(12),d(13),d(10))
         }
         root.addView(label("Clipboard archive",23f))
+        screenshotCount=label("Saved screenshots",15f,accent)
+        root.addView(screenshotCount)
+        screenshotRow=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL
+            setPadding(d(2),d(4),d(2),d(4))
+        }
+        root.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled=false
+            addView(screenshotRow)
+        },LinearLayout.LayoutParams(-1,d(84)))
+        root.addView(button("All screenshots · Search / Pin / Share") {
+            startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java))
+        },LinearLayout.LayoutParams(-1,d(46)))
+        root.addView(button("Enable screenshot detection and automatic history") {
+            startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java))
+        },LinearLayout.LayoutParams(-1,d(46)))
         root.addView(label("Encrypted on this device · No automatic age or item limit. " +
             "History is kept until you delete it or clear app data; available storage applies.",
             12f,muted))
@@ -120,8 +140,8 @@ class KeyPopClipboardActivity:Activity() {
         },LinearLayout.LayoutParams(0,d(47),1f))
         root.addView(backups)
         root.addView(label("Backups use your own password and work across KeyPop "+
-            "installations. Keep the password safe. Image and GIF vault items are "+
-            "not yet included in this TEXT archive.",11f,muted))
+            "installations. Keep the password safe. Screenshot images are "+
+            "stored separately; this backup currently covers text only.",11f,muted))
         status=label("Loading saved clips…",12f,accent)
         root.addView(status)
         items=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
@@ -132,6 +152,49 @@ class KeyPopClipboardActivity:Activity() {
         root.addView(loadMore,LinearLayout.LayoutParams(-1,d(46)))
         setContentView(root)
         refresh(true)
+        refreshScreenshots()
+    }
+    override fun onResume() {
+        super.onResume()
+        if(::screenshotRow.isInitialized)refreshScreenshots()
+    }
+    private fun refreshScreenshots() {
+        worker.execute {
+            val images=runCatching {KeyPopImageStore(this).search("")}
+                .getOrDefault(emptyList())
+            runOnUiThread {
+                if(isFinishing || !::screenshotRow.isInitialized)return@runOnUiThread
+                screenshotCount.text="Saved screenshots: "+images.size
+                screenshotRow.removeAllViews()
+                if(images.isEmpty()) {
+                    screenshotRow.addView(label(
+                        "No screenshots saved yet. Enable full Photos access above.",
+                        12f,muted))
+                }
+                images.take(12).forEach {image->
+                    val thumb=ImageView(this).apply {
+                        contentDescription=image.label
+                        scaleType=ImageView.ScaleType.CENTER_CROP
+                        setBackgroundColor(0xFF294559.toInt())
+                        setOnClickListener {
+                            startActivity(Intent(this@KeyPopClipboardActivity,
+                                KeyPopScreenshotHistoryActivity::class.java))
+                        }
+                    }
+                    screenshotRow.addView(thumb,LinearLayout.LayoutParams(
+                        d(74),d(72)).apply{rightMargin=d(6)})
+                    worker.execute {
+                        val bmp=runCatching {
+                            KeyPopImageStore(this).thumbnail(image,128)
+                        }.getOrNull()
+                        if(bmp!=null)runOnUiThread {
+                            if(thumb.isAttachedToWindow)thumb.setImageBitmap(bmp)
+                            else bmp.recycle()
+                        }
+                    }
+                }
+            }
+        }
     }
     @Deprecated("Android activity result callback")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
@@ -206,7 +269,7 @@ class KeyPopClipboardActivity:Activity() {
                     status.text="$total stored ${if(pinned)"pinned " else ""}clips" +
                         if(selectedQuery.isNotEmpty())" matching search" else ""
                     if(total==0L)items.addView(label(
-                        "No saved clips. Enable Clipboard history in KeyPop Settings.",14f,muted))
+                        "No saved text yet. Screenshot images are displayed above.",14f,muted))
                     loadMore.visibility=if(offset<total)View.VISIBLE else View.GONE
                     loadMore.isEnabled=true
                 }

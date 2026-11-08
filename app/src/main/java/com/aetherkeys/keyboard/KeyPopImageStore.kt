@@ -67,7 +67,7 @@ class KeyPopImageStore(private val context:Context) {
     }
     @Synchronized fun save(uri:Uri):Boolean {
         val mime=context.contentResolver.getType(uri) ?:return false
-        if(mime !in setOf("image/png","image/jpeg","image/webp","image/gif",
+        if(mime !in setOf("image/png","image/jpeg","image/webp",
                 "image/heic","image/heif"))return false
         val input=context.contentResolver.openInputStream(uri) ?:return false
         val bytes=input.use { stream->
@@ -89,7 +89,7 @@ class KeyPopImageStore(private val context:Context) {
                 if(cursor.moveToFirst())cursor.getString(0) else ""
             } ?: ""
         }.getOrDefault("").take(70).replace(Regex("[\\r\\n\\t]")," ")
-        val label=displayName.ifBlank { if(mime=="image/gif")"GIF" else "Screenshot" }
+        val label=displayName.ifBlank { "Screenshot" }
         val file=File(folder,id+".enc")
         file.writeBytes(encrypt(bytes))
         try {persist(list()+KeyPopImageClip(id,System.currentTimeMillis(),mime,false,label))}
@@ -98,8 +98,9 @@ class KeyPopImageStore(private val context:Context) {
     }
     @Synchronized fun search(query:String,kind:String="All"):List<KeyPopImageClip> =
         list().filter { item ->
-            (kind=="All" || (kind=="GIF" && item.mime=="image/gif") ||
-                (kind=="Sticker" && item.mime!="image/gif")) &&
+            // Older archived GIFs are retained but no longer exposed or
+            // imported; never silently delete someone's existing data.
+            item.mime!="image/gif" &&
                 (query.isBlank() || item.label.contains(query,ignoreCase=true) ||
                     item.mime.contains(query,ignoreCase=true))
         }
@@ -146,7 +147,7 @@ class KeyPopImageStore(private val context:Context) {
     fun uriForShare(image:KeyPopImageClip):Uri? {
         val source=File(folder,image.id+".enc")
         if(!source.isFile)return null
-        val ext=when(image.mime) {"image/jpeg"->".jpg";"image/gif"->".gif";
+        val ext=when(image.mime) {"image/jpeg"->".jpg";
             "image/webp"->".webp";"image/heic"->".heic";"image/heif"->".heif";else->".png"}
         val dir=File(context.cacheDir,"keypop-shared-images").apply{mkdirs()}
         // Expire previously exported plaintext media after a short grace period.

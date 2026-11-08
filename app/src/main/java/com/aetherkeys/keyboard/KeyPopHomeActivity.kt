@@ -77,7 +77,7 @@ class KeyPopHomeActivity : Activity() {
         setContentView(scroll)
         ViewCompat.requestApplyInsets(scroll)
 
-        column.addView(text("KEYPOP  ·  v1.0.5 RC6",29f,teal,true))
+        column.addView(text("KEYPOP  ·  v1.0.18 RC19",29f,teal,true))
         column.addView(text("Keyboard Setup",24f,ink,true))
         column.addView(text("English ⇄ اردو  •  سنڌي",17f,muted))
         column.addView(text("To type, enable KeyPop in Android settings and choose it as the active keyboard. Installing an APK does not activate it.",14f,muted))
@@ -106,6 +106,12 @@ class KeyPopHomeActivity : Activity() {
         addButton(column,"Choose language packs · download selected directions") {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
         }
+        addButton(column,"📷 Enable automatic screenshots and clipboard history") {
+            startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java))
+        }
+        column.addView(text("For Gboard-style screenshot offers, grant "+
+            "Allow all photos in the permission dialog. KeyPop can then "+
+            "save new captures to its encrypted screenshot archive.",13f,muted))
         addButton(column,"Settings · Themes · Layouts · Translation") {
             startActivity(Intent(this,MainActivity::class.java)
                 .putExtra("openSection","settingsHome"))

@@ -15,13 +15,13 @@ import android.view.View
 import android.widget.*
 import java.util.concurrent.Executors
 
-/** Locally curated searchable GIF/sticker shelf. Online provider/API key not required. */
-class KeyPopMediaStudioActivity:Activity() {
+/** Screenshot-only encrypted image history. No GIF module or providers. */
+class KeyPopScreenshotHistoryActivity:Activity() {
     private val store by lazy{KeyPopImageStore(this)}
     private val pool=Executors.newFixedThreadPool(2)
     private lateinit var list:LinearLayout
     private lateinit var search:EditText
-    private var type="All"
+    private var shown=50
     private val request=301
     private val ink=Color.WHITE
     private val accent=0xFF89EAF3.toInt()
@@ -50,23 +50,20 @@ class KeyPopMediaStudioActivity:Activity() {
             setPadding(dp(14),dp(15),dp(14),dp(14))
             setBackgroundColor(ground)
         }
-        wrapper.addView(text("KEYPOP  /  MEDIA SHELF",12f,accent))
-        wrapper.addView(text("Your GIFs & stickers",26f))
-        wrapper.addView(text("Import your own images, GIF animations and sticker artwork. Search, rename, pin, send or delete them. Content stays encrypted until you share it.",12f,0xFFA9BBDA.toInt()))
-        wrapper.addView(button("＋  Import photos, GIFs or stickers") { importMedia() },
+        wrapper.addView(text("KEYPOP  /  CLIPBOARD IMAGES",12f,accent))
+        wrapper.addView(text("Screenshot history",26f))
+        wrapper.addView(text("Screenshots detected after granting Photos access are kept encrypted. You can search, pin, copy, share or delete them.",12f,0xFFA9BBDA.toInt()))
+        wrapper.addView(button("＋ Import screenshots or photos") { importMedia() },
             LinearLayout.LayoutParams(-1,dp(45)).apply{topMargin=dp(7);bottomMargin=dp(10)})
         search=EditText(this).apply{
-            hint="Search your media labels"
+            hint="Search screenshot names"
             setHintTextColor(0xFF91A2BE.toInt());setTextColor(ink)
             setSingleLine(true);textSize=14f
         }
         wrapper.addView(search)
-        val filters=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        for(tab in listOf("All","GIF","Sticker")) {
-            filters.addView(button(tab) {type=tab;render()},
-                LinearLayout.LayoutParams(0,dp(40),1f).apply{rightMargin=dp(5)})
-        }
-        wrapper.addView(filters)
+        wrapper.addView(button("Screenshot permission and auto-save settings") {
+            startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java))
+        },LinearLayout.LayoutParams(-1,dp(42)))
         val scroll=ScrollView(this)
         list=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         scroll.addView(list)
@@ -74,7 +71,9 @@ class KeyPopMediaStudioActivity:Activity() {
         setContentView(wrapper)
         search.addTextChangedListener(object:TextWatcher{
             override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
-            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){render()}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){
+                shown=50;render()
+            }
             override fun afterTextChanged(s:Editable?){}
         })
         render()
@@ -96,23 +95,30 @@ class KeyPopMediaStudioActivity:Activity() {
         data?.clipData?.let{clips->
             for(i in 0 until clips.itemCount)uris.add(clips.getItemAt(i).uri)
         }
-        var imported=0
-        for(uri in uris.distinct().take(20)){
-            if(runCatching{store.save(uri)}.getOrDefault(false))imported++
+        pool.execute {
+            var imported=0
+            for(uri in uris.distinct().take(40)) {
+                if(runCatching{store.save(uri)}.getOrDefault(false))imported++
+            }
+            runOnUiThread {
+                Toast.makeText(this,"Imported "+imported+" image(s)",
+                    Toast.LENGTH_SHORT).show()
+                if(!isFinishing)render()
+            }
         }
-        Toast.makeText(this,"Imported "+imported+" item(s)",Toast.LENGTH_SHORT).show()
-        render()
     }
     private fun render() {
         list.removeAllViews()
-        val items=runCatching{store.search(search.text.toString(),type)}
+        val items=runCatching{store.search(search.text.toString())}
             .getOrElse{
                 list.addView(text("Cannot decrypt saved media. No stored items were deleted.",13f))
                 return
             }
-        list.addView(text(items.size.toString()+" stored item(s)  ·  "+type,12f,accent))
-        if(items.isEmpty())list.addView(text("No matching items. Add your own GIFs, stickers or screenshots.",13f))
-        for(item in items.take(100)) {
+        list.addView(text(items.size.toString()+" saved screenshot(s)",12f,accent))
+        if(items.isEmpty())list.addView(text(
+            "No saved screenshots. Open Screenshot access and choose "+
+            "Allow all photos, or import screenshots manually.",13f))
+        for(item in items.take(shown)) {
             val card=LinearLayout(this).apply{
                 orientation=LinearLayout.VERTICAL
                 setPadding(dp(8),dp(8),dp(8),dp(8))
@@ -125,7 +131,7 @@ class KeyPopMediaStudioActivity:Activity() {
                 gravity=Gravity.CENTER_VERTICAL
             }
             val preview=ImageView(this).apply{
-                contentDescription="Media preview"
+                contentDescription="Saved screenshot preview"
                 scaleType=ImageView.ScaleType.CENTER_CROP
             }
             header.addView(preview,LinearLayout.LayoutParams(dp(58),dp(54)))
@@ -136,7 +142,7 @@ class KeyPopMediaStudioActivity:Activity() {
                 }
             }
             header.addView(text((if(item.pinned)"📌  " else "")+item.label+
-                "\n"+(if(item.mime=="image/gif")"Animated GIF" else "Image · sticker"),13f),
+                "\nScreenshot image",13f),
                 LinearLayout.LayoutParams(0,-2,1f))
             card.addView(header)
             val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
@@ -151,7 +157,7 @@ class KeyPopMediaStudioActivity:Activity() {
                     putExtra(Intent.EXTRA_STREAM,uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                startActivity(Intent.createChooser(intent,"Send media"))
+                startActivity(Intent.createChooser(intent,"Share screenshot"))
             }
             action("Copy"){
                 val uri=store.uriForShare(item)?:return@action
@@ -164,7 +170,7 @@ class KeyPopMediaStudioActivity:Activity() {
             }
             action("Edit"){
                 val field=EditText(this).apply{setText(item.label);setSingleLine(true)}
-                AlertDialog.Builder(this).setTitle("Rename media item").setView(field)
+                AlertDialog.Builder(this).setTitle("Rename screenshot").setView(field)
                     .setNegativeButton("Cancel",null)
                     .setPositiveButton("Save"){_,_->
                         store.rename(item.id,field.text.toString())
@@ -180,5 +186,9 @@ class KeyPopMediaStudioActivity:Activity() {
             card.addView(actions)
             list.addView(card,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(9)})
         }
+        if(shown<items.size)list.addView(button("Load more saved screenshots") {
+            shown+=50
+            render()
+        },LinearLayout.LayoutParams(-1,dp(47)))
     }
 }

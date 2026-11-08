@@ -409,22 +409,25 @@ class MainActivity:Activity() {
         addBlock {
             addView(text("06   RECENT SCREENSHOTS",13f,accent,true))
             option(this,"Show copied screenshots on keyboard","screenshotClipOffer",true)
-            option(this,"Suggest new screenshots automatically (requires access)",
+            option(this,"Suggest new screenshots automatically",
                 "autoScreenshotSuggestions",true)
-            addView(text("Like Gboard, a newly captured screenshot can appear "+
-                "as a small thumbnail with Paste, Share, Save and Dismiss. "+
-                "KeyPop listens for new screenshots only while its keyboard is "+
-                "open. To detect images NOT on the clipboard, Android requires "+
-                "full photo access: choose 'Allow all photos'. Some apps "+
-                "cannot accept image insertion from a keyboard.",12f,muted))
-            action(this,"Allow screenshot access (optional)") {
-                val permission=if(Build.VERSION.SDK_INT>=33)
-                    Manifest.permission.READ_MEDIA_IMAGES
-                else Manifest.permission.READ_EXTERNAL_STORAGE
-                if(checkSelfPermission(permission)==PackageManager.PERMISSION_GRANTED)
-                    Toast.makeText(this@MainActivity,"Screenshot access already allowed",
-                        Toast.LENGTH_SHORT).show()
-                else requestPermissions(arrayOf(permission),733)
+            option(this,"Automatically save detected screenshots to encrypted history",
+                "autoScreenshotArchive",false)
+            addView(text("Screenshots are saved to Android's gallery, NOT "+
+                "automatically copied to the clipboard. KeyPop can detect "+
+                "new screenshots in the gallery and show a small Paste/Share "+
+                "thumbnail, then independently save them to its encrypted "+
+                "clipboard image history. Android 14/15 requires you to choose "+
+                "'Allow all photos' for future screenshots. This feature runs "+
+                "while KeyPop's input service is active; missed captures are "+
+                "checked when the keyboard reopens.",12f,muted))
+            action(this,"Set up full screenshot access and automatic history") {
+                startActivity(Intent(this@MainActivity,
+                    KeyPopScreenshotAccessActivity::class.java))
+            }
+            action(this,"Open saved screenshot history") {
+                startActivity(Intent(this@MainActivity,
+                    KeyPopScreenshotHistoryActivity::class.java))
             }
         }
     }
@@ -506,6 +509,8 @@ class MainActivity:Activity() {
         addBlock {
             option(this,"Clipboard history — retain every observed copy","history")
             option(this,"Also save copied images to encrypted vault","historyImages")
+            option(this,"Auto-save new gallery screenshots (requires full Photos access)",
+                "autoScreenshotArchive",false)
             addView(text("Every observed text copy is retained (including repeats "+
                 "and multi-item copies), with no age or item-count expiration. "+
                 "Saved images are also retained when image history is enabled; "+
@@ -522,6 +527,9 @@ class MainActivity:Activity() {
             }
             action(this,"Manage clipboard"){
                 startActivity(Intent(this@MainActivity,KeyPopClipboardActivity::class.java))
+            }
+            action(this,"Browse saved screenshots"){
+                startActivity(Intent(this@MainActivity,KeyPopScreenshotHistoryActivity::class.java))
             }
         }
     }
@@ -540,8 +548,9 @@ class MainActivity:Activity() {
             action(this,"Voice Translate"){
                 startActivity(Intent(this@MainActivity,KeyPopVoiceActivity::class.java))
             }
-            action(this,"Media Shelf"){
-                startActivity(Intent(this@MainActivity,KeyPopMediaStudioActivity::class.java))
+            action(this,"Screenshot history"){
+                startActivity(Intent(this@MainActivity,
+                    KeyPopScreenshotHistoryActivity::class.java))
             }
             action(this,"Performance Diagnostics"){
                 startActivity(Intent(this@MainActivity,KeyPopDiagnosticsActivity::class.java))

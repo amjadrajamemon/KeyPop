@@ -43,6 +43,7 @@ import androidx.core.view.WindowInsetsCompat
 import android.widget.Toast
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AetherImeService : InputMethodService() {
     private val prefs by lazy { getSharedPreferences("keypop",Context.MODE_PRIVATE) }
@@ -66,6 +67,9 @@ class AetherImeService : InputMethodService() {
     private var lastAppliedCorrection:AppliedCorrection?=null
     private val keyViews=ArrayList<Pair<Button,String>>()
     private val imagePreviewExecutor=Executors.newFixedThreadPool(2)
+    private val screenshotArchiveExecutor=Executors.newSingleThreadExecutor()
+    private val screenshotArchiveRunning=AtomicBoolean(false)
+    private var lastArchiveRequest=0L
     @Volatile private var recentScreenshotUri:Uri?=null
     @Volatile private var screenshotMime="image/png"
     private var screenshotRefreshToken=0
@@ -258,6 +262,7 @@ class AetherImeService : InputMethodService() {
         suggestionRefreshTask=null
         predictionExecutor.shutdownNow()
         imagePreviewExecutor.shutdownNow()
+        screenshotArchiveExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -697,8 +702,52 @@ class AetherImeService : InputMethodService() {
         screenshotObserver?.let{runCatching{contentResolver.unregisterContentObserver(it)}}
         screenshotObserver=null
     }
+    /** The system screenshot folder is NOT the Android clipboard. After
+     * explicit permission/consent, archive distinct screenshots locally so
+     * they show in KeyPop's encrypted image history as well as the offer.
+     * Never do MediaStore scans or encryption on the keypress/UI thread. */
+    private fun archiveRecentScreenshots() {
+        if(!KeyPopRecentScreenshots.granted(this) ||
+            !prefs.getBoolean("autoScreenshotArchive",false) ||
+            sensitive(currentInputEditorInfo))return
+        val now=SystemClock.uptimeMillis()
+        if(now-lastArchiveRequest<800L ||
+            !screenshotArchiveRunning.compareAndSet(false,true))return
+        lastArchiveRequest=now
+        screenshotArchiveExecutor.execute {
+            try {
+                val state=getSharedPreferences("keypop_screenshot_archive",Context.MODE_PRIVATE)
+                val seen=state.getStringSet("savedUris",emptySet()).orEmpty().toMutableSet()
+                val clips=KeyPopRecentScreenshots.recent(this,60*60L,100).asReversed()
+                var changed=false
+                val store=KeyPopImageStore(this)
+                for(uri in clips) {
+                    val key=uri.toString()
+                    if(key in seen)continue
+                    // If Android still writes a screenshot, retry it when the
+                    // next content observer event or keyboard session arrives.
+                    if(runCatching{store.save(uri)}.getOrDefault(false)) {
+                        seen.add(key)
+                        changed=true
+                    }
+                }
+                if(changed) {
+                    // No history eviction: the encrypted images remain until
+                    // explicitly removed. This small key cache only prevents
+                    // duplicate imports from the recent MediaStore lookback.
+                    state.edit().putStringSet("savedUris",
+                        seen.toList().takeLast(1000).toSet()).apply()
+                }
+            } catch(_:Exception) {
+                // A storage error must never block typing or clear history.
+            } finally {
+                screenshotArchiveRunning.set(false)
+            }
+        }
+    }
     /** Refresh on screenshot media change, keyboard open or clipboard change. */
     private fun refreshRecentScreenshotAsync() {
+        archiveRecentScreenshots()
         if(sensitive(currentInputEditorInfo)) {
             recentScreenshotUri=null
             return
@@ -871,7 +920,13 @@ class AetherImeService : InputMethodService() {
             val slot=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
             screenshotSlot=slot
             root.addView(slot,LinearLayout.LayoutParams(-1,-2))
-            recentScreenshotUri?.let{showScreenshotOffer(slot,it,screenshotMime)}
+            if(!KeyPopRecentScreenshots.granted(this) &&
+                prefs.getBoolean("autoScreenshotSuggestions",true)) {
+                slot.addView(chip("📷 Enable screenshot previews and history") {
+                    startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                },LinearLayout.LayoutParams(-1,d(34)))
+            } else recentScreenshotUri?.let{showScreenshotOffer(slot,it,screenshotMime)}
         }
         if(materialToolbar) {
             val top=LinearLayout(this).apply {
@@ -882,7 +937,7 @@ class AetherImeService : InputMethodService() {
             fun iconAction(glyph:String,description:String,fn:()->Unit) {
                 val button=chip(glyph,onTap=fn)
                 button.contentDescription=description
-                button.textSize=if(glyph=="GIF")13f else 21f
+                button.textSize=21f
                 top.addView(button,LinearLayout.LayoutParams(0,d(40),1f).apply {
                     leftMargin=d(2);rightMargin=d(2)
                 })
@@ -893,8 +948,11 @@ class AetherImeService : InputMethodService() {
             iconAction("▤","Open clipboard history"){
                 clipsOpen=!clipsOpen;emojiOpen=false;toolsOpen=false;resizeOpen=false;draw()
             }
-            iconAction("GIF","Open GIF and sticker shelf"){
-                startActivity(Intent(this,KeyPopMediaStudioActivity::class.java)
+            iconAction("📷","Open screenshot history or set up access"){
+                startActivity(Intent(this,
+                    if(KeyPopRecentScreenshots.granted(this))
+                        KeyPopScreenshotHistoryActivity::class.java
+                    else KeyPopScreenshotAccessActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             iconAction("⚙","Open organized keyboard settings"){
@@ -1041,8 +1099,7 @@ class AetherImeService : InputMethodService() {
                     },
                     "📷  Screenshots" to {
                         toolsOpen=false
-                        startActivity(Intent(this,MainActivity::class.java)
-                            .putExtra("openSection","typing")
+                        startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         draw()
                     },
@@ -1130,8 +1187,8 @@ class AetherImeService : InputMethodService() {
                             .putExtra("openSection","themes")
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
-                    "▤  GIF & Media" to {
-                        startActivity(Intent(this,KeyPopMediaStudioActivity::class.java)
+                    "📷  Screenshot history" to {
+                        startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
                     "⌨  Layouts" to {
@@ -2538,7 +2595,7 @@ class AetherImeService : InputMethodService() {
             });return
         }
         if(listed.isEmpty()) items.addView(TextView(this).apply {
-            text="Nothing copied yet. Your saved text will appear here."
+            text="No saved text yet. Screenshots appear in the image archive below."
             setTextColor(s.ink);setPadding(d(9),d(20),d(9),d(20))
         })
         listed.forEach { item ->
@@ -2582,7 +2639,7 @@ class AetherImeService : InputMethodService() {
                 }
             }
             val label=(if(image.pinned)"📌 " else "")+
-                (if(image.mime=="image/gif")"🎞 " else "📷 ")+image.label.take(45)
+                "📷 "+image.label.take(45)
             line.addView(chip(label,2f) {
                 val uri=KeyPopImageStore(this).uriForShare(image)
                 if(uri==null){Toast.makeText(this,"Image unavailable",Toast.LENGTH_SHORT).show()}
@@ -2614,8 +2671,8 @@ class AetherImeService : InputMethodService() {
         }
         items.addView(images)
         root.addView(ScrollView(this).apply { addView(items) },LinearLayout.LayoutParams(-1,d(215)))
-        root.addView(chip("GIF & Sticker Shelf · Manage / Search") {
-            startActivity(Intent(this,KeyPopMediaStudioActivity::class.java)
+        root.addView(chip("📷 Screenshot history · All saved images") {
+            startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         },LinearLayout.LayoutParams(-1,d(37)))
         root.addView(chip("＋ Import screenshot / image") {

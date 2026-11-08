@@ -8,12 +8,13 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Optional, user-approved recent screenshot suggestions (no automatic gallery scanning). -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <queries>
         <package android:name="com.google.android.apps.translate"/>
         <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH"/></intent>
     </queries>
-    <application android:usesCleartextTraffic="false" android:supportsRtl="true" android:icon="@drawable/ic_keypop_logo" android:roundIcon="@drawable/ic_keypop_logo" android:allowBackup="false" android:label="KeyPop RC18 Preview" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <application android:usesCleartextTraffic="false" android:supportsRtl="true" android:icon="@drawable/ic_keypop_logo" android:roundIcon="@drawable/ic_keypop_logo" android:allowBackup="false" android:label="KeyPop RC19 Preview" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"
             android:grantUriPermissions="true" android:exported="false">
@@ -37,7 +38,8 @@
             <meta-data android:name="android.autofill" android:resource="@xml/autofill_service"/>
         </service>
         <activity android:name=".KeyPopDiagnosticsActivity" android:exported="false"/>
-        <activity android:name=".KeyPopMediaStudioActivity" android:exported="false"/>
+        <activity android:name=".KeyPopScreenshotHistoryActivity" android:exported="false"/>
+        <activity android:name=".KeyPopScreenshotAccessActivity" android:exported="false"/>
         <activity android:name=".KeyPopClipboardActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".KeyPopProfileActivity" android:exported="false"/>
         <activity android:name=".KeyPopLayoutStudioActivity" android:exported="false"/>
@@ -56,7 +58,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <service android:name=".AetherImeService" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true" android:label="KeyPop RC18 Preview Keyboard">
+        <service android:name=".AetherImeService" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true" android:label="KeyPop RC19 Preview Keyboard">
             <intent-filter><action android:name="android.view.InputMethod"/></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/method"/>
         </service>

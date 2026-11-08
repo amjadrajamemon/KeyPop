@@ -31,6 +31,6 @@ class KeyPopImageImportActivity:Activity() {
     private fun save(uri:Uri?) {
         val success=runCatching {uri?.let{KeyPopImageStore(this).save(it)} ?:false}.getOrDefault(false)
         Toast.makeText(this,if(success)"Screenshot saved securely in KeyPop"
-            else "Could not import image (12 MB limit)",Toast.LENGTH_LONG).show()
+            else "Could not import image (32 MB limit, GIFs unsupported)",Toast.LENGTH_LONG).show()
     }
 }
