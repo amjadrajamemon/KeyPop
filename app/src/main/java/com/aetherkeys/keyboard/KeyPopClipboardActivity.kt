@@ -60,6 +60,8 @@ class KeyPopClipboardActivity:Activity() {
     private val pageSize=30
     private val exportRequest=811
     private val importRequest=812
+    private val exportAllRequest=813
+    private val importAllRequest=814
     private fun d(v:Int)=(v*resources.displayMetrics.density).toInt()
     private fun label(value:String,size:Float=14f,color:Int=ink)=TextView(this).apply{
         text=value;textSize=size;setTextColor(color)
@@ -183,7 +185,23 @@ class KeyPopClipboardActivity:Activity() {
     }
     private fun showMore(anchor:View) {
         PopupMenu(this,anchor).apply {
-            menu.add("Encrypted text backup").setOnMenuItemClickListener{
+            menu.add("Back up everything (text + screenshots)")
+                .setOnMenuItemClickListener {
+                    startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type="application/octet-stream"
+                        putExtra(Intent.EXTRA_TITLE,"KeyPop-complete-backup.kpfb")
+                    },exportAllRequest)
+                    true
+                }
+            menu.add("Restore complete backup")
+                .setOnMenuItemClickListener {
+                    startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE);type="*/*"
+                    },importAllRequest)
+                    true
+                }
+            menu.add("Legacy text-only backup").setOnMenuItemClickListener{
                 startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply{
                     addCategory(Intent.CATEGORY_OPENABLE)
                     type="application/octet-stream"
@@ -231,10 +249,13 @@ class KeyPopClipboardActivity:Activity() {
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
         super.onActivityResult(requestCode,resultCode,data)
         if(resultCode!=Activity.RESULT_OK || data?.data==null ||
-            requestCode !in setOf(exportRequest,importRequest))return
-        promptBackupPassword(data.data!!,requestCode==exportRequest)
+            requestCode !in setOf(exportRequest,importRequest,
+                exportAllRequest,importAllRequest))return
+        promptBackupPassword(data.data!!,
+            requestCode in setOf(exportRequest,exportAllRequest),
+            requestCode in setOf(exportAllRequest,importAllRequest))
     }
-    private fun promptBackupPassword(uri:Uri,isExport:Boolean) {
+    private fun promptBackupPassword(uri:Uri,isExport:Boolean,all:Boolean) {
         val password=EditText(this).apply {
             hint="Password (minimum 8 characters)"
             inputType=InputType.TYPE_CLASS_TEXT or
@@ -259,16 +280,25 @@ class KeyPopClipboardActivity:Activity() {
                         "Verifying and importing backup…"
                     worker.execute {
                         runCatching {
-                            if(isExport)KeyPopClipboardBackup.export(this,uri,pass)
-                            else KeyPopClipboardBackup.restore(this,uri,pass)
-                        }.onSuccess {count->
+                            if(all) {
+                                val (clips,images)=if(isExport)
+                                    KeyPopFullBackup.export(this,uri,pass)
+                                    else KeyPopFullBackup.restore(this,uri,pass)
+                                "$clips text clips and $images screenshots"
+                            }else{
+                                val count=if(isExport)
+                                    KeyPopClipboardBackup.export(this,uri,pass)
+                                    else KeyPopClipboardBackup.restore(this,uri,pass)
+                                "$count text clips"
+                            }
+                        }.onSuccess {summary->
                             runOnUiThread {
                                 if(!isFinishing) {
-                                    Toast.makeText(this,if(isExport)
-                                        "$count text clips backed up securely"
-                                        else "$count text clips restored; originals preserved",
+                                    Toast.makeText(this,
+                                        summary+if(isExport)" backed up securely"
+                                            else " restored; existing items preserved",
                                         Toast.LENGTH_LONG).show()
-                                    refresh(true)
+                                    if(activeTab==0)refresh(true)else refreshScreenshots()
                                 }
                             }
                         }.onFailure { error->showError(error) }

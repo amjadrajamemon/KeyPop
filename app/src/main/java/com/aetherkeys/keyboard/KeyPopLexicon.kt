@@ -155,6 +155,18 @@ class KeyPopLexicon(context:Context) {
         val updated=(old+value).toList().takeLast(15000).toSet()
         store.edit().putStringSet("learned_"+lang,updated).apply()
     }
+    /** Do not split known dictionary words or explicit personal names.
+     * Only an unambiguous two-word segmentation may be autocorrected. */
+    private fun isKnownEnglish(word:String):Boolean =
+        word in english || word=="predict" || (scowlReady &&
+            scowlIndex[word.take(2)].orEmpty().any{it.word==word})
+
+    fun joinedWordCorrection(lang:Int,typed:String):String? {
+        if(lang!=0)return null
+        val normalized=typed.trim().lowercase(Locale.ROOT)
+        if(normalized in store.getStringSet("manual_0",emptySet()).orEmpty())return null
+        return KeyPopWordJoinRules.split(normalized,::isKnownEnglish)
+    }
     fun suggestions(lang:Int,fragment:String,limit:Int=3,previous:String="",
                     beforeCursor:String=""):List<String> {
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
@@ -168,8 +180,10 @@ class KeyPopLexicon(context:Context) {
             learned.asSequence().filter {it.startsWith(prefix)}.take(128).toSet()
         val dictionary=base.toList()+familiar.map {it.word}
         val tiers=if(lang==0)familiar.associate {it.word to it.tier} else emptyMap()
-        return KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
-            relevantLearned,limit,dictionary,tiers,beforeCursor)
+        return (listOfNotNull(joinedWordCorrection(lang,fragment))+
+            KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
+                relevantLearned,limit,dictionary,tiers,beforeCursor))
+            .distinct().take(limit.coerceIn(1,8))
     }
     fun nextWords(lang:Int,previous:String,beforeCursor:String=""):List<String> =
         KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor)
@@ -179,6 +193,8 @@ class KeyPopLexicon(context:Context) {
         if(normalized in manual)return null
         val base=when(lang){1->urdu;2->sindhi;else->english}
         if(normalized in base)return null
+        // A joined token needs a word-boundary correction, not edit distance.
+        joinedWordCorrection(lang,word)?.let{return it}
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         KeyPopTypingIntelligence.correction(lang,word,learned)?.let{return it}
         // Never initialize the asset dictionary from the IME main thread.

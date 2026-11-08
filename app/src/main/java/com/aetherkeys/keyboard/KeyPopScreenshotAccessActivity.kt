@@ -3,6 +3,7 @@ package com.aetherkeys.keyboard
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -87,9 +88,11 @@ class KeyPopScreenshotAccessActivity:Activity() {
     }
     private fun enable() {
         if(KeyPopRecentScreenshots.granted(this)) {
-            prefs.edit().putBoolean("autoScreenshotSuggestions",true)
-                .putBoolean("screenshotClipOffer",true).apply()
-            render()
+            // The button explicitly says Open settings: actually navigate
+            // to the Android permission page rather than silently toggling.
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply{
+                data=Uri.parse("package:"+packageName)
+            })
             return
         }
         val permissions=when {

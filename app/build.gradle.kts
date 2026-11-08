@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 35
-        versionName = "1.0.19-rc20-clipboard-ui-redesign" 
+        versionCode = 36
+        versionName = "1.0.20-rc21-private-personal-predictions" 
     }
     splits {
         abi {
@@ -42,7 +42,7 @@ android {
         debug {
             // Debug builds retain an ephemeral test-only signature and their
             // OWN app identity. Never distribute them as an upgrade path.
-            applicationIdSuffix = ".previewv120"
+            applicationIdSuffix = ".previewv121"
             versionNameSuffix = "-debug-test-only"
         }
         release {

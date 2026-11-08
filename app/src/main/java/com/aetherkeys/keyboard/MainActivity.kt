@@ -2,6 +2,7 @@ package com.aetherkeys.keyboard
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -365,6 +366,14 @@ class MainActivity:Activity() {
             option(this,"Aggressive predictions","aggressivePredictions",true)
             option(this,"Predict next word","predictNext",true)
             option(this,"Learn my words on this device","learningEnabled",true)
+            option(this,"Learn my sentence patterns privately","personalHistoryLearning",true)
+            addView(text("KeyPop now learns short word sequences as you type "+
+                "and ranks predictions using your own recent phrasing. "+
+                "Only compact encrypted word statistics are kept locally; "+
+                "it cannot read conversations typed before you enabled it. "+
+                "Sensitive fields, passwords and URL/email fields are excluded.",12f,muted))
+            option(this,"Correct joined words (e.g. topredict → to predict)",
+                "correctMissingSpaces",true)
             option(this,"Auto-correct spelling","autoCorrect",true)
             option(this,"Grammar-aware suggestions","contextPredictions",true)
             option(this,"Grammar hints (suggest only)","grammarHints",true)
@@ -516,12 +525,70 @@ class MainActivity:Activity() {
                 "Saved images are also retained when image history is enabled; "+
                 "storage capacity and Android background clipboard limits still "+
                 "apply. Passwords marked sensitive are excluded.",12f,muted))
-            addView(text("Keep history across future APK package changes: "+
-                "Clipboard manager → Encrypted backup, then Restore history "+
-                "after installing the new app. A private archive does not "+
-                "migrate automatically with a different package ID.",12f,muted))
+            addView(text("Before replacing a preview app, export a portable "+
+                "password-encrypted full backup of text and screenshots from "+
+                "Clipboard → menu → Back up everything. Restore it in the "+
+                "newly installed package. Android cannot transfer private "+
+                "storage automatically between different package IDs.",12f,muted))
             option(this,"High contrast labels","highContrast")
             option(this,"Private performance metrics","performanceMetrics")
+            action(this,"Import my saved text history into predictions",
+                "Explicit opt-in · safe natural-language clips only") {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Learn from saved clipboard text?")
+                    .setMessage("KeyPop can learn short word sequences from up "+
+                        "to 2,000 existing text clips. Numbers, URLs, emails and "+
+                        "long or suspicious clips are excluded. It does not "+
+                        "store full sentences in its prediction database. "+
+                        "This action never uploads your data.")
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Learn privately"){_,_->
+                        Thread {
+                            val result=runCatching {
+                                val model=KeyPopPersonalLanguageModel(this@MainActivity)
+                                val db=ClipStore(this@MainActivity)
+                                var offset=0;var patterns=0
+                                while(offset<2000) {
+                                    val batch=db.page(100,offset)
+                                    if(batch.isEmpty())break
+                                    for(clip in batch)patterns+=
+                                        model.learnFromSavedClip(
+                                            KeyPopTextLanguage.detect(clip.text,0),clip.text)
+                                    offset+=batch.size
+                                }
+                                patterns
+                            }
+                            runOnUiThread{
+                                Toast.makeText(this@MainActivity,
+                                    result.fold(
+                                        {"Learned $it sentence associations locally"},
+                                        {"Import unavailable: "+(it.localizedMessage?:"error")}
+                                    ),Toast.LENGTH_LONG).show()
+                            }
+                        }.start()
+                    }.show()
+            }
+            action(this,"Erase my learned sentence patterns",
+                "Keep text clips and custom dictionary intact") {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Erase personalized predictions?")
+                    .setMessage("Remove learned word sequences only. Clipboard "+
+                        "history, screenshots and manual dictionary words remain.")
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Erase"){_,_->
+                        Thread {
+                            val result=runCatching{
+                                KeyPopPersonalLanguageModel(this@MainActivity).clear()
+                            }
+                            runOnUiThread{
+                                Toast.makeText(this@MainActivity,
+                                    if(result.isSuccess)"Sentence patterns erased"
+                                    else "Could not erase learned patterns",
+                                    Toast.LENGTH_LONG).show()
+                            }
+                        }.start()
+                    }.show()
+            }
             action(this,"Manage saved passwords"){
                 startActivity(Intent(this@MainActivity,KeyPopVaultActivity::class.java))
             }
@@ -547,10 +614,6 @@ class MainActivity:Activity() {
             }
             action(this,"Voice Translate"){
                 startActivity(Intent(this@MainActivity,KeyPopVoiceActivity::class.java))
-            }
-            action(this,"Screenshot history"){
-                startActivity(Intent(this@MainActivity,
-                    KeyPopScreenshotHistoryActivity::class.java))
             }
             action(this,"Performance Diagnostics"){
                 startActivity(Intent(this@MainActivity,KeyPopDiagnosticsActivity::class.java))

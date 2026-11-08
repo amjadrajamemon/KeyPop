@@ -1,8 +1,8 @@
-name: KeyPop RC20 install-safe debug APK
+name: KeyPop RC21 install-safe debug APK
 on:
   push:
     branches:
-      - feature/rc20-clipboard-ui-redesign-20261108
+      - feature/rc21-three-phase-personal-predictions-20261108
   pull_request:
   workflow_dispatch:
 
@@ -44,51 +44,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.19-rc20-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.20-rc21-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.19-rc20-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.19-rc20-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.20-rc21-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.20-rc21-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-all-five-apks
+          name: KeyPop-v1.0.20-rc21-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-instrumentation
-          path: dist/KeyPop-v1.0.19-rc20-androidTest.apk
+          name: KeyPop-v1.0.20-rc21-instrumentation
+          path: dist/KeyPop-v1.0.20-rc21-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-ARM64
-          path: dist/KeyPop-v1.0.19-rc20-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.20-rc21-ARM64
+          path: dist/KeyPop-v1.0.20-rc21-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-ARM32
-          path: dist/KeyPop-v1.0.19-rc20-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.20-rc21-ARM32
+          path: dist/KeyPop-v1.0.20-rc21-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-x86
-          path: dist/KeyPop-v1.0.19-rc20-x86-debug.apk
+          name: KeyPop-v1.0.20-rc21-x86
+          path: dist/KeyPop-v1.0.20-rc21-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-x86_64
-          path: dist/KeyPop-v1.0.19-rc20-x86_64-debug.apk
+          name: KeyPop-v1.0.20-rc21-x86_64
+          path: dist/KeyPop-v1.0.20-rc21-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-Universal
-          path: dist/KeyPop-v1.0.19-rc20-universal-debug.apk
+          name: KeyPop-v1.0.20-rc21-Universal
+          path: dist/KeyPop-v1.0.20-rc21-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -101,11 +101,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-x86_64
+          name: KeyPop-v1.0.20-rc21-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-instrumentation
+          name: KeyPop-v1.0.20-rc21-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -125,7 +125,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-emulator-forensic-evidence
+          name: KeyPop-v1.0.20-rc21-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -135,15 +135,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC20 parity branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc20-clipboard-ui-redesign-20261108' }}
+    # Publish only the specific RC21 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc21-three-phase-personal-predictions-20261108' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.19-rc20-all-five-apks
+          name: KeyPop-v1.0.20-rc21-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -152,8 +152,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.19-rc20-debug-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc20-clipboard-ui-redesign-20261108" --jq '.commit.sha')"
+          TAG="v1.0.20-rc21-debug-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc21-three-phase-personal-predictions-20261108" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
@@ -165,6 +165,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.19-rc20 Debug Preview — Android APKs" \
-              --notes "KeyPop RC20 DEBUG PREVIEW: professionally redesigned clipboard interface. In-keyboard clipboard and full clipboard manager now have separate Text and Screenshots tabs, compact headers, descriptive empty states, hidden empty pagination, context-sensitive actions, unobtrusive item overflow menus, searchable text history, and screenshot thumbnail cards instead of stacks of oversized Pin/Delete buttons. Full screenshot archive also uses a compact two-column grid, image action menus and background thumbnail decoding. Screenshot recognition and encrypted image archive from RC19, password-encrypted text-history backup and restore, and responsive RC18 typing are preserved. Private history is not automatically migrated across debug package identities. Debug preview package com.aetherkeys.keyboard.previewv120 installs independently; signing remains temporary. User-granted full Photos permission remains necessary for automatic screenshot detection."
+              --title "KeyPop v1.0.20-rc21 Debug Preview — Android APKs" \
+              --notes "KeyPop RC21 DEBUG PREVIEW: one consolidated three-phase audit build. Adds privacy-preserving per-user bigram/trigram frequency predictions with HMAC-indexed and AES-GCM-encrypted local SQLite records, explicitly optional import of safe historical text copies, and erase controls; handles missing spaces such as topredict to predict without splitting known words. Migrates RC19/RC20 encrypted screenshot metadata non-destructively from a single SharedPreferences JSON index into transactional indexed SQLite, adds SHA-256 screenshot duplicate detection and paged reads. Adds password-encrypted authenticated portable backup/restoration of BOTH text and screenshots; existing preview packages cannot share private storage automatically, so export old data before uninstalling. Keeps RC18 fast typing and RC20 polished two-tab UI; fixes screenshot Android settings button and improves missed-capture lookback. This is a non-production DEBUG preview, package com.aetherkeys.keyboard.previewv121. A stable, single-package upgrade requires persistent release signing; unrestricted fully-offline Sindhi translation still requires real model-quality validation."
           fi

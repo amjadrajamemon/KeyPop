@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PKG="com.aetherkeys.keyboard.previewv120"
+PKG="com.aetherkeys.keyboard.previewv121"
 SERVICE="$PKG/com.aetherkeys.keyboard.AetherImeService"
 # Derive the actual file names published by this build, not a stale version.
 APK="$(find dist -maxdepth 1 -name 'KeyPop-*-x86_64-debug.apk' -type f | head -1)"
@@ -18,7 +18,7 @@ test -s "$APK"; test -s "$TEST_APK"
 AAPT="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" -name aapt -type f | sort -V | tail -1)"
 test -n "$AAPT"
 "$AAPT" dump badging "$APK" > forensic-evidence/apk-badging.txt
-if ! grep -q "previewv120" forensic-evidence/apk-badging.txt; then
+if ! grep -q "previewv121" forensic-evidence/apk-badging.txt; then
     echo "Unexpected APK package identity; dump:" >&2
     head -30 forensic-evidence/apk-badging.txt >&2
     exit 1
@@ -42,35 +42,35 @@ if [ "$ready" != "1" ]; then
 fi
 echo "[1/6] Install the application and Android instrumentation tests"
 # Regression for the reported INSTALL_FAILED_UPDATE_INCOMPATIBLE.
-# Install the last released RC19 APK on the *same* emulator first, then
-# install RC20 without uninstalling RC19. Both must remain installed.
-OLD_APK="dist/KeyPop-v1.0.18-rc19-x86_64-debug.apk"
+# Install the last released RC20 APK on the *same* emulator first, then
+# install RC21 without uninstalling RC20. Both must remain installed.
+OLD_APK="dist/KeyPop-v1.0.19-rc20-x86_64-debug.apk"
 LEGACY_AVAILABLE=0
 echo "[coexistence] Attempt prior preview download (optional external dependency)"
 if curl -fLsS --retry 2 --connect-timeout 12 --max-time 40 \
-  "https://github.com/amjadrajamemon/KeyPop/releases/download/v1.0.18-rc19-debug-preview/KeyPop-v1.0.18-rc19-x86_64-debug.apk" \
+  "https://github.com/amjadrajamemon/KeyPop/releases/download/v1.0.19-rc20-debug-preview/KeyPop-v1.0.19-rc20-x86_64-debug.apk" \
   -o "$OLD_APK" && test -s "$OLD_APK"; then
   adb install -r "$OLD_APK"
-  adb shell pm path com.aetherkeys.keyboard.previewv119 | grep -q package:
+  adb shell pm path com.aetherkeys.keyboard.previewv120 | grep -q package:
   LEGACY_AVAILABLE=1
 else
-  echo "::warning::The legacy RC19 asset could not be fetched. Proceeding with all mandatory RC20 emulator and instrumentation validation."
+  echo "::warning::The legacy RC20 asset could not be fetched. Proceeding with all mandatory RC21 emulator and instrumentation validation."
   rm -f "$OLD_APK"
 fi
-echo "[installation] Install RC20 and check its package identity"
+echo "[installation] Install RC21 and check its package identity"
 adb install -r "$APK"
-adb shell pm path com.aetherkeys.keyboard.previewv120 | grep -q package:
+adb shell pm path com.aetherkeys.keyboard.previewv121 | grep -q package:
 if [ "$LEGACY_AVAILABLE" = "1" ]; then
-  adb shell pm path com.aetherkeys.keyboard.previewv119 | grep -q package:
-  echo "PASS: RC19 and RC20 coexist without a signature conflict"
+  adb shell pm path com.aetherkeys.keyboard.previewv120 | grep -q package:
+  echo "PASS: RC20 and RC21 coexist without a signature conflict"
 else
-  echo "PASS: RC20 installs with a unique package ID. Legacy coexistence was not independently tested in this run."
+  echo "PASS: RC21 installs with a unique package ID. Legacy coexistence was not independently tested in this run."
 fi
 adb install -r "$TEST_APK"
 adb logcat -c
 echo "[2/6] Assert Android Activity views and privacy-safe Google Translate handoff intents"
 adb shell am instrument -w -r \
-  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest,com.aetherkeys.keyboard.KeyPopRC10DictionarySmokeTest,com.aetherkeys.keyboard.KeyPopRC11InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC12InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC17ClipboardBackupInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC18TypingPerformanceInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC19ScreenshotSetupInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC20ClipboardUiInstrumentedTest \
+  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest,com.aetherkeys.keyboard.KeyPopRC10DictionarySmokeTest,com.aetherkeys.keyboard.KeyPopRC11InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC12InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC17ClipboardBackupInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC18TypingPerformanceInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC19ScreenshotSetupInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC20ClipboardUiInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC21PersonalArchiveInstrumentedTest \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
   | tee forensic-evidence/instrumentation.txt
 grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/instrumentation.txt
