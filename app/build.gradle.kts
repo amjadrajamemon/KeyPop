@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 32
-        versionName = "1.0.16-rc17-screenshots-predictions-clipboard" 
+        versionCode = 33
+        versionName = "1.0.17-rc18-responsive-typing" 
     }
     splits {
         abi {
@@ -42,7 +42,7 @@ android {
         debug {
             // Debug builds retain an ephemeral test-only signature and their
             // OWN app identity. Never distribute them as an upgrade path.
-            applicationIdSuffix = ".previewv117"
+            applicationIdSuffix = ".previewv118"
             versionNameSuffix = "-debug-test-only"
         }
         release {

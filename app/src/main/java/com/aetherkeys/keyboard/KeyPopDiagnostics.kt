@@ -12,6 +12,22 @@ import java.util.Locale
 /** Local, opt-in timing data only; never records content, app targets, or credentials. */
 object KeyPopDiagnostics {
     private val recent=ArrayList<Long>()
+    private val keyPress=ArrayList<Long>()
+    private val prediction=ArrayList<Long>()
+    private fun enabled(context:Context):Boolean =
+        context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+            .getBoolean("performanceMetrics",false)
+    private fun record(list:MutableList<Long>,elapsedNanos:Long) {
+        if(elapsedNanos<=0L || elapsedNanos>10_000_000_000L)return
+        list.add(elapsedNanos/1_000_000L)
+        if(list.size>200)list.removeAt(0)
+    }
+    @Synchronized fun observeKeyPress(context:Context,elapsedNanos:Long) {
+        if(enabled(context))record(keyPress,elapsedNanos)
+    }
+    @Synchronized fun observePredictionCompute(context:Context,elapsedNanos:Long) {
+        if(enabled(context))record(prediction,elapsedNanos)
+    }
     fun percentile(samples:List<Long>,percent:Int):Long {
         if(samples.isEmpty())return 0L
         val ordered=samples.sorted()
@@ -20,20 +36,26 @@ object KeyPopDiagnostics {
         return ordered[rank]
     }
     @Synchronized fun observeKeyboardBuild(context:Context,elapsedNanos:Long) {
-        if(!context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
-                .getBoolean("performanceMetrics",false))return
-        if(elapsedNanos<=0L || elapsedNanos>10_000_000_000L)return
-        recent.add(elapsedNanos/1_000_000L)
-        if(recent.size>100)recent.removeAt(0)
+        if(!enabled(context))return
+        record(recent,elapsedNanos)
     }
     @Synchronized fun flush(context:Context) {
-        if(recent.isEmpty())return
+        if(recent.isEmpty() && keyPress.isEmpty() && prediction.isEmpty())return
         val prefs=context.getSharedPreferences("keypop_performance",Context.MODE_PRIVATE)
         val old=prefs.getString("viewBuildMs","").orEmpty().split(",")
             .mapNotNull{it.toLongOrNull()}
         val all=(old+recent).takeLast(200)
-        prefs.edit().putString("viewBuildMs",all.joinToString(",")).apply()
+        val oldKeys=prefs.getString("keyPressMs","").orEmpty().split(",")
+            .mapNotNull{it.toLongOrNull()}
+        val oldPred=prefs.getString("predictionMs","").orEmpty().split(",")
+            .mapNotNull{it.toLongOrNull()}
+        prefs.edit().putString("viewBuildMs",all.joinToString(","))
+            .putString("keyPressMs",(oldKeys+keyPress).takeLast(200).joinToString(","))
+            .putString("predictionMs",(oldPred+prediction).takeLast(200).joinToString(","))
+            .apply()
         recent.clear()
+        keyPress.clear()
+        prediction.clear()
     }
     @Synchronized fun measurements(context:Context):List<Long> {
         val prefs=context.getSharedPreferences("keypop_performance",Context.MODE_PRIVATE)
@@ -43,18 +65,31 @@ object KeyPopDiagnostics {
     }
     @Synchronized fun clear(context:Context) {
         recent.clear()
+        keyPress.clear()
+        prediction.clear()
         context.getSharedPreferences("keypop_performance",Context.MODE_PRIVATE).edit().clear().apply()
     }
     fun summary(context:Context):String {
-        val values=measurements(context)
-        return if(values.isEmpty())"No local keyboard-view samples yet."
-        else "KeyPop keyboard view-construction time (not end-to-end latency):\n"+
-            "Samples: "+values.size+"\n"+
-            "Median: "+percentile(values,50)+" ms\n"+
-            "95th percentile: "+percentile(values,95)+" ms\n"+
-            "Min: "+values.minOrNull()+" ms · Max: "+values.maxOrNull()+" ms\n"+
-            "Device: Android "+android.os.Build.VERSION.RELEASE+
-            "\nNote: this is not a comparative benchmark."
+        val view=measurements(context)
+        val prefs=context.getSharedPreferences("keypop_performance",Context.MODE_PRIVATE)
+        fun series(name:String,live:List<Long>):List<Long> =
+            prefs.getString(name,"").orEmpty().split(",")
+                .mapNotNull{it.toLongOrNull()}+live
+        val keys=series("keyPressMs",synchronized(this){keyPress.toList()})
+        val predictions=series("predictionMs",synchronized(this){prediction.toList()})
+        if(view.isEmpty() && keys.isEmpty() && predictions.isEmpty())
+            return "No local timing samples yet. Enable private performance metrics."
+        fun line(label:String,values:List<Long>):String =
+            if(values.isEmpty())"$label: no samples yet"
+            else "$label: n="+values.size+" · p50="+percentile(values,50)+
+                " ms · p95="+percentile(values,95)+" ms · max="+values.maxOrNull()+" ms"
+        return "KeyPop private timing (no typed content recorded):\n"+
+            line("Keypress handler",keys)+"\n"+
+            line("Prediction compute",predictions)+"\n"+
+            line("Keyboard view build",view)+"\n"+
+            "Android "+android.os.Build.VERSION.RELEASE+
+            "\nThese measurements do not include total remote-editor IPC "+
+            "or provide a direct Gboard comparison."
     }
 }
 
@@ -77,7 +112,7 @@ class KeyPopDiagnosticsActivity:Activity() {
             setPadding(0,0,0,dp(14))
         })
         body.addView(TextView(this).apply{
-            text="Only opt-in keyboard view-construction timing samples are collected. Typed words, URLs, clipboard contents and passwords are never recorded."
+            text="Opt-in timings capture keypress handlers, prediction computation and keyboard view builds. No typed words, URLs, clipboard contents or passwords are recorded."
             textSize=13f
             setPadding(0,0,0,dp(14))
         })

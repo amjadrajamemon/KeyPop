@@ -124,6 +124,35 @@ object KeyPopTypingIntelligence {
             (if(known)22 else 0)+(if(contextual)40 else 0)+priority+
             familiarity-tailPenalty
     }
+    /** Allocation-free fast path for the hot predictor: candidate acceptance
+     * only needs to know whether there is exactly ONE substitution,
+     * insertion/deletion, or adjacent swapped pair. Avoid allocating an O(n²)
+     * edit-distance matrix for hundreds of candidate words. */
+    fun oneEditAway(a:String,b:String):Boolean {
+        if(a==b || kotlin.math.abs(a.length-b.length)>1)return false
+        if(a.length==b.length) {
+            var first=-1
+            var second=-1
+            for(i in a.indices)if(a[i]!=b[i]) {
+                if(first==-1)first=i
+                else if(second==-1)second=i
+                else return false
+            }
+            if(first<0)return false
+            if(second<0)return true
+            return second==first+1 &&
+                a[first]==b[second] && a[second]==b[first]
+        }
+        val longer=if(a.length>b.length)a else b
+        val shorter=if(a.length>b.length)b else a
+        var i=0;var j=0;var skipped=false
+        while(i<longer.length && j<shorter.length) {
+            if(longer[i]==shorter[j]){i++;j++}
+            else if(!skipped){i++;skipped=true}
+            else return false
+        }
+        return true
+    }
     // Optimal-string-alignment edit distance counts an adjacent swapped pair
     // as one typo, unlike ordinary Levenshtein (e.g. "teh" → "the").
     fun keyboardDistance(a:String,b:String):Int {
@@ -165,7 +194,7 @@ object KeyPopTypingIntelligence {
             if(!seen.add(word)||word==prefix)continue
             val starts=word.startsWith(prefix)
             val edit=if(!starts && prefix.length>=3)
-                keyboardDistance(prefix,word.take(prefix.length))
+                if(oneEditAway(prefix,word.take(prefix.length)))1 else 3
                 else 3
             if(!starts && edit>1)continue
             val grammar=if(context!=null)

@@ -56,6 +56,7 @@ class AetherImeService : InputMethodService() {
     private val predictionExecutor=Executors.newSingleThreadExecutor()
     private val predictionHandler=Handler(Looper.getMainLooper())
     private var predictionPending:Runnable?=null
+    private var suggestionRefreshTask:Runnable?=null
     private var predictionGeneration=0
     private val repeatHandler=Handler(Looper.getMainLooper())
     private var repeatBackspace:Runnable?=null
@@ -69,6 +70,7 @@ class AetherImeService : InputMethodService() {
     @Volatile private var screenshotMime="image/png"
     private var screenshotRefreshToken=0
     private var dismissedScreenshotUri:Uri?=null
+    private var screenshotSlot:LinearLayout?=null
     private var screenshotObserver:ContentObserver?=null
     private var screenshotDebounce:Runnable?=null
     private val clipboard by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
@@ -237,6 +239,9 @@ class AetherImeService : InputMethodService() {
         androidx.core.content.ContextCompat.registerReceiver(
             this,speechReceiver,filter,androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         clipboard.addPrimaryClipChangedListener(clipListener)
+        // Load the ~39k-word prediction index on its own executor. Never
+        // make the Space key perform first-use disk I/O or file parsing.
+        predictionExecutor.execute {runCatching{lexicon.warmup()}}
     }
 
     override fun onDestroy() {
@@ -249,6 +254,8 @@ class AetherImeService : InputMethodService() {
         try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
         predictionGeneration++
         predictionPending?.let{predictionHandler.removeCallbacks(it)}
+        suggestionRefreshTask?.let{predictionHandler.removeCallbacks(it)}
+        suggestionRefreshTask=null
         predictionExecutor.shutdownNow()
         imagePreviewExecutor.shutdownNow()
         super.onDestroy()
@@ -341,7 +348,7 @@ class AetherImeService : InputMethodService() {
     }
     override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
         super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
-        refreshSuggestions()
+        requestSuggestionRefresh(12)
         scheduleLiveTranslation()
     }
 
@@ -352,6 +359,9 @@ class AetherImeService : InputMethodService() {
         predictionGeneration++
         predictionPending?.let{predictionHandler.removeCallbacks(it)}
         predictionPending=null
+        suggestionRefreshTask?.let{predictionHandler.removeCallbacks(it)}
+        suggestionRefreshTask=null
+        screenshotSlot=null
         stopLiveTranslation()
         themeAnimator?.pause()
         KeyPopDiagnostics.flush(this)
@@ -719,10 +729,18 @@ class AetherImeService : InputMethodService() {
                     val changed=recentScreenshotUri!=visible
                     recentScreenshotUri=visible
                     screenshotMime=mime
-                    if(changed)draw()
+                    if(changed)updateScreenshotStrip()
                 }
             }
         }
+    }
+    /** Screenshot updates must never re-create the key grid while typing.
+     * Change only the small preview strip just above the persistent toolbar. */
+    private fun updateScreenshotStrip() {
+        val slot=screenshotSlot ?:return
+        slot.removeAllViews()
+        if(!sensitive(currentInputEditorInfo) && !numeric(currentInputEditorInfo))
+            recentScreenshotUri?.let{showScreenshotOffer(slot,it,screenshotMime)}
     }
     /** Paste in the current editor whenever it explicitly accepts image content.
      * Never silently open the system share chooser in another application. */
@@ -824,6 +842,7 @@ class AetherImeService : InputMethodService() {
         val root=current ?: return
         characterStrip?.dismiss()
         root.removeAllViews()
+        screenshotSlot=null
         suggestionBar=null
         materialTopBar=null
         lastSuggestionContext=null
@@ -848,8 +867,12 @@ class AetherImeService : InputMethodService() {
         // utilities row; compact preview updates without rebuilding keys.
         if(translatorOpen && !secure && !isNumeric &&
             prefs.getBoolean("compactTranslate",true))showTranslator(root)
-        if(!secure && !isNumeric && prefs.getBoolean("screenshotClipOffer",true))
-            recentScreenshotUri?.let{showScreenshotOffer(root,it,screenshotMime)}
+        if(!secure && !isNumeric && prefs.getBoolean("screenshotClipOffer",true)) {
+            val slot=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
+            screenshotSlot=slot
+            root.addView(slot,LinearLayout.LayoutParams(-1,-2))
+            recentScreenshotUri?.let{showScreenshotOffer(slot,it,screenshotMime)}
+        }
         if(materialToolbar) {
             val top=LinearLayout(this).apply {
                 orientation=LinearLayout.HORIZONTAL
@@ -1479,7 +1502,7 @@ class AetherImeService : InputMethodService() {
                         val suggested=lexicon.glide(0,trail)
                         if(suggested!=null) {
                             currentInputConnection?.commitText(suggested+" ",1)
-                            lexicon.learn(0,suggested);refreshSuggestions()
+                            learnAsync(0,suggested);refreshSuggestions()
                         } else press(label)
                     } else press(label)
                     popup=false
@@ -1673,6 +1696,16 @@ class AetherImeService : InputMethodService() {
      * main thread, debounced 28 ms, and stale results are discarded.
      * Three chip views are reused instead of recreated on every keystroke.
      */
+    private fun requestSuggestionRefresh(delayMs:Long=12L) {
+        suggestionRefreshTask?.let { predictionHandler.removeCallbacks(it) }
+        val task=Runnable {
+            suggestionRefreshTask=null
+            refreshSuggestions()
+        }
+        suggestionRefreshTask=task
+        predictionHandler.postDelayed(task,delayMs)
+    }
+    /** Only one editor snapshot is fetched for a burst of selection updates. */
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
         val input=currentInputConnection ?:return
@@ -1718,6 +1751,8 @@ class AetherImeService : InputMethodService() {
         val task=Runnable {
             if(predictionExecutor.isShutdown)return@Runnable
             predictionExecutor.execute {
+                if(token!=predictionGeneration)return@execute
+                val predictionStart=SystemClock.elapsedRealtimeNanos()
                 val values=if(word.isEmpty())lexicon.nextWords(predLang,previous,before)
                     else lexicon.suggestions(predLang,word,
                         limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
@@ -1727,9 +1762,12 @@ class AetherImeService : InputMethodService() {
                 // The Auto-correct switch governs replacements only;
                 // spelling suggestions remain available when it is OFF.
                 val spelling=if(word.length>=3)
-                    lexicon.correction(predLang,word) else null
+                    lexicon.correction(predLang,word,before) else null
                 val grammar=if(word.isNotEmpty() && prefs.getBoolean("grammarHints",true))
                     KeyPopGrammarRules.suggest(before,predLang) else null
+                KeyPopDiagnostics.observePredictionCompute(this,
+                    SystemClock.elapsedRealtimeNanos()-predictionStart)
+                if(token!=predictionGeneration)return@execute
                 predictionHandler.post {
                     if(token!=predictionGeneration || lastSuggestionContext!=key ||
                         bar!==suggestionBar || sensitive(currentInputEditorInfo))return@post
@@ -1738,7 +1776,7 @@ class AetherImeService : InputMethodService() {
             }
         }
         predictionPending=task
-        predictionHandler.postDelayed(task,28L)
+        predictionHandler.postDelayed(task,16L)
     }
     private fun renderSuggestions(bar:LinearLayout,before:String,word:String,
         predLang:Int,values:List<String>,spelling:String?,grammar:KeyPopGrammarFix?) {
@@ -1765,7 +1803,7 @@ class AetherImeService : InputMethodService() {
                 translateDraft=translateDraft.dropLast(actual.length)+committed
                 translateSource=translateDraft
                 liveSourceView?.text=translateDraft
-                lexicon.learn(predLang,replacement)
+                learnAsync(predLang,replacement)
                 refreshSuggestions()
                 scheduleLiveTranslation(120)
                 return
@@ -1784,7 +1822,7 @@ class AetherImeService : InputMethodService() {
             val accepted=connection.commitText(committed,1)
             connection.endBatchEdit()
             if(!accepted)return
-            lexicon.learn(predLang,replacement)
+            learnAsync(predLang,replacement)
             refreshSuggestions()
         }
         val offers=mutableListOf<Pair<String,()->Unit>>()
@@ -1847,7 +1885,14 @@ class AetherImeService : InputMethodService() {
                 else raw.lowercase(Locale.ROOT))+hint
         }
     }
+    /** Dictionary/user-learning writes are never performed on the key UI thread. */
+    private fun learnAsync(lang:Int,word:String) {
+        if(word.isBlank() || predictionExecutor.isShutdown)return
+        predictionExecutor.execute {runCatching{lexicon.learn(lang,word)}}
+    }
     private fun press(value:String) {
+        val pressStart=SystemClock.elapsedRealtimeNanos()
+        try {
         if(translatorOpen && translateDraftMode &&
             KeyPopTranslationDraft.handles(value)) {
             if(value=="↵") {translateBeforeSend();return}
@@ -1867,7 +1912,7 @@ class AetherImeService : InputMethodService() {
             if(value.length==1 && shift && !capsLock) {
                 shift=false;updateShiftKeys()
             }
-            refreshSuggestions()
+            requestSuggestionRefresh()
             scheduleLiveTranslation(130)
             return
         }
@@ -1900,7 +1945,7 @@ class AetherImeService : InputMethodService() {
                     connection?.endBatchEdit()
                 } else connection?.deleteSurroundingTextInCodePoints(1,0)
                 lastAppliedCorrection=null
-                refreshSuggestions()
+                requestSuggestionRefresh()
             }
             "⇧" -> {
                 if(language==0 || (prefs.getBoolean("romanMode",false) && language!=0)) {
@@ -1937,7 +1982,7 @@ class AetherImeService : InputMethodService() {
                         if(last.length==2 && last.last()==' ' && last.first().isLetter()) {
                             currentInputConnection?.deleteSurroundingText(1,0)
                             currentInputConnection?.commitText(". ",1)
-                            refreshSuggestions()
+                            requestSuggestionRefresh()
                             scheduleLiveTranslation(260)
                             return
                         }
@@ -1961,20 +2006,20 @@ class AetherImeService : InputMethodService() {
                         if(grammar!=null && grammar.remove<=before.length) {
                             currentInputConnection?.deleteSurroundingText(grammar.remove,0)
                             currentInputConnection?.commitText(grammar.replacement,1)
-                            lexicon.learn(predLang,grammar.replacement.substringAfterLast(' '))
+                            learnAsync(predLang,grammar.replacement.substringAfterLast(' '))
                         } else if(corrected!=null) {
                             currentInputConnection?.deleteSurroundingText(word.length,0)
                             val final=KeyPopTypingRules.preservesCase(word,corrected)
                             currentInputConnection?.commitText(final,1)
-                            lexicon.learn(predLang,final)
+                            learnAsync(predLang,final)
                             lastAppliedCorrection=AppliedCorrection(word,final,
                                 currentInputEditorInfo?.packageName.orEmpty(),
                                 SystemClock.elapsedRealtime())
-                        } else lexicon.learn(predLang,word)
+                        } else learnAsync(predLang,word)
                     }
                 }
                 currentInputConnection?.commitText(" ",1)
-                refreshSuggestions()
+                requestSuggestionRefresh()
             }
             "🌐" -> cycleLanguage()
             "☺,","☺" ->{
@@ -2021,10 +2066,14 @@ class AetherImeService : InputMethodService() {
                     shift=false
                     updateShiftKeys()
                 }
-                refreshSuggestions()
+                requestSuggestionRefresh()
             }
         }
         scheduleLiveTranslation()
+        } finally {
+            KeyPopDiagnostics.observeKeyPress(this,
+                SystemClock.elapsedRealtimeNanos()-pressStart)
+        }
     }
     private fun cycleLanguage() {
         language=(language+1)%3
@@ -2482,7 +2531,7 @@ class AetherImeService : InputMethodService() {
         },LinearLayout.LayoutParams(0,d(35),1.7f))
         root.addView(options)
         val items=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-        val listed=try{clipStore.page(60,clipPage*60,pinnedOnly)}catch(_:Exception){
+        val listed=try{clipStore.page(20,clipPage*20,pinnedOnly)}catch(_:Exception){
             root.addView(TextView(this).apply{
                 text="Clipboard could not be decrypted. Data was not erased."
                 setTextColor(s.ink);setPadding(d(10),d(10),d(10),d(10))
@@ -2509,12 +2558,12 @@ class AetherImeService : InputMethodService() {
             gravity=Gravity.CENTER;setTextColor(s.ink);textSize=12f
         },LinearLayout.LayoutParams(0,d(38),1.3f))
         pages.addView(chip("Older →") {
-            if((clipPage+1)*60<total){clipPage++;draw()}
+            if((clipPage+1)*20<total){clipPage++;draw()}
         },LinearLayout.LayoutParams(0,d(38),1f))
         items.addView(pages)
         val savedImages=try{KeyPopImageStore(this).list()}catch(_:Exception){emptyList()}
         val images=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-        for(image in savedImages.take(20)) {
+        for(image in savedImages.take(8)) {
             val line=LinearLayout(this).apply{
                 orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
             }

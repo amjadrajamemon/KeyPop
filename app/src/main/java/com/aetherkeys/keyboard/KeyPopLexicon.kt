@@ -12,9 +12,13 @@ import java.util.Locale
 class KeyPopLexicon(context:Context) {
     private val application=context.applicationContext
     private data class RankedWord(val word:String,val tier:Int)
+    @Volatile private var scowlReady=false
+    private val firstLetterIndex=HashMap<Char,List<RankedWord>>()
     private val scowlIndex by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         val index=HashMap<String,MutableList<RankedWord>>()
-        // First load occurs in KeyPop's prediction executor, never in draw().
+        val oneLetter=HashMap<Char,MutableList<RankedWord>>()
+        // Only the background prediction worker is allowed to initialize
+        // the 39k-word file. The UI keypress path checks scowlReady first.
         runCatching {
             application.assets.open("keypop_english_scowl.txt").bufferedReader().useLines { lines ->
                 lines.forEach { line ->
@@ -23,12 +27,25 @@ class KeyPopLexicon(context:Context) {
                     val tier=line.substring(0,tab).toIntOrNull()?:return@forEach
                     val word=line.substring(tab+1)
                     if(word.length !in 2..24 || word.any { !it.isLetter() })return@forEach
-                    index.getOrPut(word.take(2)){ArrayList()}.add(RankedWord(word,tier))
+                    val item=RankedWord(word,tier)
+                    index.getOrPut(word.take(2)){ArrayList()}.add(item)
+                    if(tier<=10)oneLetter.getOrPut(word[0]){ArrayList()}.add(item)
                 }
             }
         }
+        for((letter,candidates) in oneLetter) {
+            // A single typed letter must NOT enumerate thousands of words.
+            // The 96 familiar completions are cached once at preload.
+            firstLetterIndex[letter]=candidates
+                .sortedWith(compareBy<RankedWord>{it.tier}.thenBy{it.word.length})
+                .take(96)
+        }
+        scowlReady=true
         index
     }
+    /** Warm up the compressed prefix index on the dedicated prediction worker. */
+    fun warmup() {scowlIndex.size}
+    fun isReady():Boolean=scowlReady
     private val qwertyRows=listOf("qwertyuiop","asdfghjkl","zxcvbnm")
     /** Neighbouring first-letter substitutions are cheap to recover by
      * adding a few nearby two-letter buckets, not rescanning 39k words. */
@@ -49,8 +66,7 @@ class KeyPopLexicon(context:Context) {
         val input=fragment.trim().lowercase(Locale.ROOT)
         if(input.isBlank())return emptyList()
         if(input.length<2)
-            return scowlIndex.asSequence().filter { it.key.startsWith(input) }
-                .flatMap { it.value.asSequence() }.filter { it.tier<=10 }.toList()
+            return firstLetterIndex[input[0]].orEmpty()
         val keys=linkedSetOf(input.take(2))
         if(input.length>=3) {
             for(other in nearby(input[0]))keys.add(""+other+input[1])
@@ -58,7 +74,12 @@ class KeyPopLexicon(context:Context) {
             keys.add(""+input[1]+input[0])
         }
         return keys.asSequence().flatMap {scowlIndex[it].orEmpty().asSequence()}
-            .distinctBy {it.word}.toList()
+            .filter { it.word.startsWith(input.take(2)) ||
+                (input.length>=3 && it.tier<=20) }
+            .distinctBy {it.word}
+            .sortedWith(compareBy<RankedWord>{if(it.word.startsWith(input))0 else 1}
+                .thenBy{it.tier}.thenBy{it.word.length})
+            .take(240).toList()
     }
     private val store=context.getSharedPreferences("keypop_lexicon",Context.MODE_PRIVATE)
     private val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
@@ -126,6 +147,9 @@ class KeyPopLexicon(context:Context) {
         if(value in old)return
         // Do not silently teach invalid spellings as correct dictionary words.
         // Explicit personal-dictionary entries remain available for names.
+        // Missing dictionary warmup must never stall Space. No new
+        // speculative word is learned before its dictionary can verify it.
+        if(lang==0 && !scowlReady)return
         if(lang==0 && scowlIndex[value.take(2)].orEmpty().none {it.word==value} &&
             value !in english)return
         val updated=(old+value).toList().takeLast(15000).toSet()
@@ -136,10 +160,16 @@ class KeyPopLexicon(context:Context) {
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         val familiar=if(lang==0)rankCandidates(fragment) else emptyList()
         val base=when(lang){1->urdu;2->sindhi;else->english}
+        val prefix=fragment.lowercase(Locale.ROOT).take(2)
+        // A large personal dictionary must not create thousands of
+        // edit-distance matrices for one keypress. Indexed SCOWL candidates
+        // remain the primary source; select only relevant learned entries.
+        val relevantLearned=if(prefix.isBlank())emptySet() else
+            learned.asSequence().filter {it.startsWith(prefix)}.take(128).toSet()
         val dictionary=base.toList()+familiar.map {it.word}
         val tiers=if(lang==0)familiar.associate {it.word to it.tier} else emptyMap()
         return KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
-            learned,limit,dictionary,tiers,beforeCursor)
+            relevantLearned,limit,dictionary,tiers,beforeCursor)
     }
     fun nextWords(lang:Int,previous:String,beforeCursor:String=""):List<String> =
         KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor)
@@ -151,6 +181,9 @@ class KeyPopLexicon(context:Context) {
         if(normalized in base)return null
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         KeyPopTypingIntelligence.correction(lang,word,learned)?.let{return it}
+        // Never initialize the asset dictionary from the IME main thread.
+        // High-confidence typo mapping remains active until it is warm.
+        if(lang==0 && !scowlReady)return null
         if(lang!=0 || normalized.length !in 4..20 || !normalized.all{it in 'a'..'z'} ||
             normalized in learned)return null
         // Protect actual SCOWL words (including plurals), even if the
@@ -161,7 +194,7 @@ class KeyPopLexicon(context:Context) {
         data class Scored(val word:String,val value:Int)
         val ranked=rankCandidates(normalized).asSequence()
             .filter{it.tier<=20 && it.word!=normalized &&
-                KeyPopTypingIntelligence.keyboardDistance(normalized,it.word)==1}
+                KeyPopTypingIntelligence.oneEditAway(normalized,it.word)}
             .map {
                 val grammar=KeyPopPredictionContext.score(context,normalized,it.word)
                 Scored(it.word,(if(it.tier<=10)120 else 70)+grammar)

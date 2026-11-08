@@ -120,7 +120,7 @@ class KeyPopRuntimeSmokeTest {
                     "Auto-correct spelling" to "autoCorrect",
                     "Auto punctuation" to "autoPunctuate",
                     "Grammar hints (suggest only)" to "grammarHints",
-                    "Apply grammar fixes automatically" to "autoGrammarApply")) {
+                    "Apply high-confidence grammar fixes on Space" to "autoGrammarApply")) {
                     val item=find(activity.window.decorView,label)
                     assertTrue("Missing settings switch: $label",item!=null)
                     val row=item?.parent as? ViewGroup
