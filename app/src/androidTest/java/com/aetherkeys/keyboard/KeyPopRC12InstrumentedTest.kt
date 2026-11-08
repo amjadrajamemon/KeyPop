@@ -66,7 +66,8 @@ class KeyPopRC12InstrumentedTest {
                 assertTrue(find(root,"Clipboard archive"))
                 assertTrue(find(root,"Load more saved clips") ||
                     find(root,"Loading saved clips…") ||
-                    find(root,"No saved clips. Enable Clipboard history in KeyPop Settings."))
+                    find(root,"No saved clips. Enable Clipboard history in KeyPop Settings.") ||
+                    find(root,"No saved text yet. Screenshot images are displayed above."))
             }
         }
     }
