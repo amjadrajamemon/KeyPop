@@ -178,8 +178,22 @@ class MainActivity:Activity() {
         section=destination
         downloadMessage=null;downloadProgress=null
         content.removeAllViews()
-        content.addView(text("KEYPOP  /  SETTINGS",13f,accent,true))
-        action(content,"✕  Close Settings"){finish()}
+        val header=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL
+            gravity=Gravity.CENTER_VERTICAL
+        }
+        header.addView(text("KEYPOP  /  SETTINGS",13f,accent,true),
+            LinearLayout.LayoutParams(0,dp(44),1f))
+        val close=text("✕  Close",14f,ink,true).apply {
+            gravity=Gravity.CENTER
+            setPadding(dp(12),0,dp(12),0)
+            background=shape(card,11)
+            contentDescription="Close Settings and return to the keyboard"
+            isClickable=true;isFocusable=true
+            setOnClickListener{finish()}
+        }
+        header.addView(close,LinearLayout.LayoutParams(-2,dp(42)))
+        content.addView(header)
         if(section!="settingsHome") {
             action(content,"‹  All Settings"){navigate("settingsHome")}
         }
