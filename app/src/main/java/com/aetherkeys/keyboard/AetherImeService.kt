@@ -585,6 +585,11 @@ class AetherImeService : InputMethodService() {
     /** In-place resizing avoids detaching the gesture target during a drag. */
     private fun showResizePanel(root:LinearLayout) {
         val skin=palette()
+        // The full keyboard is intentionally replaced by the controls. Keep
+        // this lightweight canvas pinned so resizing stays visible on every drag.
+        val preview=KeyPopSizingPreview(this)
+        root.addView(preview,LinearLayout.LayoutParams(-1,d(160)))
+        var heightSlider:SeekBar?=null
         val panel=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
             setPadding(d(8),d(8),d(8),d(8))
@@ -611,11 +616,12 @@ class AetherImeService : InputMethodService() {
                         .toInt().coerceIn(36,90)
                     if(prefs.getInt("height",51)!=next){
                         prefs.edit().putInt("height",next).apply()
-                        refreshRowHeights()
+                        heightSlider?.progress=next-36
+                        preview.refresh()
                     }
                     true
                 }
-                MotionEvent.ACTION_UP ->{draw();true}
+                MotionEvent.ACTION_UP ->true
                 MotionEvent.ACTION_CANCEL ->true
                 else ->false
             }
@@ -655,33 +661,40 @@ class AetherImeService : InputMethodService() {
                 textSize=12f;setTextColor(skin.ink)
             }
             panel.addView(caption)
-            panel.addView(SeekBar(this).apply {
+            val slider=SeekBar(this).apply {
                 this.max=max-min
                 progress=(prefs.getInt(pref,initial).coerceIn(min,max)-min)
                 setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(s:SeekBar?,p:Int,fromUser:Boolean){
+                        caption.text=name+"  ·  "+(p+min)
                         if(fromUser){
                             prefs.edit().putInt(pref,p+min).apply()
-                            caption.text=name+"  ·  "+(p+min)
+                            preview.refresh()
                             onUpdate()
                         }
                     }
                     override fun onStartTrackingTouch(s:SeekBar?){}
-                    override fun onStopTrackingTouch(s:SeekBar?){draw()}
+                    override fun onStopTrackingTouch(s:SeekBar?){}
                 })
-            })
+            }
+            if(pref=="height")heightSlider=slider
+            panel.addView(slider)
         }
-        adjust("Key height (dp)","height",36,90,51){refreshRowHeights()}
-        adjust("Keyboard width (%)","keyboardWidthPercent",65,100,100){applyFloatingLayout()}
-        adjust("Key spacing (dp)","spacing",1,10,4){refreshKeyAppearance()}
-        adjust("Key label size (sp)","font",12,24,17){refreshKeyAppearance()}
-        adjust("Key corners (dp)","round",3,40,13){refreshKeyAppearance()}
-        adjust("Above navigation bar (dp)","bottomLift",0,96,0){applyFloatingLayout()}
-        val numberSwitch=chip(if(prefs.getBoolean("numberRow",true))
-            "1 2 3  ·  Number row: ON  (tap to hide)"
-            else "1 2 3  ·  Number row: OFF  (tap to show)") {
-            prefs.edit().putBoolean("numberRow",!prefs.getBoolean("numberRow",true)).apply()
-            draw()
+        // Settings update the pinned preview. Real keys are reconstructed only
+        // once on Done, not on every pixel moved by a finger.
+        adjust("Key height (dp)","height",36,90,51){}
+        adjust("Keyboard width (%)","keyboardWidthPercent",65,100,100){}
+        adjust("Key spacing (dp)","spacing",1,10,4){}
+        adjust("Key label size (sp)","font",12,32,19){}
+        adjust("Key corners (dp)","round",3,40,13){}
+        adjust("Above navigation bar (dp)","bottomLift",0,96,0){}
+        lateinit var numberSwitch:Button
+        numberSwitch=chip(if(prefs.getBoolean("numberRow",true))
+            "Number row: ON" else "Number row: OFF") {
+            val enabled=!prefs.getBoolean("numberRow",true)
+            prefs.edit().putBoolean("numberRow",enabled).apply()
+            numberSwitch.text=if(enabled)"Number row: ON" else "Number row: OFF"
+            preview.refresh()
         }
         numberSwitch.contentDescription="Toggle dedicated number row"
         panel.addView(numberSwitch,LinearLayout.LayoutParams(-1,d(42)))
@@ -713,7 +726,7 @@ class AetherImeService : InputMethodService() {
         action("✓ Done",1f){resizeOpen=false;draw()}
         panel.addView(actions)
         val available=resources.displayMetrics.heightPixels
-        val panelHeight=KeyboardSizingRules.boundedPanelHeight(available,d(360))
+        val panelHeight=KeyboardSizingRules.boundedPanelHeight(available,d(280))
         root.addView(ScrollView(this).apply {
             isFillViewport=false
             overScrollMode=View.OVER_SCROLL_IF_CONTENT_SCROLLS
@@ -1370,17 +1383,6 @@ class AetherImeService : InputMethodService() {
             }
             root.addView(tools)
         }
-        val title=TextView(this).apply {
-            text=if(symbols) "SYMBOLS   •   TAP ABC TO RETURN"
-                 else "✧  "+preset.name.uppercase()+"  •  "+languages[language]
-            textSize=9.5f; letterSpacing=0.07f
-            setTextColor(s.accent)
-            gravity=Gravity.CENTER_VERTICAL
-            setPadding(d(10),0,0,0)
-        }
-        if(preset.id!=KeyboardPresetCatalog.GESTURE &&
-            !materialToolbar && !resizeOpen)
-            root.addView(title,LinearLayout.LayoutParams(-1,d(20)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
             else if(emojiSearch)KeyPopLayouts.active(this,0)

@@ -104,7 +104,7 @@ class KeyboardPresetPreview(
             android.graphics.Shader.TileMode.CLAMP)
         canvas.drawRoundRect(0f,0f,w,h,dp(10f),dp(10f),paint)
         paint.shader=null
-        val toolbarHeight=dp(24f)
+        val toolbarHeight=if(material)dp(24f) else dp(7f)
         if(material){
             val bar=listOf("▦","▤","📷","⚙","⇄","◈","🎙")
             val cell=w/bar.size
@@ -115,11 +115,6 @@ class KeyboardPresetPreview(
                 paint.textAlign=Paint.Align.CENTER
                 canvas.drawText(label,(i+.5f)*cell,dp(15f),paint)
             }
-        }else{
-            paint.color=skin.ink;paint.textSize=dp(9f)
-            paint.typeface=android.graphics.Typeface.DEFAULT_BOLD
-            paint.textAlign=Paint.Align.LEFT
-            canvas.drawText("KEYPOP   /   "+candidate.name.uppercase(),dp(8f),dp(15f),paint)
         }
         val footerHeight=dp(28f)
         val rows=mutableListOf("QWERTYUIOP","ASDFGHJKL","ZXCVBNM")

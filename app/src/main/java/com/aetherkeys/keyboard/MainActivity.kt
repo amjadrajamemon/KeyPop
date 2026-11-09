@@ -96,6 +96,26 @@ class MainActivity:Activity() {
         if(subtitle!=null)content.addView(text(subtitle,13f,muted))
         content.addView(View(this),LinearLayout.LayoutParams(1,dp(12)))
     }
+    // Three independent selections, all on one screen. A tap immediately applies
+    // the choice; the preview is rebuilt without a separate Save step.
+    private fun picker(parent:LinearLayout,label:String,selected:String,onTap:()->Unit) {
+        val row=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL
+            gravity=Gravity.CENTER_VERTICAL
+            minimumHeight=dp(65)
+            setPadding(dp(12),dp(8),dp(12),dp(8))
+            background=shape(0xFF244B60.toInt(),12,0xFF4D8494.toInt())
+            isClickable=true;isFocusable=true
+            contentDescription="$label: $selected. Double tap to change."
+            setOnClickListener {onTap()}
+        }
+        val labels=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
+        labels.addView(text(label,12f,muted))
+        labels.addView(text(selected,16f,ink,true))
+        row.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
+        row.addView(text("⌄",20f,accent,true))
+        parent.addView(row,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(9)})
+    }
     private fun option(parent:LinearLayout,title:String,key:String,default:Boolean=false){
         val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(48)}
         val label=text(title,14f,ink)
@@ -124,6 +144,80 @@ class MainActivity:Activity() {
         })
         parent.addView(label);parent.addView(seek)
     }
+    /**
+     * Resizing keeps this canvas fixed at the top while its controls scroll.
+     * Slider changes persist and redraw the canvas without rebuilding the dialog.
+     */
+    private fun showResizeDialog() {
+        val shell=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(12),dp(8),dp(12),0)
+        }
+        val preview=KeyPopSizingPreview(this)
+        shell.addView(preview,LinearLayout.LayoutParams(-1,dp(170)))
+        val sliders=mutableListOf<Triple<SeekBar,String,Int>>()
+        val controls=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(0,dp(12),0,dp(8))
+        }
+        fun sizeSlider(label:String,key:String,min:Int,max:Int,default:Int,unit:String) {
+            val caption=text("",13f,ink)
+            val bar=SeekBar(this).apply {
+                this.max=max-min
+                progress=prefs.getInt(key,default).coerceIn(min,max)-min
+            }
+            caption.text="$label: ${bar.progress+min}$unit"
+            bar.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seek:SeekBar?,value:Int,user:Boolean){
+                    caption.text="$label: ${value+min}$unit"
+                    if(user){
+                        prefs.edit().putInt(key,value+min).apply()
+                        preview.refresh()
+                    }
+                }
+                override fun onStartTrackingTouch(seek:SeekBar?){}
+                override fun onStopTrackingTouch(seek:SeekBar?){}
+            })
+            controls.addView(caption)
+            controls.addView(bar)
+            sliders.add(Triple(bar,key,min))
+        }
+        sizeSlider("Key height","height",36,90,51," dp")
+        sizeSlider("Keyboard width","keyboardWidthPercent",65,100,100,"%")
+        sizeSlider("Key spacing","spacing",1,10,4," dp")
+        sizeSlider("Key text","font",12,32,19," sp")
+        sizeSlider("Corners","round",3,40,13," dp")
+        val numberRow=Switch(this).apply {
+            text="Number row"
+            setTextColor(ink)
+            isChecked=prefs.getBoolean("numberRow",true)
+            setOnCheckedChangeListener{_,on->
+                prefs.edit().putBoolean("numberRow",on).apply()
+                preview.refresh()
+            }
+        }
+        controls.addView(numberRow)
+        action(controls,"Reset size"){
+            prefs.edit().putInt("height",51).putInt("keyboardWidthPercent",100)
+                .putInt("spacing",4).putInt("font",19).putInt("round",13)
+                .putBoolean("numberRow",true).apply()
+            val defaults=mapOf("height" to 51,"keyboardWidthPercent" to 100,
+                "spacing" to 4,"font" to 19,"round" to 13)
+            sliders.forEach{(seek,key,min)->seek.progress=defaults.getValue(key)-min}
+            numberRow.isChecked=true
+            preview.refresh()
+        }
+        val area=ScrollView(this).apply {
+            isFillViewport=false
+            isVerticalScrollBarEnabled=false
+            addView(controls)
+        }
+        val height=(resources.displayMetrics.heightPixels/resources.displayMetrics.density*.42f)
+            .toInt().coerceIn(220,350)
+        shell.addView(area,LinearLayout.LayoutParams(-1,dp(height)))
+        AlertDialog.Builder(this).setTitle("Resize Keyboard")
+            .setView(shell).setPositiveButton("Done",null).show()
+    }
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
         window.statusBarColor=base
@@ -149,7 +243,7 @@ class MainActivity:Activity() {
         if(section=="settings")section="typing"
         if(section=="languagePacks")section="languagePacks"
         if(section !in setOf("settingsHome","typing","languagePacks","themes",
-                "layouts","keysets","translation","security","tools","onboarding"))
+                "layouts","keysets","design","translation","security","tools","onboarding"))
             section="settingsHome"
         navigate(section)
     }
@@ -175,7 +269,7 @@ class MainActivity:Activity() {
         navigate(if(target=="settings")"typing" else target)
     }
     private fun navigate(destination:String){
-        section=destination
+        section=if(destination in setOf("themes","layouts","keysets"))"design" else destination
         downloadMessage=null;downloadProgress=null
         content.removeAllViews()
         val header=LinearLayout(this).apply {
@@ -202,9 +296,7 @@ class MainActivity:Activity() {
                 "settingsHome"->dashboard()
                 "onboarding"->setup()
                 "languagePacks"->offlinePacks()
-                "themes"->themes()
-                "layouts"->layouts()
-                "keysets"->keysets()
+                "design"->design()
                 "typing"->typing()
                 "translation"->translation()
                 "security"->privacy()
@@ -232,14 +324,8 @@ class MainActivity:Activity() {
                 "Corrections, predictions, grammar, toolbar and key sizes"){navigate("typing")}
         }
         addBlock {
-            addView(text("03   MIX & MATCH KEYBOARD DESIGN",12f,accent,true))
-            val layout=KeyboardPresetCatalog.selected(this@MainActivity)
-            val keys=KeyPopKeysets.all.first{it.id==KeyPopKeysets.selectedId(this@MainActivity)}
-            addView(text("Current: "+KeyPopSkins.active(this@MainActivity).name+
-                " · "+layout.name+" · "+keys.name,12f,muted))
-            action(this,"Themes","Colors, keycap surfaces and visual style only"){navigate("themes")}
-            action(this,"Layouts","Keyboard geometry, row sizes and spacing only"){navigate("layouts")}
-            action(this,"Keys & Symbols","Bottom-row keys, long-press characters and symbol pages"){navigate("keysets")}
+            addView(text("03   KEYBOARD DESIGN",12f,accent,true))
+            action(this,"Customize Keyboard"){navigate("design")}
         }
         addBlock {
             addView(text("04   TRANSLATION & LANGUAGES",12f,accent,true))
@@ -302,131 +388,57 @@ class MainActivity:Activity() {
         }
         showTransfer()
     }
-    private fun themes(){
-        heading("Themes","Appearance only. Layout, keys and symbols stay unchanged.")
-        val current=prefs.getInt("theme",0).coerceIn(0,KeyPopSkins.all.lastIndex)
-        if(previewThemeIndex !in KeyPopSkins.all.indices)previewThemeIndex=current
+    private fun design(){
+        heading("Customize Keyboard")
+        val skin=KeyPopSkins.index(this)
+        val preset=KeyboardPresetCatalog.selected(this)
+        val keyset=KeyPopKeysets.selectedId(this)
         addBlock {
-            addView(text("ACTIVE · "+KeyPopSkins.all[current].name,12f,accent,true))
-            addView(text("PREVIEW · "+KeyPopSkins.all[previewThemeIndex].name,16f,ink,true))
-            action(this,"Apply selected theme") {
-                val selected=previewThemeIndex
-                prefs.edit().putInt("theme",selected)
-                    .remove("customAccent").apply()
-                Toast.makeText(this@MainActivity,"Theme applied",Toast.LENGTH_SHORT).show()
-                navigate("themes")
+            addView(KeyboardPresetPreview(this@MainActivity,preset,keyset),
+                LinearLayout.LayoutParams(-1,dp(154)).apply{bottomMargin=dp(13)})
+            picker(this,"Theme",KeyPopSkins.all[skin].name) {
+                val labels=KeyPopSkins.all.map{it.name}.toTypedArray()
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Theme")
+                    .setSingleChoiceItems(labels,skin){dialog,index->
+                        prefs.edit().putInt("theme",index).remove("customAccent").apply()
+                        dialog.dismiss()
+                        navigate("design")
+                    }
+                    .setNegativeButton("Cancel",null).show()
             }
-        }
-        addBlock {
-            addView(text("CHOOSE A STYLE",13f,accent,true))
-            KeyPopSkins.all.forEachIndexed {index,skin ->
-                val item=LinearLayout(this@MainActivity).apply {
-                    orientation=LinearLayout.HORIZONTAL
-                    gravity=Gravity.CENTER_VERTICAL
-                    minimumHeight=dp(56)
-                    setPadding(dp(8),dp(5),dp(8),dp(5))
-                    background=shape(if(index==previewThemeIndex)
-                        0xFF244B60.toInt() else card,10,
-                        if(index==previewThemeIndex)accent else edge)
-                }
-                item.addView(View(this@MainActivity).apply {
-                    background=shape(skin.key,11,skin.accent)
-                },LinearLayout.LayoutParams(dp(44),dp(42)))
-                val label=LinearLayout(this@MainActivity).apply {
-                    orientation=LinearLayout.VERTICAL
-                    setPadding(dp(12),0,0,0)
-                    addView(text(skin.name,14f,ink,true))
-                    addView(text(skin.subtitle,12f,muted))
-                }
-                item.addView(label,LinearLayout.LayoutParams(0,-2,1f))
-                if(index==previewThemeIndex)
-                    item.addView(text("✓",20f,accent,true))
-                item.setOnClickListener {
-                    previewThemeIndex=index
-                    navigate("themes")
-                }
-                item.isClickable=true
-                addView(item,LinearLayout.LayoutParams(-1,-2).apply{
-                    bottomMargin=dp(5)
-                })
+            picker(this,"Layout",preset.name) {
+                val labels=KeyboardPresetCatalog.all.map{it.name}.toTypedArray()
+                val selected=KeyboardPresetCatalog.all.indexOfFirst{it.id==preset.id}
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Layout")
+                    .setSingleChoiceItems(labels,selected){dialog,index->
+                        val applied=KeyboardPresetCatalog.apply(
+                            this@MainActivity,KeyboardPresetCatalog.all[index].id)
+                        dialog.dismiss()
+                        if(applied)navigate("design")
+                        else Toast.makeText(this@MainActivity,
+                            "Unable to change layout",Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Cancel",null).show()
             }
-        }
-    }
-    private fun layouts(){
-        heading("Layouts","Change geometry without altering theme or symbol mappings.")
-        if(previewLayoutIndex !in KeyboardPresetCatalog.all.indices)
-            previewLayoutIndex=KeyboardPresetCatalog.selected(this).id
-        val selected=KeyboardPresetCatalog.byId(previewLayoutIndex)
-            ?:KeyboardPresetCatalog.all.first()
-        addBlock {
-            addView(text("SELECTED GEOMETRY · "+selected.name,14f,accent,true))
-            addView(text("Preview uses your current theme and key/symbol pack.",12f,muted))
-            addView(KeyboardPresetPreview(this@MainActivity,selected),
-                LinearLayout.LayoutParams(-1,dp(154)))
-            action(this,"Apply geometry only"){
-                val applied=KeyboardPresetCatalog.apply(this@MainActivity,selected.id)
-                Toast.makeText(this@MainActivity,
-                    if(applied)"Geometry applied; theme and symbols preserved" else "Unable to apply layout",
-                    Toast.LENGTH_SHORT).show()
-                navigate("layouts")
+            val currentKeys=KeyPopKeysets.all.first{it.id==keyset}
+            picker(this,"Keys & Symbols",currentKeys.name) {
+                val labels=KeyPopKeysets.all.map{it.name}.toTypedArray()
+                val selected=KeyPopKeysets.all.indexOfFirst{it.id==keyset}
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Keys & Symbols")
+                    .setSingleChoiceItems(labels,selected){dialog,index->
+                        val applied=KeyPopKeysets.apply(
+                            this@MainActivity,KeyPopKeysets.all[index].id)
+                        dialog.dismiss()
+                        if(applied)navigate("design")
+                        else Toast.makeText(this@MainActivity,
+                            "Unable to change keys",Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Cancel",null).show()
             }
-        }
-        addBlock {
-            addView(text("AVAILABLE ARRANGEMENTS",13f,accent,true))
-            KeyboardPresetCatalog.all.forEach {preset->
-                action(this,(if(preset.id==previewLayoutIndex)"✓  " else "")+
-                    preset.name,preset.description) {
-                    previewLayoutIndex=preset.id
-                    navigate("layouts")
-                }
-            }
-            action(this,"Advanced Layout Editor"){
-                startActivity(Intent(this@MainActivity,KeyPopLayoutStudioActivity::class.java))
-            }
-        }
-    }
-    private fun keysets(){
-        heading("Keys & Symbols",
-            "Choose key content independently of appearance and geometry.")
-        val active=KeyPopKeysets.selectedId(this)
-        if(previewKeysetIndex !in KeyPopKeysets.all.map{it.id})
-            previewKeysetIndex=active
-        val chosen=KeyPopKeysets.all.first{it.id==previewKeysetIndex}
-        addBlock{
-            addView(text("SELECTED PREVIEW · "+chosen.name,14f,accent,true))
-            addView(text("Your active theme: "+KeyPopSkins.active(this@MainActivity).name+
-                " · Geometry: "+KeyboardPresetCatalog.selected(this@MainActivity).name,
-                12f,muted))
-            addView(KeyboardPresetPreview(this@MainActivity,
-                KeyboardPresetCatalog.selected(this@MainActivity),chosen.id),
-                LinearLayout.LayoutParams(-1,dp(154)))
-            addView(text("Bottom row: "+
-                KeyPopKeysets.footer(chosen.id,false).joinToString("  "),
-                12f,muted))
-            addView(text("Hold period (.) → "+
-                KeyPopKeysets.alternates(chosen.id,".",0).take(9).joinToString("  "),
-                12f,muted))
-            action(this,"Apply keys and symbols only"){
-                val applied=KeyPopKeysets.apply(this@MainActivity,chosen.id)
-                Toast.makeText(this@MainActivity,
-                    if(applied)"Keyset applied; theme and layout preserved"
-                    else "Unable to apply keyset",Toast.LENGTH_SHORT).show()
-                navigate("keysets")
-            }
-        }
-        addBlock{
-            addView(text("SELECT KEY CONTENT",12f,accent,true))
-            KeyPopKeysets.all.forEach{pack->
-                action(this,
-                    (if(pack.id==previewKeysetIndex)"✓  " else "")+pack.name,
-                    pack.description){
-                    previewKeysetIndex=pack.id
-                    navigate("keysets")
-                }
-            }
-            addView(text("Example: select Samsung-style geometry under Layouts, "+
-                "then apply Gboard-style keys and symbols here. "+
-                "Use any theme with that combination.",12f,muted))
+            action(this,"Resize keys"){showResizeDialog()}
         }
     }
     private fun typing(){
@@ -470,13 +482,8 @@ class MainActivity:Activity() {
             range(this,"Suggestion strip height","suggestionHeight",38,64,45)
         }
         addBlock {
-            addView(text("04   KEYS & GEOMETRY",13f,accent,true))
-            range(this,"Key height","height",36,90,51)
-            range(this,"Key font size","font",12,32,19)
-            range(this,"Key spacing","spacing",1,10,4)
-            range(this,"Keyboard width %","keyboardWidthPercent",65,100,100)
-            range(this,"Key corner radius","round",3,26,13)
-            option(this,"Number row","numberRow",true)
+            addView(text("04   KEYBOARD SIZE",13f,accent,true))
+            action(this,"Resize keys"){showResizeDialog()}
             option(this,"Roman Urdu / Sindhi","romanMode")
         }
         addBlock {

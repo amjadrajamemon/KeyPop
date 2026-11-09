@@ -55,20 +55,30 @@ class KeyPopRC22MixMatchInstrumentedTest {
         }
         return null
     }
-    @Test fun settingsCanPreviewAndNavigateSeparateKeysSymbols() {
+    @Test fun unifiedDesignShowsIndependentKeysAndLiveResizeEntry() {
         ActivityScenario.launch(MainActivity::class.java).use{scenario->
             scenario.onActivity{activity->
-                var entry:View?=find(activity.window.decorView,"Keys & Symbols")
-                assertNotNull("Missing Keys & Symbols category",entry)
+                var entry:View?=find(activity.window.decorView,"Customize Keyboard")
+                assertNotNull("Missing one-screen keyboard customization",entry)
                 while(entry!=null && !entry!!.hasOnClickListeners()) {
                     entry=entry!!.parent as? View
                 }
-                assertNotNull("Keys & Symbols category cannot open",entry)
+                assertNotNull("Customize Keyboard cannot open",entry)
                 entry!!.performClick()
-                assertNotNull(find(activity.window.decorView,"Apply keys and symbols only"))
-                assertNotNull(find(activity.window.decorView,"Gboard-style keys & symbols"))
-                assertNotNull(find(activity.window.decorView,"Samsung-style keys & symbols"))
-                assertNotNull(find(activity.window.decorView,"SwiftKey-style keys & symbols"))
+                val root=activity.window.decorView
+                assertNotNull("Theme selector missing",find(root,"Theme"))
+                assertNotNull("Layout selector missing",find(root,"Layout"))
+                assertNotNull("Keys and Symbols selector missing",find(root,"Keys & Symbols"))
+                assertNotNull("Live resizing entry missing",find(root,"Resize keys"))
+                assertNotNull("Active keyset not shown",
+                    find(root,KeyPopKeysets.all.first {
+                        it.id==KeyPopKeysets.selectedId(activity)
+                    }.name))
+                assertNull("Old confusing Apply control still displayed",
+                    find(root,"Apply keys and symbols only"))
+                assertTrue("Available keysets were lost",listOf(
+                    KeyPopKeysets.GBOARD,KeyPopKeysets.SAMSUNG,KeyPopKeysets.SWIFTKEY
+                ).all{KeyPopKeysets.valid(it)})
             }
         }
     }
