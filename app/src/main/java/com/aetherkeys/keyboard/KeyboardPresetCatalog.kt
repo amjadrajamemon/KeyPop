@@ -166,7 +166,7 @@ class KeyboardPresetPreview(
                 keys.length==9->dp(16f)
                 else->dp(4.5f)
             }
-            val weights=visual.map{ keyWeight(candidate.id,it.toString()) }
+            val weights=visual.map{ KeyboardPresetCatalog.keyWeight(candidate.id,it.toString()) }
             val sum=weights.sum()
             val free=(w-2*side-gap*(visual.length-1)).coerceAtLeast(1f)
             var cursor=side
