@@ -41,7 +41,7 @@ class KeyPopRC11InstrumentedTest {
             scenario.onActivity {activity->
                 val view=activity.window.decorView
                 for(name in listOf("01   GET STARTED","02   TYPING INTELLIGENCE",
-                    "03   APPEARANCE","04   TRANSLATION & LANGUAGES",
+                    "03   MIX & MATCH KEYBOARD DESIGN","04   TRANSLATION & LANGUAGES",
                     "05   PRIVACY & UTILITIES"))
                     assertNotNull("Missing settings group: $name",find(view,name))
                 val typing=find(view,"Typing & Size")

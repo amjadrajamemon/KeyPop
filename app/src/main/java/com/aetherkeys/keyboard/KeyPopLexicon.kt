@@ -187,6 +187,17 @@ class KeyPopLexicon(context:Context) {
     }
     fun nextWords(lang:Int,previous:String,beforeCursor:String=""):List<String> =
         KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor)
+    /**
+     * Spacebar fast path: only constant-time verified substitutions. The full
+     * SCOWL edit-distance ranking runs on the prediction worker, never here.
+     */
+    fun fastCorrection(lang:Int,word:String):String? {
+        if(lang!=0)return null
+        val normalized=word.lowercase(Locale.ROOT)
+        if(normalized in store.getStringSet("manual_0",emptySet()).orEmpty())return null
+        return if(normalized=="topredict")"to predict"
+            else KeyPopTypingIntelligence.correction(lang,normalized)
+    }
     fun correction(lang:Int,word:String,beforeCursor:String=""):String? {
         val normalized=word.trim().lowercase(Locale.ROOT)
         val manual=store.getStringSet("manual_"+lang,emptySet()).orEmpty()

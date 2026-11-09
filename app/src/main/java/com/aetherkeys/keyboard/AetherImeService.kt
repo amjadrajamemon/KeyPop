@@ -59,6 +59,15 @@ class AetherImeService : InputMethodService() {
     private var lastSuggestionContext:String?=null
     private val predictionExecutor=Executors.newSingleThreadExecutor()
     private val predictionHandler=Handler(Looper.getMainLooper())
+    // A short-lived RAM-only mirror avoids remote editor IPC on every key.
+    private val editorContext=KeyPopEditorContext()
+    private var contextCacheHits=0
+    private var contextCacheMisses=0
+    private var lastKeyboardTouchAt=0L
+    private var lastKnownSelection:Int?=null
+    private data class SpaceAdvice(val language:Int,val before:String,
+        val word:String,val correction:String?,val grammar:KeyPopGrammarFix?)
+    private var latestSpaceAdvice:SpaceAdvice?=null
     private var predictionPending:Runnable?=null
     private var suggestionRefreshTask:Runnable?=null
     private var predictionGeneration=0
@@ -359,11 +368,24 @@ class AetherImeService : InputMethodService() {
     }
     override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
         super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
-        requestSuggestionRefresh(12)
-        scheduleLiveTranslation()
+        lastKnownSelection=newSelStart.takeIf{newSelStart==newSelEnd && it>=0}
+        val ourEdit=editorContext.selectionChanged(newSelStart,newSelEnd)
+        // press() already scheduled the prediction for our own edits.
+        // Cursor moves, selections and external app edits need a fresh snapshot.
+        if(!ourEdit) {
+            latestSpaceAdvice=null
+            requestSuggestionRefresh(18)
+            scheduleLiveTranslation()
+        }
     }
 
     override fun onFinishInputView(finishingInput:Boolean) {
+        editorContext.clear()
+        lastKnownSelection=null
+        latestSpaceAdvice=null
+        KeyPopDiagnostics.observeContextCache(this,contextCacheHits,contextCacheMisses)
+        contextCacheHits=0
+        contextCacheMisses=0
         stopScreenshotObserver()
         lastAppliedCorrection=null
         stopBackspaceRepeating()
@@ -380,6 +402,9 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
+        editorContext.clear()
+        latestSpaceAdvice=null
+        lastKnownSelection=info?.initialSelStart?.takeIf{it>=0}
         lastAppliedCorrection=null
         val viewStart=SystemClock.elapsedRealtimeNanos()
         super.onStartInputView(info,restarting)
@@ -671,7 +696,10 @@ class AetherImeService : InputMethodService() {
                 repeatMode=android.animation.ValueAnimator.RESTART
                 addUpdateListener {
                     val time=SystemClock.uptimeMillis()
-                    if(time-lastThemeFrame>=85L) {
+                    // Animation stays paused while keys are actively tapped.
+                    // Do not compete with text rendering for the main thread.
+                    if(time-lastThemeFrame>=115L &&
+                        time-lastKeyboardTouchAt>550L) {
                         lastThemeFrame=time
                         liveBackground?.phase=it.animatedValue as Float
                     }
@@ -895,7 +923,7 @@ class AetherImeService : InputMethodService() {
         strip.addView(chip("×") {
             dismissedScreenshotUri=uri
             recentScreenshotUri=null
-            draw()
+            updateScreenshotStrip()
         }.apply{contentDescription="Dismiss this screenshot offer"},
             LinearLayout.LayoutParams(d(32),d(42)))
         root.addView(strip,LinearLayout.LayoutParams(-1,d(56)))
@@ -1436,7 +1464,11 @@ class AetherImeService : InputMethodService() {
                                 translateDraft=translateDraft.dropLast(1)
                                 translateSource=translateDraft
                                 liveSourceView?.text=translateDraft
-                            } else currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)
+                            } else {
+                                editorContext.deletedCodePoint()
+                                if(currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)!=true)
+                                    editorContext.clear()
+                            }
                             repeats++
                             // Avoid inflating suggestion views for every deleted character.
                             if(repeats%5==0)refreshSuggestions()
@@ -1773,6 +1805,23 @@ class AetherImeService : InputMethodService() {
      * main thread, debounced 28 ms, and stale results are discarded.
      * Three chip views are reused instead of recreated on every keystroke.
      */
+    /** Fetch from the remote editor only when the mirror is uninitialized
+     * or invalidated by a caret movement. Never retain sensitive content. */
+    private fun readContext(input:InputConnection,limit:Int):String {
+        if(sensitive(currentInputEditorInfo))
+            return input.getTextBeforeCursor(limit,0)?.toString().orEmpty()
+        editorContext.text()?.let{
+            contextCacheHits++
+            return it.takeLast(limit)
+        }
+        contextCacheMisses++
+        val start=SystemClock.elapsedRealtimeNanos()
+        val fresh=input.getTextBeforeCursor(256,0)?.toString().orEmpty()
+        KeyPopDiagnostics.observeEditorRead(this,
+            SystemClock.elapsedRealtimeNanos()-start)
+        editorContext.seed(fresh,lastKnownSelection)
+        return fresh.takeLast(limit)
+    }
     private fun requestSuggestionRefresh(delayMs:Long=12L) {
         suggestionRefreshTask?.let { predictionHandler.removeCallbacks(it) }
         val task=Runnable {
@@ -1794,7 +1843,7 @@ class AetherImeService : InputMethodService() {
             return
         }
         val before=if(translatorOpen && translateDraftMode)translateDraft.takeLast(140)
-            else input.getTextBeforeCursor(140,0)?.toString().orEmpty()
+            else readContext(input,140)
         val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
         val nextWords=prefs.getBoolean("predictNext",true)
         val show=word.isNotEmpty() || (nextWords && before.isNotBlank())
@@ -1855,6 +1904,7 @@ class AetherImeService : InputMethodService() {
                 predictionHandler.post {
                     if(token!=predictionGeneration || lastSuggestionContext!=key ||
                         bar!==suggestionBar || sensitive(currentInputEditorInfo))return@post
+                    latestSpaceAdvice=SpaceAdvice(predLang,before,word,spelling,grammar)
                     renderSuggestions(bar,before,word,predLang,values,spelling,grammar)
                 }
             }
@@ -1897,6 +1947,7 @@ class AetherImeService : InputMethodService() {
             val actual=Regex("[\\p{L}]+$").find(
                 connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
             if(actual!=word || sensitive(currentInputEditorInfo))return
+            editorContext.clear()
             connection.beginBatchEdit()
             if(actual.isNotEmpty())connection.deleteSurroundingText(actual.length,0)
             val replacement=KeyPopPredictionContext.wordCase(choice,actual,before)
@@ -1927,6 +1978,7 @@ class AetherImeService : InputMethodService() {
                     val conn=currentInputConnection
                     val actual=conn?.getTextBeforeCursor(grammar.remove,0)?.toString().orEmpty()
                     if(actual.length==grammar.remove && before.endsWith(actual)) {
+                        editorContext.clear()
                         conn?.beginBatchEdit()
                         conn?.deleteSurroundingText(grammar.remove,0)
                         conn?.commitText(grammar.replacement,1)
@@ -1995,6 +2047,7 @@ class AetherImeService : InputMethodService() {
     }
     private fun press(value:String) {
         val pressStart=SystemClock.elapsedRealtimeNanos()
+        lastKeyboardTouchAt=SystemClock.uptimeMillis()
         try {
         if(translatorOpen && translateDraftMode &&
             KeyPopTranslationDraft.handles(value)) {
@@ -2046,7 +2099,12 @@ class AetherImeService : InputMethodService() {
                     connection?.deleteSurroundingText(entry.corrected.length+1,0)
                     connection?.commitText(entry.original,1)
                     connection?.endBatchEdit()
-                } else connection?.deleteSurroundingTextInCodePoints(1,0)
+                } else {
+                    editorContext.deletedCodePoint()
+                    if(connection?.deleteSurroundingTextInCodePoints(1,0)!=true)
+                        editorContext.clear()
+                }
+                if(entry!=null && preceding.isNotEmpty())editorContext.clear()
                 lastAppliedCorrection=null
                 requestSuggestionRefresh()
             }
@@ -2070,6 +2128,7 @@ class AetherImeService : InputMethodService() {
                         if(word!=null) {
                             val converted=KeyPopRoman.convert(language,word)
                             if(converted!=word) {
+                                editorContext.clear()
                                 currentInputConnection?.beginBatchEdit()
                                 currentInputConnection?.deleteSurroundingText(word.length,0)
                                 currentInputConnection?.commitText(converted,1)
@@ -2081,8 +2140,9 @@ class AetherImeService : InputMethodService() {
                             prefs.getBoolean("autoPunctuate",true),
                             currentInputEditorInfo?.inputType?:0) &&
                         prefs.getBoolean("doubleSpace",true)) {
-                        val last=currentInputConnection?.getTextBeforeCursor(2,0)?.toString().orEmpty()
+                        val last=currentInputConnection?.let{readContext(it,2)}.orEmpty()
                         if(last.length==2 && last.last()==' ' && last.first().isLetter()) {
+                            editorContext.clear()
                             currentInputConnection?.deleteSurroundingText(1,0)
                             currentInputConnection?.commitText(". ",1)
                             requestSuggestionRefresh()
@@ -2090,7 +2150,7 @@ class AetherImeService : InputMethodService() {
                             return
                         }
                     }
-                    val before=currentInputConnection?.getTextBeforeCursor(48,0)?.toString().orEmpty()
+                    val before=currentInputConnection?.let{readContext(it,48)}.orEmpty()
                     val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
                     if(word.isNotBlank()) {
                         val predLang=if(language!=0 &&
@@ -2098,9 +2158,15 @@ class AetherImeService : InputMethodService() {
                         val inputType=currentInputEditorInfo?.inputType?:0
                         val corrected=if(KeyPopTypingRules.autocorrectEnabled(
                                 prefs.getBoolean("autoCorrect",true),inputType)) {
-                            val candidate=lexicon.correction(predLang,word,before)
+                            // Only precomputed spelling or fixed verified typos
+                            // are allowed here. Dictionary scans stay off UI.
+                            val cached=latestSpaceAdvice?.takeIf {
+                                it.language==predLang && it.word==word &&
+                                    it.before.takeLast(48)==before
+                            }?.correction
+                            val candidate=cached ?:lexicon.fastCorrection(predLang,word)
                             if(!prefs.getBoolean("correctMissingSpaces",true) &&
-                                candidate==lexicon.joinedWordCorrection(predLang,word))
+                                candidate?.contains(' ')==true)
                                 null else candidate
                         } else null
                         // Grammar hints are suggestions, not forced edits. Optional
@@ -2109,14 +2175,19 @@ class AetherImeService : InputMethodService() {
                             KeyPopTypingRules.autocorrectEnabled(
                                 prefs.getBoolean("autoCorrect",true),inputType) &&
                             prefs.getBoolean("grammarHints",true))
-                            KeyPopGrammarRules.suggest(before,predLang) else null
+                            latestSpaceAdvice?.takeIf {
+                                it.language==predLang && it.before.takeLast(48)==before
+                            }?.grammar ?: KeyPopGrammarRules.suggest(before,predLang)
+                            else null
                         val committed=if(grammar!=null &&
                             grammar.remove<=before.length) {
+                            editorContext.clear()
                             currentInputConnection?.deleteSurroundingText(grammar.remove,0)
                             currentInputConnection?.commitText(grammar.replacement,1)
                             learnAsync(predLang,grammar.replacement.substringAfterLast(' '))
                             grammar.replacement
                         } else if(corrected!=null) {
+                            editorContext.clear()
                             currentInputConnection?.deleteSurroundingText(word.length,0)
                             val final=KeyPopTypingRules.preservesCase(word,corrected)
                             currentInputConnection?.commitText(final,1)
@@ -2132,7 +2203,9 @@ class AetherImeService : InputMethodService() {
                         learnPersonalAsync(predLang,before.dropLast(word.length),committed)
                     }
                 }
-                currentInputConnection?.commitText(" ",1)
+                editorContext.committed(" ")
+                if(currentInputConnection?.commitText(" ",1)!=true)editorContext.clear()
+                latestSpaceAdvice=null
                 requestSuggestionRefresh()
             }
             "🌐" -> cycleLanguage()
@@ -2156,7 +2229,8 @@ class AetherImeService : InputMethodService() {
                 else currentInputConnection?.commitText("\n",1)
             }
             else -> {
-                val prior=currentInputConnection?.getTextBeforeCursor(120,0)?.toString().orEmpty()
+                val connection=currentInputConnection
+                val prior=connection?.let{readContext(it,120)}.orEmpty()
                 val sentenceStart=prior.isBlank() || prior.trimEnd().lastOrNull() in listOf('.','!','?','\n')
                 val latinMode=language==0 || prefs.getBoolean("romanMode",false)
                 val capital=shift || (latinMode && prefs.getBoolean("autoCap",true) && sentenceStart)
@@ -2171,11 +2245,17 @@ class AetherImeService : InputMethodService() {
                         prefs.getBoolean("autoPunctuate",true),
                         currentInputEditorInfo?.inputType?:0) &&
                     prior.trimEnd().lastOrNull()?.isLetterOrDigit()==true
-                if(doAutoPunct && prior.endsWith(" "))
-                    currentInputConnection?.deleteSurroundingText(1,0)
-                currentInputConnection?.commitText(
-                    (if(capital && latinMode)value.uppercase(Locale.ROOT) else value)+
-                        (if(doAutoPunct)" " else ""),1)
+                if(doAutoPunct && prior.endsWith(" ")) {
+                    editorContext.deletedCharacters(1)
+                    if(connection?.deleteSurroundingText(1,0)!=true)
+                        editorContext.clear()
+                }
+                val characters=(if(capital && latinMode)
+                    value.uppercase(Locale.ROOT) else value)+
+                        (if(doAutoPunct)" " else "")
+                editorContext.committed(characters)
+                if(connection?.commitText(characters,1)!=true)
+                    editorContext.clear()
                 if(shift && latinMode && !capsLock) {
                     shift=false
                     updateShiftKeys()
