@@ -12,12 +12,21 @@ package com.aetherkeys.keyboard
 class KeyPopEditorContext(private val capacity:Int=256) {
     private var before:String?=null
     private var expectedSelection:Int?=null
-    fun clear() {before=null;expectedSelection=null}
+    // Android may report selection acknowledgments after several quick keys.
+    // Accept any still-pending local cursor position rather than clearing the
+    // mirror on every delayed input-connection callback.
+    private val pendingSelections=ArrayDeque<Int>()
+    fun clear() {
+        before=null
+        expectedSelection=null
+        pendingSelections.clear()
+    }
     fun valid():Boolean=before!=null
     fun text():String?=before
     fun seed(value:String,selection:Int?=null) {
         before=value.takeLast(capacity.coerceAtLeast(32))
         expectedSelection=selection?.takeIf{it>=0}
+        pendingSelections.clear()
     }
     /** Called BEFORE invoking commitText(), because some editors call back
      * synchronously from commitText(). On failure the caller must clear(). */
@@ -25,11 +34,19 @@ class KeyPopEditorContext(private val capacity:Int=256) {
         val old=before?:return
         before=(old+value).takeLast(capacity)
         expectedSelection=expectedSelection?.plus(value.length)
+        markPending()
     }
     fun deletedCharacters(count:Int) {
         val old=before?:return
         before=old.dropLast(count.coerceAtLeast(0))
         expectedSelection=expectedSelection?.minus(count)?.coerceAtLeast(0)
+        markPending()
+    }
+    private fun markPending() {
+        expectedSelection?.let{
+            pendingSelections.addLast(it)
+            if(pendingSelections.size>64)pendingSelections.removeFirst()
+        }
     }
     fun deletedCodePoint() {
         val old=before?:return
@@ -44,12 +61,22 @@ class KeyPopEditorContext(private val capacity:Int=256) {
      */
     fun selectionChanged(start:Int,end:Int):Boolean {
         if(start<0||start!=end) {clear();return false}
-        val value=before?:return false
-        if(expectedSelection!=null && start!=expectedSelection) {
-            clear()
-            return false
+        if(before==null)return false
+        if(expectedSelection==null) {
+            expectedSelection=start
+            return true
         }
-        expectedSelection=start
-        return true
+        if(start==expectedSelection){
+            pendingSelections.clear()
+            return true
+        }
+        if(start in pendingSelections) {
+            while(pendingSelections.isNotEmpty()) {
+                if(pendingSelections.removeFirst()==start)break
+            }
+            return true
+        }
+        clear()
+        return false
     }
 }

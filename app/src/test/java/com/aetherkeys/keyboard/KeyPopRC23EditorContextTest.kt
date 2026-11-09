@@ -43,7 +43,20 @@ class KeyPopRC23EditorContextTest {
         c.clear()
         assertFalse(c.valid())
     }
-    @Test fun cacheIsBoundedAndDoesNotGrowWithLongMessages() {
+    @Test fun delayedSelectionAcknowledgmentsFromRapidTypingDoNotInvalidateMirror() {
+        val c=KeyPopEditorContext()
+        c.seed("hi",2)
+        repeat(10){c.committed("a")}
+        // The editor can report old local cursor positions after a burst.
+        for(cursor in 3..12) {
+            assertTrue("Unexpected mirror invalidation at $cursor",
+                c.selectionChanged(cursor,cursor))
+        }
+        assertEquals("hi"+"a".repeat(10),c.text())
+        assertFalse(c.selectionChanged(1,1))
+        assertNull(c.text())
+    }
+        @Test fun cacheIsBoundedAndDoesNotGrowWithLongMessages() {
         val c=KeyPopEditorContext(256)
         c.seed("",0)
         repeat(30000){c.committed("a")}
