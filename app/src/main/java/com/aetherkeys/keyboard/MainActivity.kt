@@ -144,6 +144,80 @@ class MainActivity:Activity() {
         })
         parent.addView(label);parent.addView(seek)
     }
+    /**
+     * Resizing keeps this canvas fixed at the top while its controls scroll.
+     * Slider changes persist and redraw the canvas without rebuilding the dialog.
+     */
+    private fun showResizeDialog() {
+        val shell=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(12),dp(8),dp(12),0)
+        }
+        val preview=KeyPopSizingPreview(this)
+        shell.addView(preview,LinearLayout.LayoutParams(-1,dp(170)))
+        val sliders=mutableListOf<Triple<SeekBar,String,Int>>()
+        val controls=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(0,dp(12),0,dp(8))
+        }
+        fun sizeSlider(label:String,key:String,min:Int,max:Int,default:Int,unit:String) {
+            val caption=text("",13f,ink)
+            val bar=SeekBar(this).apply {
+                this.max=max-min
+                progress=prefs.getInt(key,default).coerceIn(min,max)-min
+            }
+            caption.text="$label: ${bar.progress+min}$unit"
+            bar.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seek:SeekBar?,value:Int,user:Boolean){
+                    caption.text="$label: ${value+min}$unit"
+                    if(user){
+                        prefs.edit().putInt(key,value+min).apply()
+                        preview.refresh()
+                    }
+                }
+                override fun onStartTrackingTouch(seek:SeekBar?){}
+                override fun onStopTrackingTouch(seek:SeekBar?){}
+            })
+            controls.addView(caption)
+            controls.addView(bar)
+            sliders.add(Triple(bar,key,min))
+        }
+        sizeSlider("Key height","height",36,90,51," dp")
+        sizeSlider("Keyboard width","keyboardWidthPercent",65,100,100,"%")
+        sizeSlider("Key spacing","spacing",1,10,4," dp")
+        sizeSlider("Key text","font",12,32,19," sp")
+        sizeSlider("Corners","round",3,40,13," dp")
+        val numberRow=Switch(this).apply {
+            text="Number row"
+            setTextColor(ink)
+            isChecked=prefs.getBoolean("numberRow",true)
+            setOnCheckedChangeListener{_,on->
+                prefs.edit().putBoolean("numberRow",on).apply()
+                preview.refresh()
+            }
+        }
+        controls.addView(numberRow)
+        action(controls,"Reset size"){
+            prefs.edit().putInt("height",51).putInt("keyboardWidthPercent",100)
+                .putInt("spacing",4).putInt("font",19).putInt("round",13)
+                .putBoolean("numberRow",true).apply()
+            val defaults=mapOf("height" to 51,"keyboardWidthPercent" to 100,
+                "spacing" to 4,"font" to 19,"round" to 13)
+            sliders.forEach{(seek,key,min)->seek.progress=defaults.getValue(key)-min}
+            numberRow.isChecked=true
+            preview.refresh()
+        }
+        val area=ScrollView(this).apply {
+            isFillViewport=false
+            isVerticalScrollBarEnabled=false
+            addView(controls)
+        }
+        val height=(resources.displayMetrics.heightPixels/resources.displayMetrics.density*.42f)
+            .toInt().coerceIn(220,350)
+        shell.addView(area,LinearLayout.LayoutParams(-1,dp(height)))
+        AlertDialog.Builder(this).setTitle("Resize Keyboard")
+            .setView(shell).setPositiveButton("Done",null).show()
+    }
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
         window.statusBarColor=base
@@ -364,6 +438,7 @@ class MainActivity:Activity() {
                     }
                     .setNegativeButton("Cancel",null).show()
             }
+            action(this,"Resize keys"){showResizeDialog()}
         }
     }
     private fun typing(){
@@ -407,13 +482,8 @@ class MainActivity:Activity() {
             range(this,"Suggestion strip height","suggestionHeight",38,64,45)
         }
         addBlock {
-            addView(text("04   KEYS & GEOMETRY",13f,accent,true))
-            range(this,"Key height","height",36,90,51)
-            range(this,"Key font size","font",12,32,19)
-            range(this,"Key spacing","spacing",1,10,4)
-            range(this,"Keyboard width %","keyboardWidthPercent",65,100,100)
-            range(this,"Key corner radius","round",3,26,13)
-            option(this,"Number row","numberRow",true)
+            addView(text("04   KEYBOARD SIZE",13f,accent,true))
+            action(this,"Resize keys"){showResizeDialog()}
             option(this,"Roman Urdu / Sindhi","romanMode")
         }
         addBlock {
