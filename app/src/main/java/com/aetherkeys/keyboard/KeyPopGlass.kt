@@ -33,9 +33,11 @@ object KeyPopGlass {
     fun key(context:Context,skin:KeyPopSkin,primary:Boolean=false):Drawable {
         val dp=context.resources.displayMetrics.density
         val material=KeyPopSkins.index(context)==10
-        val radius=(if(material)10f else
-            KeyPopSkins.radius(skin,context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
-                .getInt("round",13)).coerceIn(3f,26f))*dp
+        // Material keycaps must honor the same corner-size slider as other
+        // themes; otherwise the live preview would disagree with the keys.
+        val radius=KeyPopSkins.radius(skin,
+            context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                .getInt("round",13)).coerceIn(3f,26f)*dp
         val base=if(primary)skin.accent else skin.key
         val light=blend(base,Color.WHITE,if(material).07f else .10f)
         val dark=blend(base,skin.background,if(material).16f else .20f)
