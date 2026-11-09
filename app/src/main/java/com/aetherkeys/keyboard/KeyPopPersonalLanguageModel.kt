@@ -75,6 +75,8 @@ class KeyPopPersonalLanguageModel(context:Context) {
         c.init(Cipher.DECRYPT_MODE,aesKey,GCMParameterSpec(128,data.copyOfRange(0,12)))
         return String(c.doFinal(data.copyOfRange(12,data.size)),Charsets.UTF_8)
     }
+    private var cachedContextKey:String?=null
+    private var cachedWords:List<String> = emptyList()
     private val tokenize=Regex("[\\p{L}]{2,28}")
     private fun normalize(value:String):String=value.lowercase(Locale.ROOT)
     private fun words(text:String):List<String> =
@@ -123,9 +125,16 @@ class KeyPopPersonalLanguageModel(context:Context) {
                     arrayOf(System.currentTimeMillis(),key,id))
             }
             db.setTransactionSuccessful()
-        }finally{db.endTransaction()}
+        }finally{
+            db.endTransaction()
+            cachedContextKey=null
+            cachedWords=emptyList()
+        }
     }
-    /** Limits first; decrypts at most 24 candidates on the background worker. */
+    /** Cache only a small decrypted candidate window for the current word.
+     * Previously the same 24-72 Android Keystore AES decryptions and SQLite
+     * queries ran after EVERY letter, competing with the key rendering thread.
+     * This memory-only cache never stores editor text or persists to disk. */
     @Synchronized fun candidates(language:Int,before:String,fragment:String="",limit:Int=3)
         :List<String> {
         if(!prefs.getBoolean("personalHistoryLearning",true) ||
@@ -134,20 +143,33 @@ class KeyPopPersonalLanguageModel(context:Context) {
         val prior=if(cleanFragment.isNotEmpty())
             words(before.removeSuffix(before.takeLastWhile{it.isLetter()})) else words(before)
         if(prior.isEmpty())return emptyList()
-        val result=LinkedHashSet<String>()
-        for(context in contexts(language,prior)) {
-            val id=signature(context)
-            helper.readableDatabase.query("next_words",arrayOf("cipher","uses"),
-                "context_id=?",arrayOf(id),null,null,"uses DESC, last_seen DESC",
-                "24").use{cursor->
-                while(cursor.moveToNext() && result.size<limit.coerceIn(1,8)) {
-                    val value=runCatching{open(cursor.getBlob(0))}.getOrNull()?:continue
-                    if(value.startsWith(cleanFragment) &&
-                        value!=cleanFragment)result.add(value)
+        val searchContexts=contexts(language,prior)
+        val cacheKey=searchContexts.joinToString("|")
+        if(cacheKey!=cachedContextKey) {
+            val collected=LinkedHashSet<String>()
+            for(context in searchContexts) {
+                val id=signature(context)
+                helper.readableDatabase.query("next_words",arrayOf("cipher"),
+                    "context_id=?",arrayOf(id),null,null,"uses DESC, last_seen DESC",
+                    "16").use { cursor->
+                    while(cursor.moveToNext() && collected.size<36) {
+                        runCatching{open(cursor.getBlob(0))}.getOrNull()
+                            ?.let{collected.add(it)}
+                    }
                 }
+                if(collected.size>=36)break
             }
+            cachedWords=collected.toList()
+            cachedContextKey=cacheKey
         }
-        return result.toList().take(limit.coerceIn(1,8))
+        return cachedWords.asSequence()
+            .filter{it.startsWith(cleanFragment) && it!=cleanFragment}
+            .take(limit.coerceIn(1,8)).toList()
+    }
+    /** Drop decrypted autocomplete fragments when the editor session ends. */
+    @Synchronized fun dropCandidateCache() {
+        cachedContextKey=null
+        cachedWords=emptyList()
     }
     /** Optional one-time import from the user's already saved, encrypted
      * TEXT clipboard archive. Explicit UI consent is required. Only short,

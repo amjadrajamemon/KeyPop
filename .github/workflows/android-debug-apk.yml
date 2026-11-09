@@ -1,8 +1,8 @@
-name: KeyPop RC23 install-safe debug APK
+name: KeyPop RC24 install-safe debug APK
 on:
   push:
     branches:
-      - feature/rc23-low-latency-keyboard-20261109
+      - feature/rc24-smooth-glass-input-20261109
   pull_request:
   workflow_dispatch:
 
@@ -44,51 +44,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.22-rc23-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.23-rc24-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.22-rc23-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.22-rc23-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.23-rc24-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.23-rc24-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-all-five-apks
+          name: KeyPop-v1.0.23-rc24-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-instrumentation
-          path: dist/KeyPop-v1.0.22-rc23-androidTest.apk
+          name: KeyPop-v1.0.23-rc24-instrumentation
+          path: dist/KeyPop-v1.0.23-rc24-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-ARM64
-          path: dist/KeyPop-v1.0.22-rc23-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.23-rc24-ARM64
+          path: dist/KeyPop-v1.0.23-rc24-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-ARM32
-          path: dist/KeyPop-v1.0.22-rc23-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.23-rc24-ARM32
+          path: dist/KeyPop-v1.0.23-rc24-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-x86
-          path: dist/KeyPop-v1.0.22-rc23-x86-debug.apk
+          name: KeyPop-v1.0.23-rc24-x86
+          path: dist/KeyPop-v1.0.23-rc24-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-x86_64
-          path: dist/KeyPop-v1.0.22-rc23-x86_64-debug.apk
+          name: KeyPop-v1.0.23-rc24-x86_64
+          path: dist/KeyPop-v1.0.23-rc24-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-Universal
-          path: dist/KeyPop-v1.0.22-rc23-universal-debug.apk
+          name: KeyPop-v1.0.23-rc24-Universal
+          path: dist/KeyPop-v1.0.23-rc24-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -101,11 +101,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-x86_64
+          name: KeyPop-v1.0.23-rc24-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-instrumentation
+          name: KeyPop-v1.0.23-rc24-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -125,7 +125,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-emulator-forensic-evidence
+          name: KeyPop-v1.0.23-rc24-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -135,15 +135,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC23 parity branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc23-low-latency-keyboard-20261109' }}
+    # Publish only the specific RC24 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc24-smooth-glass-input-20261109' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.22-rc23-all-five-apks
+          name: KeyPop-v1.0.23-rc24-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -152,8 +152,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.22-rc23-debug-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc23-low-latency-keyboard-20261109" --jq '.commit.sha')"
+          TAG="v1.0.23-rc24-debug-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc24-smooth-glass-input-20261109" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
@@ -165,6 +165,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.22-rc23 Debug Preview — Android APKs" \
-              --notes "KeyPop RC23 DEBUG PREVIEW — responsive typing forensic fix plus the RC22 modular themes/layouts/keysets. The main keypress handler uses a short-lived RAM-only editor mirror instead of Android getTextBeforeCursor IPC for each letter, including cache invalidation when the cursor moves or an editor selection changes. Avoids expensive SCOWL dictionary scans during Spacebar correction; uses asynchronous prepared corrections plus a constant-time verified typo fallback (topredict → to predict, tge → the). Skips duplicate selection-update prediction refreshes after own edits, keeps personalized predictions and translation on background workers, avoids full keyboard rebuild for screenshot-dismiss, and reduces theme animation invalidation during active typing. Backspace repeat, Roman transliteration, selected suggestions, punctuation and text-editor selection changes invalidate/update the mirror safely. Performance Diagnostics displays remote editor snapshot timing and editor context cache reuse. Includes cross-compatible independent visual themes, geometry and Gboard/SwiftKey/Samsung-inspired symbol packs from RC22. Debug package com.aetherkeys.keyboard.previewv123 is separate from RC21/RC20 and does not migrate encrypted data automatically; export full backup before uninstalling an old preview. Emulator tests cannot establish real-world Gboard latency parity; use device profiling on Redmi Note 13 before production release."
+              --title "KeyPop v1.0.23-rc24 Debug Preview — Android APKs" \
+              --notes "KeyPop RC24 debug preview from RC23 baseline: removes the harsh bright borders on Material Teal keycaps; uses a simpler, lower-overdraw gradient; paints the keyboard background across navigation-safe insets; reuses key background prototypes and suggestion chip views; precompiles the trailing-word matcher; defers first-run dictionary warmup; caches a bounded in-memory set of decrypted personal predictions until learning changes or the editor session ends. English, Urdu, Sindhi, clipboard, screenshots and translation remain available. This is a separate debug-testing package com.aetherkeys.keyboard.previewv124, not a production signed upgrade. CI emulator checks do not establish Gboard-equivalent latency on a Redmi Note 13."
           fi

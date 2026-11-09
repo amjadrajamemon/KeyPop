@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 38
-        versionName = "1.0.22-rc23-low-latency-typing" 
+        versionCode = 39
+        versionName = "1.0.23-rc24-smooth-glass-fast-input" 
     }
     splits {
         abi {
@@ -42,7 +42,7 @@ android {
         debug {
             // Debug builds retain an ephemeral test-only signature and their
             // OWN app identity. Never distribute them as an upgrade path.
-            applicationIdSuffix = ".previewv123"
+            applicationIdSuffix = ".previewv124"
             versionNameSuffix = "-debug-test-only"
         }
         release {
