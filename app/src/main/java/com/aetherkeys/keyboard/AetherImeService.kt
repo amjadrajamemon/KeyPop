@@ -511,8 +511,8 @@ class AetherImeService : InputMethodService() {
                     (skin.accent and 0x00FFFFFF) or (0x33 shl 24)),
                 gradient(skin.surface,skin.surface,11),null)
             setPadding(d(8),d(7),d(8),d(7))
-            minWidth=d(40);minimumWidth=d(40)
-            minHeight=d(40);minimumHeight=d(40)
+            minimumWidth=d(40)
+            minimumHeight=d(40)
             contentDescription=description
             isFocusable=true
             setOnClickListener{tapFeedback(this);onTap()}
