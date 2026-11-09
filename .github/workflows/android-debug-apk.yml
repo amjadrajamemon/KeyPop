@@ -2,7 +2,7 @@ name: KeyPop RC24 install-safe debug APK
 on:
   push:
     branches:
-      - feature/rc24-low-latency-keyboard-20261109
+      - feature/rc24-smooth-glass-input-20261109
   pull_request:
   workflow_dispatch:
 
@@ -136,7 +136,7 @@ jobs:
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
     # Publish only the specific RC24 parity branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc24-low-latency-keyboard-20261109' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc24-smooth-glass-input-20261109' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -153,7 +153,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v1.0.23-rc24-debug-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc24-low-latency-keyboard-20261109" --jq '.commit.sha')"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc24-smooth-glass-input-20261109" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
