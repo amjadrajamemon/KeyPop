@@ -82,28 +82,44 @@ class KeyPopLayoutStudioActivity:Activity() {
                 "% · tap another key to swap"
         }?:"Tap a key to select, then another to swap. Hold to edit a character."
         add(text(label,13f,dim),12)
-        val sizeControls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        sizeControls.addView(b("− Narrower") {
-            chosen?.let { (r,c)->
-                val old=KeyPopKeyGeometry.width(this,lang,r,c)
-                KeyPopKeyGeometry.setWidth(this,lang,r,c,(old-10).coerceAtLeast(65))
-                render()
+        // A selected key changes width directly in its existing row while the
+        // slider remains attached. No redraw/scroll reset during dragging.
+        var selectedRow:LinearLayout?=null
+        chosen?.let { (selectedR,selectedC)->
+            val currentWidth=KeyPopKeyGeometry.width(this,lang,selectedR,selectedC)
+            val widthLabel=text("Key width: $currentWidth%",13f,accent)
+            add(widthLabel,2)
+            val slider=SeekBar(this).apply {
+                max=175-65
+                progress=currentWidth-65
+                contentDescription="Selected key width"
+                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(bar:SeekBar?,progress:Int,byUser:Boolean) {
+                        if(!byUser)return
+                        val width=progress+65
+                        KeyPopKeyGeometry.setWidth(this@KeyPopLayoutStudioActivity,
+                            lang,selectedR,selectedC,width)
+                        widthLabel.text="Key width: $width%"
+                        val row=selectedRow ?:return
+                        val tile=row.getChildAt(selectedC)?:return
+                        val params=tile.layoutParams as? LinearLayout.LayoutParams ?:return
+                        params.weight=width/100f
+                        tile.layoutParams=params
+                        row.requestLayout()
+                    }
+                    override fun onStartTrackingTouch(bar:SeekBar?){}
+                    override fun onStopTrackingTouch(bar:SeekBar?){}
+                })
             }
-        },LinearLayout.LayoutParams(0,dp(42),1f).apply{rightMargin=dp(5)})
-        sizeControls.addView(b("＋ Wider") {
-            chosen?.let { (r,c)->
-                val old=KeyPopKeyGeometry.width(this,lang,r,c)
-                KeyPopKeyGeometry.setWidth(this,lang,r,c,(old+10).coerceAtMost(175))
-                render()
-            }
-        },LinearLayout.LayoutParams(0,dp(42),1f))
-        add(sizeControls,12)
+            add(slider,12)
+        }
         val board=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL;setPadding(dp(5),dp(12),dp(5),dp(10))
             background=bg(0xFF18213B.toInt(),18,0xFF394968.toInt())
         }
         KeyPopLayouts.active(this,lang).forEachIndexed{r,line->
             val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            if(chosen?.first==r)selectedRow=row
             line.forEachIndexed{c,key->
                 val tile=b(key,chosen==Pair(r,c)) {
                     val before=chosen
@@ -144,7 +160,7 @@ class KeyPopLayoutStudioActivity:Activity() {
                 .show()
         },LinearLayout.LayoutParams(0,dp(46),1f))
         add(row,13)
-        add(text("Select a key and use Wider/Narrower to adjust its touch width, or hold it to edit its symbol. Special function keys stay protected.",12f,dim),16)
+
         add(b("Done"){finish()})
     }
     private fun edit(r:Int,c:Int,old:String) {
