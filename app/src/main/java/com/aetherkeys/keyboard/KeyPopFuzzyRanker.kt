@@ -78,14 +78,19 @@ object KeyPopFuzzyRanker {
      * Offer ambiguous alternatives as chips but do not silently rewrite a
      * valid word, close ties, or an unfamiliar personal name on Space.
      */
-    fun automatic(matches:List<Match>):String? {
+    fun automatic(matches:List<Match>,aggressive:Boolean=true):String? {
         val best=matches.firstOrNull()?:return null
         val runnerUp=matches.getOrNull(1)
         val margin=if(runnerUp==null)Int.MAX_VALUE else best.score-runnerUp.score
+        // Aggressive mode spends confidence on clear typos, never close ties.
+        // The existing settings toggle affects correction strictness as well
+        // as the number of presented prediction candidates.
+        val oneEditMargin=if(aggressive)32 else 55
+        val twoEditMargin=if(aggressive)75 else 115
         return when {
             best.tier>20 ->null
-            best.distance==1 && margin>=45 ->best.word
-            best.distance==2 && best.tier<=10 && margin>=100 ->best.word
+            best.distance==1 && margin>=oneEditMargin ->best.word
+            best.distance==2 && best.tier<=10 && margin>=twoEditMargin ->best.word
             else ->null
         }
     }
