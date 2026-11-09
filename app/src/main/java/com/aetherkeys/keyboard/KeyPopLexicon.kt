@@ -208,14 +208,16 @@ class KeyPopLexicon(context:Context) {
         val tiers=if(lang==0)familiar.associate {it.word to it.tier} else emptyMap()
         val normalized=fragment.trim().lowercase(Locale.ROOT)
         val originalKnown=lang==0 && isKnownEnglish(normalized)
-        val fuzzy=if(lang==0 && !originalKnown)
+        val strongPrefix=familiar.count{it.word.startsWith(normalized)}
+        // A valid or clearly completable stem should not spend another 2,200
+        // comparisons on speculative corrections after every keypress.
+        val fuzzy=if(lang==0 && !originalKnown && strongPrefix<3)
             rankedFuzzy(normalized,beforeCursor)
                 .filter{it.tier<=20}.take(4).map{it.word} else emptyList()
         val completions=KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
             relevantLearned,8,dictionary,tiers,beforeCursor)
         // Exact-prefix completions should lead when a stem is being entered;
         // for a clearly misspelled stem put the best dictionary fixes first.
-        val strongPrefix=familiar.count{it.word.startsWith(normalized)}
         val ordered=if(strongPrefix>=2)
             completions+fuzzy.take(2)
             else fuzzy.take(3)+completions
