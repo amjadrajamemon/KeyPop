@@ -1808,8 +1808,8 @@ class AetherImeService : InputMethodService() {
     /** Fetch from the remote editor only when the mirror is uninitialized
      * or invalidated by a caret movement. Never retain sensitive content. */
     private fun readContext(input:InputConnection,limit:Int):String {
-        if(sensitive(currentInputEditorInfo))
-            return input.getTextBeforeCursor(limit,0)?.toString().orEmpty()
+        if(sensitive(currentInputEditorInfo))return ""
+        // Never mirror or inspect secrets in password/secure editors.
         editorContext.text()?.let{
             contextCacheHits++
             return it.takeLast(limit)
@@ -2233,7 +2233,9 @@ class AetherImeService : InputMethodService() {
                 val prior=connection?.let{readContext(it,120)}.orEmpty()
                 val sentenceStart=prior.isBlank() || prior.trimEnd().lastOrNull() in listOf('.','!','?','\n')
                 val latinMode=language==0 || prefs.getBoolean("romanMode",false)
-                val capital=shift || (latinMode && prefs.getBoolean("autoCap",true) && sentenceStart)
+                val capital=shift || (latinMode &&
+                    !sensitive(currentInputEditorInfo) &&
+                    prefs.getBoolean("autoCap",true) && sentenceStart)
                 val variation=(currentInputEditorInfo?.inputType ?: 0) and
                     InputType.TYPE_MASK_VARIATION
                 val noAutoSpace=variation in setOf(InputType.TYPE_TEXT_VARIATION_URI,
