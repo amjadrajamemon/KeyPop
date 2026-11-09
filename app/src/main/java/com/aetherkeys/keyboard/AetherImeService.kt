@@ -1370,17 +1370,6 @@ class AetherImeService : InputMethodService() {
             }
             root.addView(tools)
         }
-        val title=TextView(this).apply {
-            text=if(symbols) "SYMBOLS   •   TAP ABC TO RETURN"
-                 else "✧  "+preset.name.uppercase()+"  •  "+languages[language]
-            textSize=9.5f; letterSpacing=0.07f
-            setTextColor(s.accent)
-            gravity=Gravity.CENTER_VERTICAL
-            setPadding(d(10),0,0,0)
-        }
-        if(preset.id!=KeyboardPresetCatalog.GESTURE &&
-            !materialToolbar && !resizeOpen)
-            root.addView(title,LinearLayout.LayoutParams(-1,d(20)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
             else if(emojiSearch)KeyPopLayouts.active(this,0)
