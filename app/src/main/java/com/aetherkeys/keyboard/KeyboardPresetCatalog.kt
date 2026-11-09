@@ -65,18 +65,31 @@ object KeyboardPresetCatalog {
             return listOf("?123",",","☺","🌐","SPACE",".","↵")
         return listOf("?123",",","🌐","SPACE",".","↵")
     }
+    /** Wider default targets for frequently used editing / punctuation keys.
+     * Widths remain proportional within each row; the keyboard never widens
+     * past the available screen. This affects all geometry + keyset combinations
+     * without overwriting a user's individual letter-key widths. */
     fun keyWeight(id:Int,label:String):Float = when(label){
         "SPACE" -> when(id) { MATERIAL->4.43f;FLOW->5.4f;GESTURE->5.8f;FACETED->5f;else->4.3f }
         "?123","ABC" -> if(id==GESTURE)1.1f else if(id==MATERIAL)1.57f else 1.4f
-        "," -> if(id==MATERIAL)0.85f else 1f
+        "," -> if(id==MATERIAL)1.25f else 1.35f
         "☺" -> if(id==MATERIAL)0.85f else 1.0f
         "☺," -> if(id==MATERIAL)0.85f else 1.12f
-        "⇧","⌫" -> if(id==MATERIAL)1.42f else 1f
-        "↵" ->if(id==MATERIAL)1.58f else 1f
-        "." ->if(id==MATERIAL)1f else 1f
+        "⇧","⌫" -> if(id==MATERIAL)1.75f else 1.65f
+        "↵" ->if(id==MATERIAL)1.90f else 1.75f
+        "." ->if(id==MATERIAL)1.35f else 1.35f
         "?" ->if(id==MATERIAL)0.7f else 1f
         "🌐" ->if(id==MATERIAL)1f else 1.2f
         else ->if(id==GESTURE)1.12f else 1f
+    }
+
+    /** Typography follows the wider touch targets but still respects the
+     * selected font size; an action caption such as "⇄ Send" stays readable. */
+    fun keyTextSize(token:String,caption:String,base:Float):Float = when {
+        token in setOf("⇧","⌫","↵",",",".") && caption.length<=2 ->
+            (base*1.16f).coerceIn(14f,32f)
+        caption.length>3 -> (base*.70f).coerceIn(12f,24f)
+        else -> base.coerceIn(12f,32f)
     }
 }
 
@@ -153,15 +166,19 @@ class KeyboardPresetPreview(
                 keys.length==9->dp(16f)
                 else->dp(4.5f)
             }
-            val kw=(w-2*side-gap*(visual.length-1))/visual.length
+            val weights=visual.map{ KeyboardPresetCatalog.keyWeight(candidate.id,it.toString()) }
+            val sum=weights.sum()
+            val free=(w-2*side-gap*(visual.length-1)).coerceAtLeast(1f)
+            var cursor=side
             visual.forEachIndexed { i,ch->
                 val key=ch.toString()
-                val x=side+i*(kw+gap)
+                val kw=free*weights[i]/sum
                 val hint=if(ch.isLetter())
                     KeyPopRowParity.alternates(
                         KeyPopKeysets.alternates(keyset,key.lowercase(),0),
                         key,numberRow).firstOrNull() else null
-                keyCap(key,x,y,kw,rowHeight,key in listOf("⇧","⌫"),hint)
+                keyCap(key,cursor,y,kw,rowHeight,key in listOf("⇧","⌫"),hint)
+                cursor+=kw+gap
             }
         }
         val footer=KeyPopKeysets.footer(keyset,false)

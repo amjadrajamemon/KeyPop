@@ -1,8 +1,8 @@
-name: KeyPop RC25 install-safe debug APK
+name: KeyPop RC26 install-safe debug APK
 on:
   push:
     branches:
-      - feature/rc25-unified-design-clean-keyboard-20261109
+      - feature/rc26-adaptive-predictions-corrections-20261109
   pull_request:
   workflow_dispatch:
 
@@ -44,51 +44,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.24-rc25-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.25-rc26-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.24-rc25-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.24-rc25-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.25-rc26-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.25-rc26-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-all-five-apks
+          name: KeyPop-v1.0.25-rc26-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-instrumentation
-          path: dist/KeyPop-v1.0.24-rc25-androidTest.apk
+          name: KeyPop-v1.0.25-rc26-instrumentation
+          path: dist/KeyPop-v1.0.25-rc26-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-ARM64
-          path: dist/KeyPop-v1.0.24-rc25-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.25-rc26-ARM64
+          path: dist/KeyPop-v1.0.25-rc26-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-ARM32
-          path: dist/KeyPop-v1.0.24-rc25-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.25-rc26-ARM32
+          path: dist/KeyPop-v1.0.25-rc26-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-x86
-          path: dist/KeyPop-v1.0.24-rc25-x86-debug.apk
+          name: KeyPop-v1.0.25-rc26-x86
+          path: dist/KeyPop-v1.0.25-rc26-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-x86_64
-          path: dist/KeyPop-v1.0.24-rc25-x86_64-debug.apk
+          name: KeyPop-v1.0.25-rc26-x86_64
+          path: dist/KeyPop-v1.0.25-rc26-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-Universal
-          path: dist/KeyPop-v1.0.24-rc25-universal-debug.apk
+          name: KeyPop-v1.0.25-rc26-Universal
+          path: dist/KeyPop-v1.0.25-rc26-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -101,11 +101,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-x86_64
+          name: KeyPop-v1.0.25-rc26-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-instrumentation
+          name: KeyPop-v1.0.25-rc26-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -125,7 +125,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-emulator-forensic-evidence
+          name: KeyPop-v1.0.25-rc26-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -135,15 +135,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC25 parity branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc25-unified-design-clean-keyboard-20261109' }}
+    # Publish only the specific RC26 parity branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc26-adaptive-predictions-corrections-20261109' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.24-rc25-all-five-apks
+          name: KeyPop-v1.0.25-rc26-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -152,8 +152,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.24-rc25-debug-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc25-unified-design-clean-keyboard-20261109" --jq '.commit.sha')"
+          TAG="v1.0.25-rc26-debug-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc26-adaptive-predictions-corrections-20261109" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
@@ -165,6 +165,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.24-rc25 Debug Preview — Android APKs" \
-              --notes "KeyPop RC25 debug preview: one-screen independent theme, layout and keys selection; removed redundant keyboard-style text; live resizing previews for key height, keyboard width, spacing, font, corners and individual key widths. RC24 performance and toolbar enhancements are retained. This is a debug-testing package com.aetherkeys.keyboard.previewv125, not a production signed upgrade. Offline Sindhi remains a known release blocker; emulator checks are not a Gboard-equivalent performance benchmark."
+              --title "KeyPop v1.0.25-rc26 Debug Preview — Android APKs" \
+              --notes "KeyPop RC26 adaptive predictions debug preview: stronger two-edit SCOWL spelling suggestions, context-aware ordering, protected ambiguous corrections, and limited one-key-tolerant personal-word completion on a background worker. Builds on RC25 unified design and live-resize previews. The signed production release is not established by this preview, and real-device Gboard-equivalent typing latency remains unverified. APK test identity: com.aetherkeys.keyboard.previewv126."
           fi

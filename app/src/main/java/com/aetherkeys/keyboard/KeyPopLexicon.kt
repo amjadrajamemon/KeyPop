@@ -81,6 +81,32 @@ class KeyPopLexicon(context:Context) {
                 .thenBy{it.tier}.thenBy{it.word.length})
             .take(240).toList()
     }
+    /**
+     * Only nearby two-letter SCOWL buckets are visited, including one typo
+     * in either opening key. At most 2,200 eligible candidates reach the
+     * edit-distance ranker, and only on the prediction worker.
+     */
+    private fun fuzzyCandidates(typed:String):Sequence<Pair<String,Int>> {
+        val input=typed.lowercase(Locale.ROOT)
+        if(!scowlReady || input.length !in 4..22 ||
+            !input.all{it in 'a'..'z'})return emptySequence()
+        val keys=linkedSetOf(input.take(2),""+input[1]+input[0])
+        for(letter in nearby(input[0]))keys.add(""+letter+input[1])
+        for(letter in nearby(input[1]))keys.add(""+input[0]+letter)
+        return keys.asSequence()
+            .flatMap{scowlIndex[it].orEmpty().asSequence()}
+            .filter { it.tier<=35 &&
+                kotlin.math.abs(it.word.length-input.length)<=2 }
+            .distinctBy{it.word}
+            .take(2200)
+            .map{it.word to it.tier}
+    }
+
+    private fun rankedFuzzy(input:String,beforeCursor:String):List<KeyPopFuzzyRanker.Match> {
+        val context=KeyPopPredictionContext.parse(beforeCursor,input)
+        return KeyPopFuzzyRanker.rank(input,fuzzyCandidates(input),context,8)
+    }
+
     private val store=context.getSharedPreferences("keypop_lexicon",Context.MODE_PRIVATE)
     private val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
     private val english=("the and that have for not with you this but his from they say her she"+
@@ -180,10 +206,28 @@ class KeyPopLexicon(context:Context) {
             learned.asSequence().filter {it.startsWith(prefix)}.take(128).toSet()
         val dictionary=base.toList()+familiar.map {it.word}
         val tiers=if(lang==0)familiar.associate {it.word to it.tier} else emptyMap()
+        val normalized=fragment.trim().lowercase(Locale.ROOT)
+        val originalKnown=lang==0 && isKnownEnglish(normalized)
+        val strongPrefix=familiar.count{it.word.startsWith(normalized)}
+        // A valid or clearly completable stem should not spend another 2,200
+        // comparisons on speculative corrections after every keypress.
+        val fuzzy=if(lang==0 && !originalKnown && strongPrefix<3)
+            rankedFuzzy(normalized,beforeCursor)
+                .filter{it.tier<=20}.take(4).map{it.word} else emptyList()
+        val completions=KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
+            relevantLearned,8,dictionary,tiers,beforeCursor)
+        // An exact completion of the letters actually typed is stronger
+        // evidence than an approximate substitution (likew -> likewise,
+        // not 'liked'/'likes'). Curated words count even if the SCOWL
+        // familiarity bucket did not index them.
+        val exact=completions.filter{it.startsWith(normalized)}
+        val ordered=if(exact.isNotEmpty())
+            exact.take(2)+fuzzy.take(3)+completions
+            else fuzzy.take(3)+completions
         return (listOfNotNull(joinedWordCorrection(lang,fragment))+
-            KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
-                relevantLearned,limit,dictionary,tiers,beforeCursor))
-            .distinct().take(limit.coerceIn(1,8))
+            listOfNotNull(KeyPopTypingIntelligence.correction(lang,fragment))+
+            ordered).distinct().filter{it!=normalized}
+            .take(limit.coerceIn(1,8))
     }
     fun nextWords(lang:Int,previous:String,beforeCursor:String=""):List<String> =
         KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor)
@@ -198,41 +242,35 @@ class KeyPopLexicon(context:Context) {
         return if(normalized=="topredict")"to predict"
             else KeyPopTypingIntelligence.correction(lang,normalized)
     }
+    /** The suggestion chip may offer an ambiguous candidate that would be
+     * too risky to insert automatically; the Space auto-fix gate is separate. */
+    fun suggestedCorrection(lang:Int,word:String,beforeCursor:String=""):String? {
+        val normalized=word.trim().lowercase(Locale.ROOT)
+        if(lang!=0 || normalized.length !in 3..22)return null
+        if(normalized in store.getStringSet("manual_0",emptySet()).orEmpty())return null
+        if(isKnownEnglish(normalized))return null
+        joinedWordCorrection(lang,normalized)?.let{return it}
+        KeyPopTypingIntelligence.correction(lang,normalized)?.let{return it}
+        return rankedFuzzy(normalized,beforeCursor).firstOrNull()
+            ?.takeIf{it.tier<=20}?.word
+    }
+
     fun correction(lang:Int,word:String,beforeCursor:String=""):String? {
         val normalized=word.trim().lowercase(Locale.ROOT)
         val manual=store.getStringSet("manual_"+lang,emptySet()).orEmpty()
         if(normalized in manual)return null
         val base=when(lang){1->urdu;2->sindhi;else->english}
         if(normalized in base)return null
-        // A joined token needs a word-boundary correction, not edit distance.
         joinedWordCorrection(lang,word)?.let{return it}
         val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
         KeyPopTypingIntelligence.correction(lang,word,learned)?.let{return it}
-        // Never initialize the asset dictionary from the IME main thread.
-        // High-confidence typo mapping remains active until it is warm.
-        if(lang==0 && !scowlReady)return null
-        if(lang!=0 || normalized.length !in 4..20 || !normalized.all{it in 'a'..'z'} ||
-            normalized in learned)return null
-        // Protect actual SCOWL words (including plurals), even if the
-        // small curated lexicon did not include them.
-        if(scowlIndex[normalized.take(2)].orEmpty().any{it.word==normalized})
+        if(lang!=0 || normalized.length !in 4..22 ||
+            normalized in learned || !scowlReady || !normalized.all{it in 'a'..'z'})
             return null
-        val context=KeyPopPredictionContext.parse(beforeCursor,word)
-        data class Scored(val word:String,val value:Int)
-        val ranked=rankCandidates(normalized).asSequence()
-            .filter{it.tier<=20 && it.word!=normalized &&
-                KeyPopTypingIntelligence.oneEditAway(normalized,it.word)}
-            .map {
-                val grammar=KeyPopPredictionContext.score(context,normalized,it.word)
-                Scored(it.word,(if(it.tier<=10)120 else 70)+grammar)
-            }
-            .sortedWith(compareByDescending<Scored>{it.value}.thenBy{it.word})
-            .take(3).toList()
-        val best=ranked.firstOrNull()?:return null
-        val next=ranked.getOrNull(1)
-        // Automatic edits must be unambiguous. Otherwise expose suggestions
-        // to the user (e.g. worke could mean worker OR worked).
-        return if(next==null || best.value-next.value>=80) best.word else null
+        if(isKnownEnglish(normalized))return null
+        return KeyPopFuzzyRanker.automatic(
+            rankedFuzzy(normalized,beforeCursor),
+            prefs.getBoolean("aggressivePredictions",true))
     }
     fun glide(lang:Int,path:List<String>):String? {
         if(lang!=0 || path.size<3)return null

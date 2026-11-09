@@ -163,7 +163,14 @@ class KeyPopPersonalLanguageModel(context:Context) {
             cachedContextKey=cacheKey
         }
         return cachedWords.asSequence()
-            .filter{it.startsWith(cleanFragment) && it!=cleanFragment}
+            .filter{candidate->
+                candidate!=cleanFragment && (
+                    candidate.startsWith(cleanFragment) ||
+                    (cleanFragment.length>=4 &&
+                        KeyPopTypingIntelligence.oneEditAway(
+                            cleanFragment,candidate.take(cleanFragment.length)))
+                )
+            }
             .take(limit.coerceIn(1,8)).toList()
     }
     /** Drop decrypted autocomplete fragments when the editor session ends. */

@@ -82,11 +82,15 @@ class KeyPopSizingPreview(context: Context): View(context) {
         rows.forEachIndexed {rowIndex,row ->
             val side=if(row.length==9)dp(11f) else dp(3f)
             val available=layoutWidth-2*side
-            val unit=(available-spacing*(row.length-1))/row.length
+            val weights=row.map { KeyboardPresetCatalog.keyWeight(geometry.id,it.toString()) }
+            val total=weights.sum()
+            val free=(available-spacing*(row.length-1)).coerceAtLeast(1f)
+            var x=left+side
             row.forEachIndexed {index,ch->
                 val symbol=ch.toString()
-                key(symbol,left+side+index*(unit+spacing),y,unit,
-                    symbol=="⇧" || symbol=="⌫")
+                val keyWidth=free*weights[index]/total
+                key(symbol,x,y,keyWidth,symbol=="⇧" || symbol=="⌫")
+                x+=keyWidth+spacing
             }
             y+=capHeight+spacing
         }
