@@ -1,6 +1,8 @@
 package com.aetherkeys.keyboard
 
 import android.content.Intent
+import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -25,6 +27,21 @@ class KeyPopRC24NavigationToolbarTest {
                 assertTrue("Back from deep settings must finish, not stack another page",
                     activity.isFinishing)
             }
+        }
+    }
+
+    @Test fun everyThemeKeyUsesSingleDrawableInsteadOfLayerStack() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+        val original=prefs.getInt("theme",0)
+        try {
+            KeyPopSkins.all.forEachIndexed { index,skin ->
+                prefs.edit().putInt("theme",index).commit()
+                assertTrue("Theme $index still draws stacked key layers",
+                    KeyPopGlass.key(context,skin) is GradientDrawable)
+            }
+        } finally {
+            prefs.edit().putInt("theme",original).commit()
         }
     }
 
