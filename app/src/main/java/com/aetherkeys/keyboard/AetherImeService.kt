@@ -573,7 +573,8 @@ class AetherImeService : InputMethodService() {
             key.background=android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(
                     (skin.accent and 0x00FFFFFF) or (0x55 shl 24)),bg,null)
-            key.textSize=if(key.text.toString().length>3)12f else font
+            key.textSize=KeyboardPresetCatalog.keyTextSize(
+                label,key.text.toString(),font)
             val layout=key.layoutParams as? LinearLayout.LayoutParams
             if(layout!=null) {
                 layout.leftMargin=space;layout.rightMargin=space
@@ -1457,6 +1458,9 @@ class AetherImeService : InputMethodService() {
             val caption=if(!material && !symbols && letterHint)
                 show+"\n"+actualHint else show
             val button=makeKey(caption,heavy,weight) { press(label) }
+            // Control keys use visibly larger glyphs as well as wider bounds.
+            button.textSize=KeyboardPresetCatalog.keyTextSize(
+                label,caption,prefs.getInt("font",19).coerceIn(12,32).toFloat())
             if(material && label.length==1 && label[0].isLetter() &&
                 actualHint!=null && actualHint!=label && button is KeyPopHintKey) {
                 button.hintText=actualHint
