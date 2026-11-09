@@ -65,6 +65,11 @@ class AetherImeService : InputMethodService() {
     private var contextCacheMisses=0
     private var lastKeyboardTouchAt=0L
     private var lastKnownSelection:Int?=null
+    private val trailingWordPattern=Regex("[\\p{L}]+$")
+    // Cache immutable visual primitives once per keyboard rebuild, not per key.
+    private var renderSkin:KeyPopSkin?=null
+    private var regularKeyBackground:android.graphics.drawable.Drawable?=null
+    private var primaryKeyBackground:android.graphics.drawable.Drawable?=null
     private data class SpaceAdvice(val language:Int,val before:String,
         val word:String,val correction:String?,val grammar:KeyPopGrammarFix?)
     private var latestSpaceAdvice:SpaceAdvice?=null
@@ -259,7 +264,12 @@ class AetherImeService : InputMethodService() {
         clipboard.addPrimaryClipChangedListener(clipListener)
         // Load the ~39k-word prediction index on its own executor. Never
         // make the Space key perform first-use disk I/O or file parsing.
-        predictionExecutor.execute {runCatching{lexicon.warmup()}}
+        // Defer the one-off 39k-word index build until the keyboard has had
+        // a chance to show its first frame.
+        predictionHandler.postDelayed({
+            if(!predictionExecutor.isShutdown)
+                predictionExecutor.execute {runCatching{lexicon.warmup()}}
+        },300L)
     }
 
     override fun onDestroy() {
@@ -398,6 +408,9 @@ class AetherImeService : InputMethodService() {
         stopLiveTranslation()
         themeAnimator?.pause()
         KeyPopDiagnostics.flush(this)
+        if(!predictionExecutor.isShutdown)predictionExecutor.execute {
+            runCatching{personalLanguage.dropCandidateCache()}
+        }
         super.onFinishInputView(finishingInput)
     }
 
@@ -445,7 +458,7 @@ class AetherImeService : InputMethodService() {
             cornerRadius=d(r).toFloat()
             if(stroke!=null) setStroke(d(1),stroke)
         }
-    private fun palette()=KeyPopSkins.active(this)
+    private fun palette()=renderSkin ?: KeyPopSkins.active(this)
     private fun tapFeedback(v:View) {
         if(prefs.getBoolean("haptics",false)) v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         if(prefs.getBoolean("sound",false))
@@ -454,7 +467,9 @@ class AetherImeService : InputMethodService() {
     private fun makeKey(label:String,heavy:Boolean=false,weight:Float=1f,action:()->Unit):Button {
         val s=palette()
         val round=KeyPopSkins.radius(s,prefs.getInt("round",13)).toInt().coerceIn(1,40)
-        val bg=KeyPopGlass.key(this,s,heavy)
+        val prototype=if(heavy)primaryKeyBackground else regularKeyBackground
+        val bg=prototype?.constantState?.newDrawable()?.mutate()
+            ?:KeyPopGlass.key(this,s,heavy)
         return KeyPopHintKey(this).apply {
             text=label
             textSize=if(label.length>3) {
@@ -469,7 +484,7 @@ class AetherImeService : InputMethodService() {
                 bg,null)
             minWidth=0; minimumWidth=0; minHeight=0; minimumHeight=0
             setPadding(0,0,0,0)
-            elevation=d(if(KeyPopSkins.index(this@AetherImeService)==10)1 else 3).toFloat()
+            elevation=d(if(KeyPopSkins.index(this@AetherImeService)==10)0 else 2).toFloat()
             setOnClickListener { tapFeedback(this); action() }
         }
     }
@@ -524,13 +539,17 @@ class AetherImeService : InputMethodService() {
     /** In-place key styling updates while the slider remains attached to its view. */
     private fun refreshKeyAppearance() {
         val skin=palette()
+        val regular=KeyPopGlass.key(this,skin,false)
+        val primary=KeyPopGlass.key(this,skin,true)
         val radius=KeyPopSkins.radius(skin,prefs.getInt("round",13)).toInt().coerceIn(1,40)
         val font=prefs.getInt("font",17).coerceIn(12,24).toFloat()
         val space=d(prefs.getInt("spacing",4).coerceIn(1,10)/2)
         keyViews.forEach { (key,label)->
             val heavy=label=="↵" || label=="⇧" ||
                 (label=="SPACE" && skin.shape==3)
-            val bg=KeyPopGlass.key(this,skin,heavy)
+            val foreground=if(heavy)primary else regular
+            val bg=foreground.constantState?.newDrawable()?.mutate()
+                ?:KeyPopGlass.key(this,skin,heavy)
             key.background=android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(
                     (skin.accent and 0x00FFFFFF) or (0x55 shl 24)),bg,null)
@@ -943,13 +962,23 @@ class AetherImeService : InputMethodService() {
         predictionPending=null
         keyViews.clear()
         renderedRows.clear()
-        val s=palette()
+        val s=KeyPopSkins.active(this)
+        renderSkin=s
+        regularKeyBackground=KeyPopGlass.key(this,s,false)
+        primaryKeyBackground=KeyPopGlass.key(this,s,true)
+        // Fill the whole IME shell, including navigation-safe padding, with
+        // the same tone as the keyboard; rounded panels must not expose white.
+        floatingShell?.setBackgroundColor(if(prefs.getBoolean("floating",false))
+            Color.TRANSPARENT else s.background)
+        window.window?.navigationBarColor=s.background
+        if(Build.VERSION.SDK_INT>=29)
+            window.window?.isNavigationBarContrastEnforced=false
         val keyboardBackdrop=KeyPopBackdropDrawable(KeyPopSkins.index(this),s)
         liveBackground=keyboardBackdrop
         root.background=if(KeyPopSkins.index(this)==10)KeyPopGlass.background(this,s)
             else keyboardBackdrop
         updateThemeAnimation()
-        root.setPadding(d(3),d(5),d(3),d(6))
+        root.setPadding(d(2),d(4),d(2),d(5))
         applyFloatingLayout()
         val preset=KeyboardPresetCatalog.selected(this)
         val secure=sensitive(currentInputEditorInfo)
@@ -1844,7 +1873,7 @@ class AetherImeService : InputMethodService() {
         }
         val before=if(translatorOpen && translateDraftMode)translateDraft.takeLast(140)
             else readContext(input,140)
-        val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
+        val word=trailingWordPattern.find(before)?.value.orEmpty()
         val nextWords=prefs.getBoolean("predictNext",true)
         val show=word.isNotEmpty() || (nextWords && before.isNotBlank())
         materialTopBar?.visibility=if(KeyPopPredictionContext.toolbarVisible(
@@ -1864,16 +1893,21 @@ class AetherImeService : InputMethodService() {
         predictionPending?.let{predictionHandler.removeCallbacks(it)}
         predictionPending=null
         if(!show) {
-            bar.removeAllViews()
+            // Reuse the same three chip widgets after Space instead of
+            // allocating and measuring replacements on the next letter.
             return
         }
         // Immediately expose what the person typed; never show a stale
         // *correction* from the previous word while the new word is entering.
-        if(word.isNotEmpty() && bar.childCount>=2) {
-            (bar.getChildAt(1) as? Button)?.text=word
+        for(i in 0 until bar.childCount) {
+            val chip=bar.getChildAt(i) as? Button ?:continue
+            if(word.isNotEmpty() && i==1) {
+                chip.text=word
+                chip.visibility=View.VISIBLE
+            } else chip.visibility=View.INVISIBLE
         }
         val without=before.removeSuffix(word).trimEnd()
-        val previous=Regex("[\\p{L}]+$").find(without)?.value.orEmpty()
+        val previous=trailingWordPattern.find(without)?.value.orEmpty()
         val task=Runnable {
             if(predictionExecutor.isShutdown)return@Runnable
             predictionExecutor.execute {
@@ -1928,7 +1962,7 @@ class AetherImeService : InputMethodService() {
         fun replaceWord(choice:String) {
             lastAppliedCorrection=null
             if(translatorOpen && translateDraftMode) {
-                val actual=Regex("[\\p{L}]+$").find(translateDraft)?.value.orEmpty()
+                val actual=trailingWordPattern.find(translateDraft)?.value.orEmpty()
                 if(actual!=word)return
                 val replacement=KeyPopPredictionContext.wordCase(choice,actual,before)
                 val committed=if(prefs.getBoolean("suggestionSpace",true))
@@ -1944,7 +1978,7 @@ class AetherImeService : InputMethodService() {
                 return
             }
             val connection=currentInputConnection ?:return
-            val actual=Regex("[\\p{L}]+$").find(
+            val actual=trailingWordPattern.find(
                 connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
             if(actual!=word || sensitive(currentInputEditorInfo))return
             editorContext.clear()
@@ -2053,7 +2087,7 @@ class AetherImeService : InputMethodService() {
             KeyPopTranslationDraft.handles(value)) {
             if(value=="↵") {translateBeforeSend();return}
             if(value=="SPACE" && prefs.getBoolean("autoCorrect",true)) {
-                val fragment=Regex("[\\p{L}]+$").find(translateDraft)?.value.orEmpty()
+                val fragment=trailingWordPattern.find(translateDraft)?.value.orEmpty()
                 val corrected=lexicon.correction(language,fragment)
                 if(corrected!=null) {
                     translateDraft=translateDraft.dropLast(fragment.length)+
@@ -2151,7 +2185,7 @@ class AetherImeService : InputMethodService() {
                         }
                     }
                     val before=currentInputConnection?.let{readContext(it,48)}.orEmpty()
-                    val word=Regex("[\\p{L}]+$").find(before)?.value.orEmpty()
+                    val word=trailingWordPattern.find(before)?.value.orEmpty()
                     if(word.isNotBlank()) {
                         val predLang=if(language!=0 &&
                             prefs.getBoolean("romanMode",false))0 else language
