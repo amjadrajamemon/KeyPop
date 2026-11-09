@@ -589,6 +589,7 @@ class AetherImeService : InputMethodService() {
         // this lightweight canvas pinned so resizing stays visible on every drag.
         val preview=KeyPopSizingPreview(this)
         root.addView(preview,LinearLayout.LayoutParams(-1,d(160)))
+        var heightSlider:SeekBar?=null
         val panel=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
             setPadding(d(8),d(8),d(8),d(8))
@@ -615,6 +616,7 @@ class AetherImeService : InputMethodService() {
                         .toInt().coerceIn(36,90)
                     if(prefs.getInt("height",51)!=next){
                         prefs.edit().putInt("height",next).apply()
+                        heightSlider?.progress=next-36
                         preview.refresh()
                     }
                     true
@@ -659,14 +661,14 @@ class AetherImeService : InputMethodService() {
                 textSize=12f;setTextColor(skin.ink)
             }
             panel.addView(caption)
-            panel.addView(SeekBar(this).apply {
+            val slider=SeekBar(this).apply {
                 this.max=max-min
                 progress=(prefs.getInt(pref,initial).coerceIn(min,max)-min)
                 setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(s:SeekBar?,p:Int,fromUser:Boolean){
+                        caption.text=name+"  ·  "+(p+min)
                         if(fromUser){
                             prefs.edit().putInt(pref,p+min).apply()
-                            caption.text=name+"  ·  "+(p+min)
                             preview.refresh()
                             onUpdate()
                         }
@@ -674,7 +676,9 @@ class AetherImeService : InputMethodService() {
                     override fun onStartTrackingTouch(s:SeekBar?){}
                     override fun onStopTrackingTouch(s:SeekBar?){}
                 })
-            })
+            }
+            if(pref=="height")heightSlider=slider
+            panel.addView(slider)
         }
         // Settings update the pinned preview. Real keys are reconstructed only
         // once on Done, not on every pixel moved by a finger.
