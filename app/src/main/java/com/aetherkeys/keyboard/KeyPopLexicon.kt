@@ -265,7 +265,9 @@ class KeyPopLexicon(context:Context) {
             normalized in learned || !scowlReady || !normalized.all{it in 'a'..'z'})
             return null
         if(isKnownEnglish(normalized))return null
-        return KeyPopFuzzyRanker.automatic(rankedFuzzy(normalized,beforeCursor))
+        return KeyPopFuzzyRanker.automatic(
+            rankedFuzzy(normalized,beforeCursor),
+            prefs.getBoolean("aggressivePredictions",true))
     }
     fun glide(lang:Int,path:List<String>):String? {
         if(lang!=0 || path.size<3)return null
