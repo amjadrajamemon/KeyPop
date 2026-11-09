@@ -216,10 +216,13 @@ class KeyPopLexicon(context:Context) {
                 .filter{it.tier<=20}.take(4).map{it.word} else emptyList()
         val completions=KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
             relevantLearned,8,dictionary,tiers,beforeCursor)
-        // Exact-prefix completions should lead when a stem is being entered;
-        // for a clearly misspelled stem put the best dictionary fixes first.
-        val ordered=if(strongPrefix>=2)
-            completions+fuzzy.take(2)
+        // An exact completion of the letters actually typed is stronger
+        // evidence than an approximate substitution (likew -> likewise,
+        // not 'liked'/'likes'). Curated words count even if the SCOWL
+        // familiarity bucket did not index them.
+        val exact=completions.filter{it.startsWith(normalized)}
+        val ordered=if(exact.isNotEmpty())
+            exact.take(2)+fuzzy.take(3)+completions
             else fuzzy.take(3)+completions
         return (listOfNotNull(joinedWordCorrection(lang,fragment))+
             listOfNotNull(KeyPopTypingIntelligence.correction(lang,fragment))+
