@@ -9,7 +9,6 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.widget.Button
 
 /** Pixel-density independent, first-party glass and keycap rendering for KeyPop. */
@@ -27,9 +26,10 @@ object KeyPopGlass {
             cornerRadius=cornerPx
             if(Color.alpha(border)>0) setStroke(1.coerceAtLeast((cornerPx/12).toInt()),border)
         }
-    /** Use one filled gradient for the Material/teal theme, not three stacked
-     * glass layers and a bright stroke on every key. The old combination was
-     * both expensive to render and visually produced harsh pale borders. */
+    /** A single GPU-friendly gradient for EVERY skin. Older builds drew
+     * three stacked glass layers on each key, increasing overdraw on devices
+     * with smaller GPU budgets. Preserve depth with color stops instead.
+     * No white key borders; outlined skins get only a subtle accent stroke. */
     fun key(context:Context,skin:KeyPopSkin,primary:Boolean=false):Drawable {
         val dp=context.resources.displayMetrics.density
         val material=KeyPopSkins.index(context)==10
@@ -37,26 +37,14 @@ object KeyPopGlass {
             KeyPopSkins.radius(skin,context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
                 .getInt("round",13)).coerceIn(3f,26f))*dp
         val base=if(primary)skin.accent else skin.key
-        if(material) {
-            return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(blend(base,Color.WHITE,.07f),base,
-                    blend(base,skin.background,.16f))).apply {
-                cornerRadius=radius
-                // No white outline: the key-to-background contrast carries
-                // its shape without a bright hard edge.
+        val light=blend(base,Color.WHITE,if(material).07f else .10f)
+        val dark=blend(base,skin.background,if(material).16f else .20f)
+        return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(light,base,dark)).apply {
+            cornerRadius=radius
+            if(skin.outline && !material) {
+                setStroke(dp.coerceAtLeast(1f).toInt(),alpha(skin.accent,36))
             }
-        }
-        val light=blend(base,Color.WHITE,.11f)
-        val dark=blend(base,Color.BLACK,.15f)
-        val front=shape(intArrayOf(light,base,dark),radius,
-            alpha(skin.ink,16))
-        val gloss=shape(intArrayOf(alpha(Color.WHITE,35),
-            alpha(Color.WHITE,6),alpha(Color.WHITE,0)),radius,Color.TRANSPARENT)
-        val behind=shape(intArrayOf(alpha(Color.BLACK,10),alpha(Color.BLACK,23)),
-            radius,Color.TRANSPARENT)
-        return LayerDrawable(arrayOf(behind,front,gloss)).apply {
-            setLayerInset(1,0,0,0,(1*dp).toInt())
-            setLayerInset(2,(1*dp).toInt(),0,(1*dp).toInt(),(3*dp).toInt())
         }
     }
     fun panel(context:Context,skin:KeyPopSkin):Drawable {

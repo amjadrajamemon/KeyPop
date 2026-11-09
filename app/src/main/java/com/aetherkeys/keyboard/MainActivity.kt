@@ -162,16 +162,38 @@ class MainActivity:Activity() {
         ticker.removeCallbacks(refresh)
         super.onPause()
     }
+    // Back exits the settings task in one step. The visible "All Settings"
+    // control remains available when the user intentionally wants the index.
     @Deprecated("Deprecated in Java")
     override fun onBackPressed(){
-        if(section!="settingsHome")navigate("settingsHome")
-        else super.onBackPressed()
+        finish()
+    }
+    override fun onNewIntent(intent:Intent){
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val target=intent.getStringExtra("openSection")?:"settingsHome"
+        navigate(if(target=="settings")"typing" else target)
     }
     private fun navigate(destination:String){
         section=destination
         downloadMessage=null;downloadProgress=null
         content.removeAllViews()
-        content.addView(text("KEYPOP  /  SETTINGS",13f,accent,true))
+        val header=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL
+            gravity=Gravity.CENTER_VERTICAL
+        }
+        header.addView(text("KEYPOP  /  SETTINGS",13f,accent,true),
+            LinearLayout.LayoutParams(0,dp(44),1f))
+        val close=text("✕  Close",14f,ink,true).apply {
+            gravity=Gravity.CENTER
+            setPadding(dp(12),0,dp(12),0)
+            background=shape(card,11)
+            contentDescription="Close Settings and return to the keyboard"
+            isClickable=true;isFocusable=true
+            setOnClickListener{finish()}
+        }
+        header.addView(close,LinearLayout.LayoutParams(-2,dp(42)))
+        content.addView(header)
         if(section!="settingsHome") {
             action(content,"‹  All Settings"){navigate("settingsHome")}
         }

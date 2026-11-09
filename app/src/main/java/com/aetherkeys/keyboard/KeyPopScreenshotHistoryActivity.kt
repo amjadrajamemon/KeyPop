@@ -79,7 +79,8 @@ class KeyPopScreenshotHistoryActivity:Activity() {
                 }
                 this.menu.add("Screenshot detection settings").setOnMenuItemClickListener{
                     startActivity(Intent(this@KeyPopScreenshotHistoryActivity,
-                        KeyPopScreenshotAccessActivity::class.java));true
+                        KeyPopScreenshotAccessActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP));true
                 }
                 show()
             }
@@ -169,7 +170,8 @@ class KeyPopScreenshotHistoryActivity:Activity() {
                             "manually. Previously saved images are never deleted automatically.",
                             13f,muted))
                         list.addView(button("Set up screenshot detection"){
-                            startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java))
+                            startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                         },LinearLayout.LayoutParams(-1,dp(45)).apply{topMargin=dp(12)})
                         list.addView(button("Import images"){
                             importMedia()

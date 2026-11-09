@@ -14,6 +14,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.widget.ImageView
+import android.widget.ImageButton
 import android.net.Uri
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -496,6 +497,25 @@ class AetherImeService : InputMethodService() {
             background=KeyPopGlass.panel(this@AetherImeService,s)
             setPadding(0,0,0,0)
             setOnClickListener { tapFeedback(this); onTap() }
+        }
+    }
+    /** Consistent vector toolbar buttons: no font-dependent emoji or costly glass layers. */
+    private fun toolbarIcon(kind:KeyPopToolbarGlyph.Kind,description:String,
+        onTap:()->Unit):ImageButton {
+        val skin=palette()
+        return ImageButton(this).apply {
+            scaleType=ImageView.ScaleType.FIT_CENTER
+            setImageDrawable(KeyPopToolbarGlyph(kind,skin.ink))
+            background=android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(
+                    (skin.accent and 0x00FFFFFF) or (0x33 shl 24)),
+                gradient(skin.surface,skin.surface,11),null)
+            setPadding(d(8),d(7),d(8),d(7))
+            minimumWidth=d(40)
+            minimumHeight=d(40)
+            contentDescription=description
+            isFocusable=true
+            setOnClickListener{tapFeedback(this);onTap()}
         }
     }
     private fun applyFloatingLayout() {
@@ -1009,33 +1029,32 @@ class AetherImeService : InputMethodService() {
                 gravity=Gravity.CENTER_VERTICAL
                 setPadding(d(3),d(1),d(3),d(1))
             }
-            fun iconAction(glyph:String,description:String,fn:()->Unit) {
-                val button=chip(glyph,onTap=fn)
-                button.contentDescription=description
-                button.textSize=21f
-                top.addView(button,LinearLayout.LayoutParams(0,d(40),1f).apply {
+            fun iconAction(kind:KeyPopToolbarGlyph.Kind,description:String,fn:()->Unit) {
+                val button=toolbarIcon(kind,description,fn)
+                top.addView(button,LinearLayout.LayoutParams(0,d(43),1f).apply {
                     leftMargin=d(2);rightMargin=d(2)
                 })
             }
-            iconAction("▦","Open feature grid and resize tools"){
+            iconAction(KeyPopToolbarGlyph.Kind.GRID,"Open feature grid and resize tools"){
                 toolsOpen=!toolsOpen;if(toolsOpen)toolsPage=0;resizeOpen=false;draw()
             }
-            iconAction("▤","Open clipboard history"){
+            iconAction(KeyPopToolbarGlyph.Kind.CLIPBOARD,"Open clipboard history"){
                 clipsOpen=!clipsOpen;emojiOpen=false;toolsOpen=false;resizeOpen=false;draw()
             }
-            iconAction("📷","Open screenshot history or set up access"){
+            iconAction(KeyPopToolbarGlyph.Kind.SCREENSHOT,"Open screenshot history or set up access"){
                 startActivity(Intent(this,
                     if(KeyPopRecentScreenshots.granted(this))
                         KeyPopScreenshotHistoryActivity::class.java
                     else KeyPopScreenshotAccessActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
-            iconAction("⚙","Open organized keyboard settings"){
+            iconAction(KeyPopToolbarGlyph.Kind.SETTINGS,"Open organized keyboard settings"){
                 startActivity(Intent(this,MainActivity::class.java)
                     .putExtra("openSection","settingsHome")
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
             }
-            iconAction("⇄","Translate text"){
+            iconAction(KeyPopToolbarGlyph.Kind.TRANSLATE,"Translate text"){
                 translatorOpen=!translatorOpen;writingOpen=false;emojiOpen=false
                 clipsOpen=false;toolsOpen=false;resizeOpen=false
                 if(translatorOpen) {
@@ -1056,12 +1075,13 @@ class AetherImeService : InputMethodService() {
                 draw()
                 if(translatorOpen) scheduleLiveTranslation(80)
             }
-            iconAction("◈","Preview theme gallery without changing your active theme"){
+            iconAction(KeyPopToolbarGlyph.Kind.THEMES,"Preview theme gallery without changing your active theme"){
                 startActivity(Intent(this,MainActivity::class.java)
                     .putExtra("openSection","themes")
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
             }
-            iconAction("🎙","Open voice translation"){
+            iconAction(KeyPopToolbarGlyph.Kind.MICROPHONE,"Open voice translation"){
                 voiceTargetPackage=currentInputEditorInfo?.packageName.orEmpty()
                 pendingSpeech=null;pendingSpeechSend=false
                 val code=when(language){1->"ur-PK";2->"sd-PK";else->"en-US"}
@@ -1078,34 +1098,36 @@ class AetherImeService : InputMethodService() {
             gravity=Gravity.CENTER_VERTICAL
             setPadding(d(2),0,d(2),0)
         }
-        fun shortcut(label:String,weight:Float,fn:()->Unit) {
-            val control=chip(label,onTap=fn)
-            control.contentDescription=label
-            control.textSize=11f
-            toolbar.addView(control,LinearLayout.LayoutParams(0,d(42),weight).apply {
+        fun shortcut(kind:KeyPopToolbarGlyph.Kind,description:String,
+            weight:Float,fn:()->Unit) {
+            val control=toolbarIcon(kind,description,fn)
+            toolbar.addView(control,LinearLayout.LayoutParams(0,d(43),weight).apply {
                 leftMargin=d(2);rightMargin=d(2)
             })
         }
-        shortcut(if(toolsOpen)"Close Menu" else "☷  Tools",1.12f) {
+        shortcut(KeyPopToolbarGlyph.Kind.GRID,if(toolsOpen)"Close tools" else "Open tools",1.12f) {
             toolsOpen=!toolsOpen;if(toolsOpen)toolsPage=0;resizeOpen=false;draw()
         }
-        shortcut(if(resizeOpen)"✓  Done" else "↕  Resize",1f) {
+        shortcut(if(resizeOpen)KeyPopToolbarGlyph.Kind.CHECK else KeyPopToolbarGlyph.Kind.RESIZE,
+            if(resizeOpen)"Finish resizing" else "Resize keyboard",1f) {
             resizeOpen=!resizeOpen;toolsOpen=false;draw()
         }
-        shortcut(if(secure)"Paste" else "▤  Clips",.9f) {
+        shortcut(if(secure)KeyPopToolbarGlyph.Kind.PASTE else KeyPopToolbarGlyph.Kind.CLIPBOARD,
+            if(secure)"Paste" else "Open clipboard",.9f) {
             if(secure)currentInputConnection?.performContextMenuAction(android.R.id.paste)
             else {clipsOpen=!clipsOpen;emojiOpen=false;toolsOpen=false;resizeOpen=false;draw()}
         }
-        shortcut("☺  Emoji",.9f) {
+        shortcut(KeyPopToolbarGlyph.Kind.EMOJI,"Open emoji",.9f) {
             if(!secure && !isNumeric){
                 emojiOpen=!emojiOpen;clipsOpen=false;toolsOpen=false
                 translatorOpen=false;writingOpen=false;resizeOpen=false;draw()
             }
         }
-        shortcut("⚙ Settings",1.1f) {
+        shortcut(KeyPopToolbarGlyph.Kind.SETTINGS,"Open settings",1.1f) {
             startActivity(Intent(this,MainActivity::class.java)
                 .putExtra("openSection","settingsHome")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         }
         root.addView(toolbar,LinearLayout.LayoutParams(-1,d(44)))
         }
@@ -1158,7 +1180,8 @@ class AetherImeService : InputMethodService() {
                         toolsOpen=false
                         startActivity(Intent(this,MainActivity::class.java)
                             .putExtra("openSection","security")
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                         draw()
                     },
                     "▤  Clipboard" to {
@@ -1260,7 +1283,8 @@ class AetherImeService : InputMethodService() {
                     "◈  Themes" to {
                         startActivity(Intent(this,MainActivity::class.java)
                             .putExtra("openSection","themes")
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                     },
                     "📷  Screenshot history" to {
                         startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java)
@@ -1269,7 +1293,8 @@ class AetherImeService : InputMethodService() {
                     "⌨  Layouts" to {
                         startActivity(Intent(this,MainActivity::class.java)
                             .putExtra("openSection","layouts")
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                     },
                     "⇄  Symbols" to {
                         symbols=!symbols;extended=false;toolsOpen=false;draw()
@@ -2726,7 +2751,8 @@ class AetherImeService : InputMethodService() {
             !prefs.getBoolean("googleCloudConsent",false))) {
             panel.addView(chip("Set up Google Cloud API key ↗"){
                 startActivity(Intent(this,MainActivity::class.java)
-                    .putExtra("openSection","translation").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    .putExtra("openSection","translation").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
             },LinearLayout.LayoutParams(-1,d(36)))
         }
         root.addView(panel)
