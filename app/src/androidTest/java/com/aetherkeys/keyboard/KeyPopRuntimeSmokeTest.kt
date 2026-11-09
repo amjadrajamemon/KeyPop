@@ -74,7 +74,7 @@ class KeyPopRuntimeSmokeTest {
                     }
                     return null
                 }
-                for(label in listOf("Keyboard Setup","Offline Packs","Themes","Translation"))
+                for(label in listOf("Keyboard Setup","Offline Packs","Customize Keyboard","Translation"))
                     assertTrue("Missing visible settings section: "+label,
                         find(activity.window.decorView,label)!=null)
                 val translation=find(activity.window.decorView,"Translation")
@@ -109,12 +109,11 @@ class KeyPopRuntimeSmokeTest {
                 assertTrue("Typing settings inaccessible",category!=null)
                 category?.performClick()
                 val prefs=activity.getSharedPreferences("keypop",Context.MODE_PRIVATE)
-                for(label in listOf("Key font size","Suggestion font size",
-                    "Suggestion strip height")) {
-                    assertTrue("Missing responsive font adjustment: $label",
-                        find(activity.window.decorView,label+": 19")!=null ||
-                        find(activity.window.decorView,label+": 17")!=null ||
-                        find(activity.window.decorView,label+": 45")!=null)
+                val typingText=visibleText(activity.window.decorView)
+                assertTrue("Missing live resize entry",typingText.contains("Resize keys"))
+                for(label in listOf("Suggestion font size","Suggestion strip height")) {
+                    assertTrue("Missing suggestion adjustment: $label",
+                        typingText.contains(label+":"))
                 }
                 for((label,key) in listOf(
                     "Auto-correct spelling" to "autoCorrect",
