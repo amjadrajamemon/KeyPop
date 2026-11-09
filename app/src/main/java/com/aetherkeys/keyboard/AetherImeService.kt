@@ -900,8 +900,7 @@ class AetherImeService : InputMethodService() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(Intent.createChooser(share,"Share screenshot")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }catch(_:Exception){
             Toast.makeText(this,"Screenshot cannot be shared",Toast.LENGTH_SHORT).show()
         }
@@ -1020,8 +1019,7 @@ class AetherImeService : InputMethodService() {
                 prefs.getBoolean("autoScreenshotSuggestions",true)) {
                 slot.addView(chip("📷 Enable screenshot previews and history") {
                     startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 },LinearLayout.LayoutParams(-1,d(34)))
             } else recentScreenshotUri?.let{showScreenshotOffer(slot,it,screenshotMime)}
         }
@@ -1048,8 +1046,7 @@ class AetherImeService : InputMethodService() {
                     if(KeyPopRecentScreenshots.granted(this))
                         KeyPopScreenshotHistoryActivity::class.java
                     else KeyPopScreenshotAccessActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             iconAction(KeyPopToolbarGlyph.Kind.SETTINGS,"Open organized keyboard settings"){
                 startActivity(Intent(this,MainActivity::class.java)
@@ -1091,8 +1088,7 @@ class AetherImeService : InputMethodService() {
                 startActivity(Intent(this,KeyPopVoiceActivity::class.java)
                     .putExtra("lang",code)
                     .putExtra("target",prefs.getInt("autoTarget",1))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             root.addView(top,LinearLayout.LayoutParams(-1,d(43)))
             materialTopBar=top
@@ -1202,15 +1198,13 @@ class AetherImeService : InputMethodService() {
                     "📷  Screenshots" to {
                         toolsOpen=false
                         startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         draw()
                     },
                     "▤  Full archive" to {
                         toolsOpen=false
                         startActivity(Intent(this,KeyPopClipboardActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         draw()
                     }
                 ))
@@ -1229,8 +1223,7 @@ class AetherImeService : InputMethodService() {
                                 "KeyPop Keyboard: https://github.com/amjadrajamemon/KeyPop")
                         }
                         startActivity(Intent.createChooser(share,"Share KeyPop")
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
                     "⬚  Resize" to {resizeOpen=true;toolsOpen=false;draw()},
                     "↶  Undo" to {
@@ -1285,8 +1278,7 @@ class AetherImeService : InputMethodService() {
                         startActivity(Intent(this,KeyPopVoiceActivity::class.java)
                             .putExtra("lang",code)
                             .putExtra("target",prefs.getInt("autoTarget",if(language==0)1 else 0))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
                     "◈  Themes" to {
                         startActivity(Intent(this,MainActivity::class.java)
@@ -1296,8 +1288,7 @@ class AetherImeService : InputMethodService() {
                     },
                     "📷  Screenshot history" to {
                         startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
                     "⌨  Layouts" to {
                         startActivity(Intent(this,MainActivity::class.java)
@@ -2806,19 +2797,16 @@ class AetherImeService : InputMethodService() {
         if(clipTab==0) {
             footer.addView(chip("Search / manage text"){
                 startActivity(Intent(this,KeyPopClipboardActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             },LinearLayout.LayoutParams(-1,d(38)))
         }else{
             footer.addView(chip("View all"){
                 startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             },LinearLayout.LayoutParams(0,d(38),1f))
             footer.addView(chip("＋ Import"){
                 startActivity(Intent(this,KeyPopImageImportActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             },LinearLayout.LayoutParams(0,d(38),1f))
         }
         root.addView(footer)
@@ -2918,8 +2906,7 @@ class AetherImeService : InputMethodService() {
                             content.addView(text("Enable screenshot access or import an image.",12f))
                             content.addView(chip("Enable screenshot detection"){
                                 startActivity(Intent(this,KeyPopScreenshotAccessActivity::class.java)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                             },LinearLayout.LayoutParams(-1,d(38)))
                         } else {
                             content.addView(text(all.size.toString()+" saved screenshots",12f))
@@ -3020,8 +3007,7 @@ class AetherImeService : InputMethodService() {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 startActivity(Intent.createChooser(share,"Share screenshot")
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
         }
     }
