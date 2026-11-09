@@ -146,7 +146,8 @@ class KeyPopModelManagerActivity:Activity() {
         column.addView(label("‹ Back to Settings",14f,teal).apply{
             setOnClickListener{
                 startActivity(Intent(this@KeyPopModelManagerActivity,MainActivity::class.java)
-                    .putExtra("openSection","settingsHome"))
+                    .putExtra("openSection","settingsHome")
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                 finish()
             }
         })
