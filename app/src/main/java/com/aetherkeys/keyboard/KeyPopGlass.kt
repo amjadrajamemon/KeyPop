@@ -25,8 +25,11 @@ object KeyPopGlass {
     private fun shape(colors:IntArray,cornerPx:Float,border:Int):GradientDrawable=
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,colors).apply {
             cornerRadius=cornerPx
-            setStroke(1.coerceAtLeast((cornerPx/12).toInt()),border)
+            if(Color.alpha(border)>0) setStroke(1.coerceAtLeast((cornerPx/12).toInt()),border)
         }
+    /** Use one filled gradient for the Material/teal theme, not three stacked
+     * glass layers and a bright stroke on every key. The old combination was
+     * both expensive to render and visually produced harsh pale borders. */
     fun key(context:Context,skin:KeyPopSkin,primary:Boolean=false):Drawable {
         val dp=context.resources.displayMetrics.density
         val material=KeyPopSkins.index(context)==10
@@ -34,13 +37,22 @@ object KeyPopGlass {
             KeyPopSkins.radius(skin,context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
                 .getInt("round",13)).coerceIn(3f,26f))*dp
         val base=if(primary)skin.accent else skin.key
-        val light=blend(base,Color.WHITE,if(material).10f else .15f)
-        val dark=blend(base,Color.BLACK,if(material).14f else .18f)
+        if(material) {
+            return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(blend(base,Color.WHITE,.07f),base,
+                    blend(base,skin.background,.16f))).apply {
+                cornerRadius=radius
+                // No white outline: the key-to-background contrast carries
+                // its shape without a bright hard edge.
+            }
+        }
+        val light=blend(base,Color.WHITE,.11f)
+        val dark=blend(base,Color.BLACK,.15f)
         val front=shape(intArrayOf(light,base,dark),radius,
-            alpha(if(primary)Color.WHITE else skin.ink,if(material)30 else 45))
-        val gloss=shape(intArrayOf(alpha(Color.WHITE,if(material)45 else 65),
-            alpha(Color.WHITE,10),alpha(Color.WHITE,0)),radius,Color.TRANSPARENT)
-        val behind=shape(intArrayOf(alpha(Color.BLACK,15),alpha(Color.BLACK,36)),
+            alpha(skin.ink,16))
+        val gloss=shape(intArrayOf(alpha(Color.WHITE,35),
+            alpha(Color.WHITE,6),alpha(Color.WHITE,0)),radius,Color.TRANSPARENT)
+        val behind=shape(intArrayOf(alpha(Color.BLACK,10),alpha(Color.BLACK,23)),
             radius,Color.TRANSPARENT)
         return LayerDrawable(arrayOf(behind,front,gloss)).apply {
             setLayerInset(1,0,0,0,(1*dp).toInt())
@@ -49,16 +61,22 @@ object KeyPopGlass {
     }
     fun panel(context:Context,skin:KeyPopSkin):Drawable {
         val dp=context.resources.displayMetrics.density
-        val light=blend(skin.surface,Color.WHITE,.10f)
-        val dark=blend(skin.surface,Color.BLACK,.12f)
-        return shape(intArrayOf(alpha(light,245),alpha(skin.surface,240),alpha(dark,240)),
-            18*dp,alpha(skin.ink,42))
+        val material=KeyPopSkins.index(context)==10
+        val light=blend(skin.surface,Color.WHITE,if(material).045f else .08f)
+        val dark=blend(skin.surface,Color.BLACK,if(material).045f else .10f)
+        return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(light,skin.surface,dark)).apply {
+            cornerRadius=(if(material)14f else 18f)*dp
+            // Glass is a surface treatment, not a white-bordered card.
+            if(!material) setStroke(dp.coerceAtLeast(1f).toInt(),
+                alpha(skin.ink,15))
+        }
     }
     fun background(context:Context,skin:KeyPopSkin):Drawable {
         val dp=context.resources.displayMetrics.density
         return shape(intArrayOf(skin.background,
             blend(skin.background,skin.surface,.13f),
-            blend(skin.background,Color.BLACK,.11f)),12*dp,Color.TRANSPARENT)
+            blend(skin.background,Color.BLACK,.11f)),0f,Color.TRANSPARENT)
     }
 }
 
