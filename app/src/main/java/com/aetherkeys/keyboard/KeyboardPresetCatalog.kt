@@ -166,15 +166,19 @@ class KeyboardPresetPreview(
                 keys.length==9->dp(16f)
                 else->dp(4.5f)
             }
-            val kw=(w-2*side-gap*(visual.length-1))/visual.length
+            val weights=visual.map{ keyWeight(candidate.id,it.toString()) }
+            val sum=weights.sum()
+            val free=(w-2*side-gap*(visual.length-1)).coerceAtLeast(1f)
+            var cursor=side
             visual.forEachIndexed { i,ch->
                 val key=ch.toString()
-                val x=side+i*(kw+gap)
+                val kw=free*weights[i]/sum
                 val hint=if(ch.isLetter())
                     KeyPopRowParity.alternates(
                         KeyPopKeysets.alternates(keyset,key.lowercase(),0),
                         key,numberRow).firstOrNull() else null
-                keyCap(key,x,y,kw,rowHeight,key in listOf("⇧","⌫"),hint)
+                keyCap(key,cursor,y,kw,rowHeight,key in listOf("⇧","⌫"),hint)
+                cursor+=kw+gap
             }
         }
         val footer=KeyPopKeysets.footer(keyset,false)
