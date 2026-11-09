@@ -114,7 +114,8 @@ class KeyPopHomeActivity : Activity() {
             "save new captures to its encrypted screenshot archive.",13f,muted))
         addButton(column,"Settings · Themes · Layouts · Translation") {
             startActivity(Intent(this,MainActivity::class.java)
-                .putExtra("openSection","settingsHome"))
+                .putExtra("openSection","settingsHome")
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         }
         column.addView(text("English ↔ Urdu works offline with downloaded Google ML Kit packs. Sindhi model files are experimental and must pass independent translation checks.",13f,muted))
         val settings=getSharedPreferences("keypop",MODE_PRIVATE)
