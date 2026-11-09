@@ -39,20 +39,23 @@ object KeyboardPresetCatalog {
         return all.firstOrNull{it.id==id} ?: all.first()
     }
     fun byId(id:Int)=all.firstOrNull{it.id==id}
-    /** Called only after an explicit Apply action, never from preview or menu navigation. */
+    /** Geometry selection must not replace theme, key characters, long-press
+     * symbols, number row, font preferences, or the user's custom accent.
+     * Freeze the old coupled preset's keyset once for existing installs. */
     fun apply(context:Context,id:Int):Boolean {
-        val preset=byId(id) ?:return false
-        val editor=context.getSharedPreferences("keypop",Context.MODE_PRIVATE).edit()
-            .putInt("keyboardPreset",id)
+        val preset=byId(id)?:return false
+        val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+        val old=prefs.getInt("keyboardPreset",MATERIAL)
+        val edit=prefs.edit()
+        if(!prefs.contains(KeyPopKeysets.KEY))
+            edit.putInt(KeyPopKeysets.KEY,KeyPopKeysets.legacy(old))
+        edit.putInt("keyboardPreset",id)
         if(id!=CUSTOM) {
-            editor.putInt("theme",preset.skin).putInt("height",preset.height)
-                .putInt("spacing",preset.spacing).putInt("round",preset.radius)
-                .putInt("font",preset.font).putBoolean("numberRow",preset.numberRow)
-                .putBoolean("suggestions",preset.suggestions)
-                .putInt("handMode",0).putBoolean("floating",false)
-                .putBoolean("splitKeyboard",false).remove("customAccent")
+            // Geometry owns key height and spacing, but NEVER skin colors,
+            // font, symbol mapping, number row, or accessibility settings.
+            edit.putInt("height",preset.height).putInt("spacing",preset.spacing)
         }
-        return editor.commit()
+        return edit.commit()
     }
     fun foot(id:Int, symbols:Boolean):List<String> {
         // Backspace belongs to the last typing row, never a second footer key.
@@ -78,7 +81,11 @@ object KeyboardPresetCatalog {
 }
 
 /** Offline lightweight preview showing real rows, geometry and number-row differences. */
-class KeyboardPresetPreview(context:Context,private val candidate:KeyboardErgonomics):View(context) {
+class KeyboardPresetPreview(
+    context:Context,
+    private val candidate:KeyboardErgonomics,
+    private val previewKeyset:Int?=null
+):View(context) {
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
     private fun dp(v:Float)=v*resources.displayMetrics.density
     override fun onMeasure(w:Int,h:Int) {
@@ -86,10 +93,11 @@ class KeyboardPresetPreview(context:Context,private val candidate:KeyboardErgono
     }
     override fun onDraw(canvas:Canvas) {
         super.onDraw(canvas)
-        val skin=KeyPopSkins.all[candidate.skin]
+        val skin=KeyPopSkins.active(context)
+        val keyset=previewKeyset ?:KeyPopKeysets.selectedId(context)
         val w=width.toFloat()
         val h=height.toFloat()
-        val material=candidate.id==KeyboardPresetCatalog.MATERIAL
+        val material=keyset==KeyPopKeysets.GBOARD
         paint.shader=android.graphics.LinearGradient(0f,0f,w,h,
             KeyPopGlass.blend(skin.background,Color.WHITE,0.10f),
             KeyPopGlass.blend(skin.background,Color.BLACK,0.20f),
@@ -98,11 +106,11 @@ class KeyboardPresetPreview(context:Context,private val candidate:KeyboardErgono
         paint.shader=null
         val toolbarHeight=dp(24f)
         if(material){
-            val bar=listOf("▦","▤","GIF","⚙","⇄","◈","🎙")
+            val bar=listOf("▦","▤","📷","⚙","⇄","◈","🎙")
             val cell=w/bar.size
             bar.forEachIndexed { i,label->
                 paint.color=skin.ink
-                paint.textSize=dp(if(label=="GIF")9f else 12f)
+                paint.textSize=dp(12f)
                 paint.typeface=android.graphics.Typeface.DEFAULT_BOLD
                 paint.textAlign=Paint.Align.CENTER
                 canvas.drawText(label,(i+.5f)*cell,dp(15f),paint)
@@ -115,8 +123,10 @@ class KeyboardPresetPreview(context:Context,private val candidate:KeyboardErgono
         }
         val footerHeight=dp(28f)
         val rows=mutableListOf("QWERTYUIOP","ASDFGHJKL","ZXCVBNM")
-        if(candidate.numberRow)rows.add(0,"1234567890")
-        val gap=dp(2.8f)
+        val numberRow=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+            .getBoolean("numberRow",true)
+        if(numberRow)rows.add(0,"1234567890")
+        val gap=dp((candidate.spacing*0.7f).coerceIn(2f,4f))
         val available=h-toolbarHeight-footerHeight-dp(7f)-gap*(rows.size-1)
         val rowHeight=available/rows.size
         fun keyCap(label:String,x:Float,y:Float,kw:Float,kh:Float,primary:Boolean,cornerHint:String?){
@@ -152,12 +162,14 @@ class KeyboardPresetPreview(context:Context,private val candidate:KeyboardErgono
             visual.forEachIndexed { i,ch->
                 val key=ch.toString()
                 val x=side+i*(kw+gap)
-                val hint=if(material&&ch.isLetter())
-                    KeyPopMaterialHints.candidates(key.lowercase(),0,true).firstOrNull() else null
+                val hint=if(ch.isLetter())
+                    KeyPopRowParity.alternates(
+                        KeyPopKeysets.alternates(keyset,key.lowercase(),0),
+                        key,numberRow).firstOrNull() else null
                 keyCap(key,x,y,kw,rowHeight,key in listOf("⇧","⌫"),hint)
             }
         }
-        val footer=KeyboardPresetCatalog.foot(candidate.id,false)
+        val footer=KeyPopKeysets.footer(keyset,false)
         val weights=footer.map{KeyboardPresetCatalog.keyWeight(candidate.id,it)}
         val total=weights.sum()
         val free=w-dp(8f)-gap*(footer.size-1)

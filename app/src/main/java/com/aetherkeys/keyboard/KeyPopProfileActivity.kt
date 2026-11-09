@@ -17,7 +17,8 @@ object KeyPopDesignProfile {
     private val intOptions=mapOf("theme" to 0..14,"height" to 36..90,
         "round" to 3..40,"spacing" to 1..10,"font" to 12..24,
         "handMode" to 0..2,"englishLayout" to 0..4,
-        "keyboardPreset" to 0..5,"keyboardWidthPercent" to 65..100,
+        "keyboardPreset" to 0..5,"keysetPreset" to 1..3,
+        "keyboardWidthPercent" to 65..100,
         "bottomLift" to 0..96)
     private val boolOptions=setOf("numberRow","hints","haptics","sound",
         "wordDelete","doubleSpace","autoCap","splitKeyboard","floating",
@@ -111,7 +112,7 @@ class KeyPopProfileActivity:Activity() {
             box.addView(TextView(this).apply{text=t;textSize=size;setPadding(0,0,0,margin)})
         }
         info("KeyPop Design Studio",24f)
-        info("Export your theme and keyboard layout, or bring your design onto another Android device. Passwords, clipboard and personal words are never exported.",14f)
+        info("Export your independent theme, keyboard geometry and key/symbol pack, or bring your design onto another Android device. Passwords, clipboard and personal words are never exported.",14f)
         box.addView(Button(this).apply{
             text="Export keyboard design"
             setOnClickListener{

@@ -47,6 +47,7 @@ class MainActivity:Activity() {
     private var section="settingsHome"
     private var previewThemeIndex=-1
     private var previewLayoutIndex=-1
+    private var previewKeysetIndex=-1
     private var downloadMessage:TextView?=null
     private var downloadProgress:ProgressBar?=null
     private val ticker=Handler(Looper.getMainLooper())
@@ -148,7 +149,7 @@ class MainActivity:Activity() {
         if(section=="settings")section="typing"
         if(section=="languagePacks")section="languagePacks"
         if(section !in setOf("settingsHome","typing","languagePacks","themes",
-                "layouts","translation","security","tools","onboarding"))
+                "layouts","keysets","translation","security","tools","onboarding"))
             section="settingsHome"
         navigate(section)
     }
@@ -181,6 +182,7 @@ class MainActivity:Activity() {
                 "languagePacks"->offlinePacks()
                 "themes"->themes()
                 "layouts"->layouts()
+                "keysets"->keysets()
                 "typing"->typing()
                 "translation"->translation()
                 "security"->privacy()
@@ -208,9 +210,14 @@ class MainActivity:Activity() {
                 "Corrections, predictions, grammar, toolbar and key sizes"){navigate("typing")}
         }
         addBlock {
-            addView(text("03   APPEARANCE",12f,accent,true))
-            action(this,"Themes","Preview a complete color and visual style"){navigate("themes")}
-            action(this,"Layouts","Preview and apply keyboard geometry"){navigate("layouts")}
+            addView(text("03   MIX & MATCH KEYBOARD DESIGN",12f,accent,true))
+            val layout=KeyboardPresetCatalog.selected(this@MainActivity)
+            val keys=KeyPopKeysets.all.first{it.id==KeyPopKeysets.selectedId(this@MainActivity)}
+            addView(text("Current: "+KeyPopSkins.active(this@MainActivity).name+
+                " · "+layout.name+" · "+keys.name,12f,muted))
+            action(this,"Themes","Colors, keycap surfaces and visual style only"){navigate("themes")}
+            action(this,"Layouts","Keyboard geometry, row sizes and spacing only"){navigate("layouts")}
+            action(this,"Keys & Symbols","Bottom-row keys, long-press characters and symbol pages"){navigate("keysets")}
         }
         addBlock {
             addView(text("04   TRANSLATION & LANGUAGES",12f,accent,true))
@@ -274,7 +281,7 @@ class MainActivity:Activity() {
         showTransfer()
     }
     private fun themes(){
-        heading("Themes","Preview first, then apply your chosen appearance")
+        heading("Themes","Appearance only. Layout, keys and symbols stay unchanged.")
         val current=prefs.getInt("theme",0).coerceIn(0,KeyPopSkins.all.lastIndex)
         if(previewThemeIndex !in KeyPopSkins.all.indices)previewThemeIndex=current
         addBlock {
@@ -282,10 +289,7 @@ class MainActivity:Activity() {
             addView(text("PREVIEW · "+KeyPopSkins.all[previewThemeIndex].name,16f,ink,true))
             action(this,"Apply selected theme") {
                 val selected=previewThemeIndex
-                if(selected==KeyboardPresetCatalog.byId(KeyboardPresetCatalog.MATERIAL)?.skin)
-                    KeyboardPresetCatalog.apply(this@MainActivity,KeyboardPresetCatalog.MATERIAL)
-                else prefs.edit().putInt("theme",selected)
-                    .putInt("keyboardPreset",KeyboardPresetCatalog.CUSTOM)
+                prefs.edit().putInt("theme",selected)
                     .remove("customAccent").apply()
                 Toast.makeText(this@MainActivity,"Theme applied",Toast.LENGTH_SHORT).show()
                 navigate("themes")
@@ -327,19 +331,20 @@ class MainActivity:Activity() {
         }
     }
     private fun layouts(){
-        heading("Layouts","Review key arrangement before applying")
+        heading("Layouts","Change geometry without altering theme or symbol mappings.")
         if(previewLayoutIndex !in KeyboardPresetCatalog.all.indices)
             previewLayoutIndex=KeyboardPresetCatalog.selected(this).id
         val selected=KeyboardPresetCatalog.byId(previewLayoutIndex)
             ?:KeyboardPresetCatalog.all.first()
         addBlock {
-            addView(text("SELECTED PREVIEW · "+selected.name,14f,accent,true))
+            addView(text("SELECTED GEOMETRY · "+selected.name,14f,accent,true))
+            addView(text("Preview uses your current theme and key/symbol pack.",12f,muted))
             addView(KeyboardPresetPreview(this@MainActivity,selected),
                 LinearLayout.LayoutParams(-1,dp(154)))
-            action(this,"Apply selected layout"){
+            action(this,"Apply geometry only"){
                 val applied=KeyboardPresetCatalog.apply(this@MainActivity,selected.id)
                 Toast.makeText(this@MainActivity,
-                    if(applied)"Layout applied" else "Unable to apply layout",
+                    if(applied)"Geometry applied; theme and symbols preserved" else "Unable to apply layout",
                     Toast.LENGTH_SHORT).show()
                 navigate("layouts")
             }
@@ -356,6 +361,50 @@ class MainActivity:Activity() {
             action(this,"Advanced Layout Editor"){
                 startActivity(Intent(this@MainActivity,KeyPopLayoutStudioActivity::class.java))
             }
+        }
+    }
+    private fun keysets(){
+        heading("Keys & Symbols",
+            "Choose key content independently of appearance and geometry.")
+        val active=KeyPopKeysets.selectedId(this)
+        if(previewKeysetIndex !in KeyPopKeysets.all.map{it.id})
+            previewKeysetIndex=active
+        val chosen=KeyPopKeysets.all.first{it.id==previewKeysetIndex}
+        addBlock{
+            addView(text("SELECTED PREVIEW · "+chosen.name,14f,accent,true))
+            addView(text("Your active theme: "+KeyPopSkins.active(this@MainActivity).name+
+                " · Geometry: "+KeyboardPresetCatalog.selected(this@MainActivity).name,
+                12f,muted))
+            addView(KeyboardPresetPreview(this@MainActivity,
+                KeyboardPresetCatalog.selected(this@MainActivity),chosen.id),
+                LinearLayout.LayoutParams(-1,dp(154)))
+            addView(text("Bottom row: "+
+                KeyPopKeysets.footer(chosen.id,false).joinToString("  "),
+                12f,muted))
+            addView(text("Hold period (.) → "+
+                KeyPopKeysets.alternates(chosen.id,".",0).take(9).joinToString("  "),
+                12f,muted))
+            action(this,"Apply keys and symbols only"){
+                val applied=KeyPopKeysets.apply(this@MainActivity,chosen.id)
+                Toast.makeText(this@MainActivity,
+                    if(applied)"Keyset applied; theme and layout preserved"
+                    else "Unable to apply keyset",Toast.LENGTH_SHORT).show()
+                navigate("keysets")
+            }
+        }
+        addBlock{
+            addView(text("SELECT KEY CONTENT",12f,accent,true))
+            KeyPopKeysets.all.forEach{pack->
+                action(this,
+                    (if(pack.id==previewKeysetIndex)"✓  " else "")+pack.name,
+                    pack.description){
+                    previewKeysetIndex=pack.id
+                    navigate("keysets")
+                }
+            }
+            addView(text("Example: select Samsung-style geometry under Layouts, "+
+                "then apply Gboard-style keys and symbols here. "+
+                "Use any theme with that combination.",12f,muted))
         }
     }
     private fun typing(){

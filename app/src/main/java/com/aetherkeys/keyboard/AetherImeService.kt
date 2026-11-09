@@ -926,7 +926,10 @@ class AetherImeService : InputMethodService() {
         val preset=KeyboardPresetCatalog.selected(this)
         val secure=sensitive(currentInputEditorInfo)
         val isNumeric=numeric(currentInputEditorInfo)
-        val materialToolbar=preset.id==KeyboardPresetCatalog.MATERIAL && !secure && !isNumeric
+        // Toolbar/key contents follow the keyset; geometry and theme never
+        // implicitly switch a Gboard-style keyset to a Samsung/SwiftKey one.
+        val materialToolbar=KeyPopKeysets.selectedId(this)==KeyPopKeysets.GBOARD &&
+            !secure && !isNumeric
         // Gboard-style arrangement: live translator above the persistent
         // utilities row; compact preview updates without rebuilding keys.
         if(translatorOpen && !secure && !isNumeric &&
@@ -1294,12 +1297,13 @@ class AetherImeService : InputMethodService() {
             setPadding(d(10),0,0,0)
         }
         if(preset.id!=KeyboardPresetCatalog.GESTURE &&
-            preset.id!=KeyboardPresetCatalog.MATERIAL && !resizeOpen)
+            !materialToolbar && !resizeOpen)
             root.addView(title,LinearLayout.LayoutParams(-1,d(20)))
         val rows=if(isNumeric) listOf(listOf("1","2","3"),listOf("4","5","6"),
             listOf("7","8","9"),listOf(".","0","⌫"))
             else if(emojiSearch)KeyPopLayouts.active(this,0)
-            else if(symbols) { if(extended) extraSymbols else symbolRows }
+            else if(symbols)
+                KeyPopKeysets.symbolRows(KeyPopKeysets.selectedId(this),extended)
             else if(language!=0 && prefs.getBoolean("romanMode",false))
                 KeyPopLayouts.active(this,0)
             else if(extended && language==1)urduExtended
@@ -1320,7 +1324,8 @@ class AetherImeService : InputMethodService() {
             addRow(root,keys,keyHeight,layoutRow=customRow,layoutLanguage=customLanguage)
         }
         if(isNumeric) addRow(root,listOf("-","@","↵"),keyHeight, true)
-        else addRow(root,KeyboardPresetCatalog.foot(preset.id,symbols),keyHeight,true)
+        else addRow(root,KeyPopKeysets.footer(KeyPopKeysets.selectedId(this),symbols),
+            keyHeight,true)
     }
     private fun addRow(parent:LinearLayout,labels:List<String>,height:Int,footer:Boolean=false,
                        layoutRow:Int=-1,layoutLanguage:Int=language) {
@@ -1355,9 +1360,9 @@ class AetherImeService : InputMethodService() {
             val weight=KeyboardPresetCatalog.keyWeight(preset.id,label)
             val heavy=label in listOf("↵","⇧") || (label=="SPACE" && palette().shape==3)
             val altLanguage=if(language!=0 && prefs.getBoolean("romanMode",false))0 else language
-            val material=preset.id==KeyboardPresetCatalog.MATERIAL && !symbols
+            val material=KeyPopKeysets.selectedId(this)==KeyPopKeysets.GBOARD && !symbols
             val variants=KeyPopRowParity.alternates(
-                KeyPopMaterialHints.candidates(label,altLanguage,material),
+                KeyPopKeysets.alternates(KeyPopKeysets.selectedId(this),label,altLanguage),
                 label,KeyPopRowParity.hasNumberRow(
                     prefs.getBoolean("numberRow",true),symbols,numeric(currentInputEditorInfo)))
             val actualHint=if(prefs.getBoolean("hints",true))variants.firstOrNull() else null
