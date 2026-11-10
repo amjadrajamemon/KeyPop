@@ -72,22 +72,28 @@ object KeyboardPresetCatalog {
     fun keyWeight(id:Int,label:String):Float = when(label){
         "SPACE" -> when(id) { MATERIAL->4.43f;FLOW->5.4f;GESTURE->5.8f;FACETED->5f;else->4.3f }
         "?123","ABC" -> if(id==GESTURE)1.1f else if(id==MATERIAL)1.57f else 1.4f
-        "," -> if(id==MATERIAL)1.25f else 1.35f
+        "," -> if(id==MATERIAL)1.85f else 1.85f
         "☺" -> if(id==MATERIAL)0.85f else 1.0f
         "☺," -> if(id==MATERIAL)0.85f else 1.12f
-        "⇧","⌫" -> if(id==MATERIAL)1.75f else 1.65f
-        "↵" ->if(id==MATERIAL)1.90f else 1.75f
-        "." ->if(id==MATERIAL)1.35f else 1.35f
+        "⇧","⌫" -> if(id==MATERIAL)2.55f else 2.40f
+        "↵" ->if(id==MATERIAL)2.35f else 2.20f
+        "." ->if(id==MATERIAL)1.85f else 1.85f
         "?" ->if(id==MATERIAL)0.7f else 1f
         "🌐" ->if(id==MATERIAL)1f else 1.2f
         else ->if(id==GESTURE)1.12f else 1f
     }
 
+    /** Give the five frequently used controls visibly taller keycaps too,
+     * without overlapping adjacent rows or altering the surrounding letters.
+     * The touch target and the painted key background both grow. */
+    fun controlHeightBonus(token:String):Int =
+        if(token in setOf("⇧","⌫","↵",",","."))8 else 0
+
     /** Typography follows the wider touch targets but still respects the
      * selected font size; an action caption such as "⇄ Send" stays readable. */
     fun keyTextSize(token:String,caption:String,base:Float):Float = when {
         token in setOf("⇧","⌫","↵",",",".") && caption.length<=2 ->
-            (base*1.16f).coerceIn(14f,32f)
+            (base*1.28f).coerceIn(16f,32f)
         caption.length>3 -> (base*.70f).coerceIn(12f,24f)
         else -> base.coerceIn(12f,32f)
     }

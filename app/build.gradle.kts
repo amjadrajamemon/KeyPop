@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 41
-        versionName = "1.0.25-rc26-adaptive-predictions" 
+        versionCode = 42
+        versionName = "1.0.26-rc27-visible-control-keys" 
     }
     splits {
         abi {
@@ -42,7 +42,7 @@ android {
         debug {
             // Debug builds retain an ephemeral test-only signature and their
             // OWN app identity. Never distribute them as an upgrade path.
-            applicationIdSuffix = ".previewv126"
+            applicationIdSuffix = ".previewv127"
             versionNameSuffix = "-debug-test-only"
         }
         release {

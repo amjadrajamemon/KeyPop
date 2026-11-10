@@ -544,12 +544,13 @@ class AetherImeService : InputMethodService() {
     private fun refreshRowHeights() {
         val height=prefs.getInt("height",51).coerceIn(36,90)
         renderedRows.forEach { (row,offset)->
-            val px=d((height+offset).coerceAtLeast(30))
             for(i in 0 until row.childCount) {
                 val v=row.getChildAt(i)
                 if(v !is Button)continue
                 val layout=v.layoutParams
-                if(layout.height!=px) {layout.height=px;v.layoutParams=layout}
+                val bonus=KeyboardPresetCatalog.controlHeightBonus(v.tag as? String ?: "")
+                val actual=d((height+offset+bonus).coerceAtLeast(30))
+                if(layout.height!=actual) {layout.height=actual;v.layoutParams=layout}
             }
             row.requestLayout()
         }
@@ -1458,6 +1459,7 @@ class AetherImeService : InputMethodService() {
             val caption=if(!material && !symbols && letterHint)
                 show+"\n"+actualHint else show
             val button=makeKey(caption,heavy,weight) { press(label) }
+            button.tag=label
             // Control keys use visibly larger glyphs as well as wider bounds.
             button.textSize=KeyboardPresetCatalog.keyTextSize(
                 label,caption,prefs.getInt("font",19).coerceIn(12,32).toFloat())
@@ -1494,8 +1496,13 @@ class AetherImeService : InputMethodService() {
                 else if(label in setOf("⇧","⌫"))-1 else index
             val widthFactor=if(layoutRow>=0 && indexInLayout>=0)
                 KeyPopKeyGeometry.width(this,layoutLanguage,layoutRow,indexInLayout)/100f else 1f
-            row.addView(button,LinearLayout.LayoutParams(0,d(height),weight*widthFactor).apply {
-                leftMargin=d(gap/2); rightMargin=d(gap/2); topMargin=d(2); bottomMargin=d(2)
+            val bonus=KeyboardPresetCatalog.controlHeightBonus(label)
+            row.addView(button,LinearLayout.LayoutParams(0,d(height+bonus),weight*widthFactor).apply {
+                leftMargin=d(gap/2); rightMargin=d(gap/2)
+                // Fixed row heights used to hide the enlarged controls:
+                // painted 8dp taller caps now participate in row measurement.
+                topMargin=if(bonus>0)0 else d(2)
+                bottomMargin=if(bonus>0)0 else d(2)
             })
         }
         parent.addView(row)
