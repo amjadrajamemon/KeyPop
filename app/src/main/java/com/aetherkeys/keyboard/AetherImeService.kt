@@ -447,6 +447,9 @@ class AetherImeService : InputMethodService() {
             pendingSpeech=null;pendingSpeechSend=false
         }
         draw()
+        // The InputConnection often becomes valid only after the view has
+        // attached. Do not rely on the initial synchronous draw to fill chips.
+        current?.post {requestSuggestionRefresh(0)}
         startScreenshotObserver()
         floatingShell?.post {
             floatingShell?.let { ViewCompat.requestApplyInsets(it) }
@@ -551,8 +554,12 @@ class AetherImeService : InputMethodService() {
                 val v=row.getChildAt(i)
                 if(v !is Button)continue
                 val layout=v.layoutParams
-                val bonus=KeyboardPresetCatalog.controlHeightBonus(v.tag as? String ?: "")
-                val actual=d((height+offset+bonus).coerceAtLeast(30))
+                val token=v.tag as? String ?: ""
+                val bonus=KeyboardPresetCatalog.controlHeightBonus(token)+
+                    (if(token=="SPACE")12 else 0)
+                val actual=d(((height+offset+bonus)*
+                    KeyPopKeyGeometry.heightPercent(this,language,-1,-1,token)/100f)
+                    .toInt().coerceAtLeast(30))
                 if(layout.height!=actual) {layout.height=actual;v.layoutParams=layout}
             }
             row.requestLayout()
@@ -1366,7 +1373,16 @@ class AetherImeService : InputMethodService() {
             root.addView(bar,LinearLayout.LayoutParams(-1,d(
                 if(materialToolbar)preferred else preferred.coerceAtLeast(38))))
             suggestionBar=bar
-            refreshSuggestions()
+            // Precreate the strip and populate it after the IME attaches.
+            for(i in 0 until 3) {
+                val chip=chip(if(i==1)"Start typing" else ""){}
+                chip.textSize=prefs.getInt("suggestionFont",17).coerceIn(12,24).toFloat()
+                bar.addView(chip,LinearLayout.LayoutParams(0,d(preferred),1f).apply {
+                    leftMargin=d(2);rightMargin=d(2)
+                })
+            }
+            bar.visibility=View.VISIBLE
+            requestSuggestionRefresh(0)
         }
         if(cursorTools) {
             val tools=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
@@ -1497,10 +1513,14 @@ class AetherImeService : InputMethodService() {
             keyViews.add(button to label)
             val indexInLayout=if(layoutRow==2 && label !in setOf("⇧","⌫"))index-1
                 else if(label in setOf("⇧","⌫"))-1 else index
-            val widthFactor=if(layoutRow>=0 && indexInLayout>=0)
-                KeyPopKeyGeometry.width(this,layoutLanguage,layoutRow,indexInLayout)/100f else 1f
-            val bonus=KeyboardPresetCatalog.controlHeightBonus(label)
-            row.addView(button,LinearLayout.LayoutParams(0,d(height+bonus),weight*widthFactor).apply {
+            val widthFactor=KeyPopKeyGeometry.widthPercent(this,layoutLanguage,
+                layoutRow,indexInLayout,label)/100f
+            val bonus=KeyboardPresetCatalog.controlHeightBonus(label)+
+                (if(label=="SPACE")12 else 0)
+            val actualHeight=((height+bonus)*
+                KeyPopKeyGeometry.heightPercent(this,layoutLanguage,layoutRow,
+                    indexInLayout,label)/100f).toInt().coerceAtLeast(30)
+            row.addView(button,LinearLayout.LayoutParams(0,d(actualHeight),weight*widthFactor).apply {
                 leftMargin=d(gap/2); rightMargin=d(gap/2)
                 // Fixed row heights used to hide the enlarged controls:
                 // painted 8dp taller caps now participate in row measurement.
