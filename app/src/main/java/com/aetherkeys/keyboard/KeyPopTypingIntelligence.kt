@@ -66,10 +66,10 @@ object KeyPopTypingIntelligence {
             "مهرباني" to listOf("ڪري"),"توهان" to listOf("ڪيئن","جو"),
             "مان" to listOf("ٺيڪ","اڄ"),"سلام" to listOf("عليڪم"),
             "سڀاڻي" to listOf("صبح")))
-    fun list(language:Int):List<String> = when(language) {
+    fun list(language:Int):List<String> = (when(language) {
         1->urdu;2->sindhi;else->english
-    }
-    private fun normalized(value:String)=value.trim().lowercase(Locale.ROOT)
+    }+KeyPopRegionalWordBank.words(language)).distinct()
+    private fun normalized(value:String)=KeyPopUnicodeWords.normalize(value.trim())
     // High-confidence corrections for common neighbouring-key, dropped-key
     // and transposition mistakes; never transmit typed text to a server.
     private val commonTypos=mapOf(

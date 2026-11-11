@@ -20,6 +20,14 @@ object KeyPopTypingRules {
             InputType.TYPE_TEXT_VARIATION_PHONETIC
         )
     }
+    /** Fields that opt out of suggestions must never be sent through the
+     * prediction, dictionary-learning or personal-history pipeline. */
+    fun textAllowsSuggestions(inputType:Int):Boolean =
+        textAllowsAutomaticChanges(inputType)
+
+    fun textAllowsLearning(inputType:Int):Boolean =
+        textAllowsAutomaticChanges(inputType)
+
     fun autocorrectEnabled(toggle:Boolean,inputType:Int):Boolean =
         toggle && textAllowsAutomaticChanges(inputType)
     fun autoPunctuationEnabled(toggle:Boolean,inputType:Int):Boolean =

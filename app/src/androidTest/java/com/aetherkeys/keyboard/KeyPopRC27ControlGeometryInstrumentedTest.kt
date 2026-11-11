@@ -81,16 +81,16 @@ class KeyPopRC27ControlGeometryInstrumentedTest {
     }
 
     @Test fun installedPreviewHasCorrectVisibleLauncherAndKeyboardIdentity() {
-        assertEquals("com.aetherkeys.keyboard.previewv127",context.packageName)
+        assertEquals("com.aetherkeys.keyboard.previewv133",context.packageName)
         assertTrue("Android launcher still identifies old RC23 preview",
             context.applicationInfo.loadLabel(context.packageManager)
-                .toString().contains("RC27"))
+                .toString().contains("RC33"))
         @Suppress("DEPRECATION")
         val services=context.packageManager.getPackageInfo(
             context.packageName,PackageManager.GET_SERVICES).services.orEmpty()
         val ime=services.firstOrNull { it.name.endsWith("AetherImeService") }
         assertNotNull("IME service omitted",ime)
         assertTrue("Android keyboard picker still labels RC23",
-            ime!!.loadLabel(context.packageManager).toString().contains("RC27"))
+            ime!!.loadLabel(context.packageManager).toString().contains("RC33"))
     }
 }

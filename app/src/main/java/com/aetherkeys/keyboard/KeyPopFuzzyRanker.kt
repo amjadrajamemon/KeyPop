@@ -81,16 +81,20 @@ object KeyPopFuzzyRanker {
     fun automatic(matches:List<Match>,aggressive:Boolean=true):String? {
         val best=matches.firstOrNull()?:return null
         val runnerUp=matches.getOrNull(1)
-        val margin=if(runnerUp==null)Int.MAX_VALUE else best.score-runnerUp.score
-        // Aggressive mode spends confidence on clear typos, never close ties.
-        // The existing settings toggle affects correction strictness as well
-        // as the number of presented prediction candidates.
+        // The absence of a runner-up is NOT proof of confidence: an indexed
+        // search may simply have failed to retrieve the true intended word.
+        val margin=if(runnerUp==null)0 else best.score-runnerUp.score
         val oneEditMargin=if(aggressive)32 else 55
         val twoEditMargin=if(aggressive)75 else 115
         return when {
             best.tier>20 ->null
-            best.distance==1 && margin>=oneEditMargin ->best.word
-            best.distance==2 && best.tier<=10 && margin>=twoEditMargin ->best.word
+            runnerUp==null && best.distance==1 &&
+                best.tier<=10 && best.score>=380 ->best.word
+            runnerUp==null ->null
+            best.distance==1 && best.score>=315 &&
+                margin>=oneEditMargin ->best.word
+            best.distance==2 && best.tier<=10 && best.score>=245 &&
+                margin>=twoEditMargin ->best.word
             else ->null
         }
     }

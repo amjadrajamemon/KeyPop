@@ -14,6 +14,11 @@ class KeyPopLexicon(context:Context) {
     private data class RankedWord(val word:String,val tier:Int)
     @Volatile private var scowlReady=false
     private val firstLetterIndex=HashMap<Char,List<RankedWord>>()
+    // Common-word deletion index recovers missing leading letters without
+    // scanning all 39,000 SCOWL forms on every keystroke.
+    private val deleteIndex=HashMap<String,MutableList<RankedWord>>()
+    private val glideIndex=HashMap<String,MutableList<RankedWord>>()
+    @Volatile private var recentFuzzy:Pair<String,List<KeyPopFuzzyRanker.Match>>?=null
     private val scowlIndex by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         val index=HashMap<String,MutableList<RankedWord>>()
         val oneLetter=HashMap<Char,MutableList<RankedWord>>()
@@ -29,6 +34,15 @@ class KeyPopLexicon(context:Context) {
                     if(word.length !in 2..24 || word.any { !it.isLetter() })return@forEach
                     val item=RankedWord(word,tier)
                     index.getOrPut(word.take(2)){ArrayList()}.add(item)
+                    if(tier<=20 && word.length in 3..17) {
+                        val gestureKey=""+word.first()+word.last()
+                        glideIndex.getOrPut(gestureKey){ArrayList()}.add(item)
+                    }
+                    if(tier<=10 && word.length in 3..16)for(i in word.indices) {
+                        val key=word.removeRange(i,i+1)
+                        val items=deleteIndex.getOrPut(key){ArrayList()}
+                        if(items.size<32)items.add(item)
+                    }
                     if(tier<=10)oneLetter.getOrPut(word[0]){ArrayList()}.add(item)
                 }
             }
@@ -93,18 +107,26 @@ class KeyPopLexicon(context:Context) {
         val keys=linkedSetOf(input.take(2),""+input[1]+input[0])
         for(letter in nearby(input[0]))keys.add(""+letter+input[1])
         for(letter in nearby(input[1]))keys.add(""+input[0]+letter)
-        return keys.asSequence()
+        val deletes=(sequenceOf(input)+input.indices.asSequence()
+            .map{input.removeRange(it,it+1)}).distinct()
+        val fromDeletes=deletes.flatMap{deleteIndex[it].orEmpty().asSequence()}
+        val fromBuckets=keys.asSequence()
             .flatMap{scowlIndex[it].orEmpty().asSequence()}
+        return (fromDeletes+fromBuckets)
             .filter { it.tier<=35 &&
                 kotlin.math.abs(it.word.length-input.length)<=2 }
             .distinctBy{it.word}
-            .take(2200)
+            .take(2400)
             .map{it.word to it.tier}
     }
 
     private fun rankedFuzzy(input:String,beforeCursor:String):List<KeyPopFuzzyRanker.Match> {
+        val key=input+"|"+beforeCursor.takeLast(80)
+        recentFuzzy?.let{if(it.first==key)return it.second}
         val context=KeyPopPredictionContext.parse(beforeCursor,input)
-        return KeyPopFuzzyRanker.rank(input,fuzzyCandidates(input),context,8)
+        val ranked=KeyPopFuzzyRanker.rank(input,fuzzyCandidates(input),context,8)
+        recentFuzzy=key to ranked
+        return ranked
     }
 
     private val store=context.getSharedPreferences("keypop_lexicon",Context.MODE_PRIVATE)
@@ -230,7 +252,9 @@ class KeyPopLexicon(context:Context) {
             .take(limit.coerceIn(1,8))
     }
     fun nextWords(lang:Int,previous:String,beforeCursor:String=""):List<String> =
-        KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor)
+        (KeyPopContextPhraseModel.suggest(lang,beforeCursor,6)+
+            KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor))
+            .distinct().take(8)
     /**
      * Spacebar fast path: only constant-time verified substitutions. The full
      * SCOWL edit-distance ranking runs on the prediction worker, never here.
@@ -272,19 +296,43 @@ class KeyPopLexicon(context:Context) {
             rankedFuzzy(normalized,beforeCursor),
             prefs.getBoolean("aggressivePredictions",true))
     }
+    /** Frequent-word glide decoder indexed by starting and ending keys.
+     * Repeated letters are collapsed because a finger traces each key once
+     * ("helo" can legitimately mean "hello"). No full dictionary scan or
+     * Android IPC is performed on the touch dispatch path. */
     fun glide(lang:Int,path:List<String>):String? {
         if(lang!=0 || path.size<3)return null
-        val sequence=path.joinToString("").lowercase(Locale.ROOT)
-        val start=sequence.firstOrNull() ?:return null
-        val end=sequence.lastOrNull() ?:return null
-        fun isSubsequence(word:String):Boolean {
-            var i=0
-            for(ch in sequence)if(i<word.length && word[i]==ch)i++
-            return i==word.length
+        val trace=path.map{it.lowercase(Locale.ROOT)}
+            .filter{it.length==1 && it[0] in 'a'..'z'}
+            .joinToString("")
+        if(trace.length<3)return null
+        val first=trace.first();val last=trace.last()
+        fun compact(text:String):String=buildString {
+            for(c in text)if(isEmpty()||last()!=c)append(c)
         }
-        return (words(lang)+KeyPopTypingIntelligence.list(lang)).asSequence().filter {
-            it.length>=3 && it.first()==start && it.last()==end && isSubsequence(it)
-        }.minByOrNull { kotlin.math.abs(it.length-sequence.length) }
+        fun skipped(word:String):Int? {
+            val expected=compact(word)
+            if(expected.firstOrNull()!=first || expected.lastOrNull()!=last)return null
+            var pos=0
+            for(char in trace)if(pos<expected.length && char==expected[pos])pos++
+            return if(pos==expected.length)trace.length-expected.length else null
+        }
+        val familiar=if(scowlReady)glideIndex[""+first+last].orEmpty()
+            else emptyList()
+        val custom=words(lang).asSequence().filter {
+            it.length in 3..17 && it.firstOrNull()==first &&
+                it.lastOrNull()==last
+        }.map{RankedWord(it,10)}
+        return (familiar.asSequence()+custom)
+            .distinctBy{it.word}
+            .mapNotNull { item ->
+                val excess=skipped(item.word)?:return@mapNotNull null
+                val score=(if(item.tier<=10)120 else 65)-
+                    excess*17-kotlin.math.abs(item.word.length-trace.length)*3
+                item.word to score
+            }
+            .maxWithOrNull(compareBy<Pair<String,Int>>{it.second}
+                .thenByDescending{it.first.length})?.first
     }
     private fun editDistanceAtMost2(a:String,b:String):Int {
         if(kotlin.math.abs(a.length-b.length)>2)return 3

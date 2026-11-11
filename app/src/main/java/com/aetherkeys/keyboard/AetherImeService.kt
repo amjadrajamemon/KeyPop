@@ -66,7 +66,7 @@ class AetherImeService : InputMethodService() {
     private var contextCacheMisses=0
     private var lastKeyboardTouchAt=0L
     private var lastKnownSelection:Int?=null
-    private val trailingWordPattern=Regex("[\\p{L}]+$")
+    private val trailingWordPattern=Regex("[\\p{L}\\p{M}]+(?:['’][\\p{L}\\p{M}]+)*$")
     // Cache immutable visual primitives once per keyboard rebuild, not per key.
     private var renderSkin:KeyPopSkin?=null
     private var regularKeyBackground:android.graphics.drawable.Drawable?=null
@@ -85,6 +85,7 @@ class AetherImeService : InputMethodService() {
     private data class AppliedCorrection(val original:String,val corrected:String,
         val editor:String,val time:Long)
     private var lastAppliedCorrection:AppliedCorrection?=null
+    private var lastRejectedCorrection:Pair<String,String>?=null
     private val keyViews=ArrayList<Pair<Button,String>>()
     private val imagePreviewExecutor=Executors.newFixedThreadPool(2)
     private val screenshotArchiveExecutor=Executors.newSingleThreadExecutor()
@@ -399,6 +400,7 @@ class AetherImeService : InputMethodService() {
         contextCacheMisses=0
         stopScreenshotObserver()
         lastAppliedCorrection=null
+        lastRejectedCorrection=null
         stopBackspaceRepeating()
         predictionGeneration++
         predictionPending?.let{predictionHandler.removeCallbacks(it)}
@@ -420,6 +422,7 @@ class AetherImeService : InputMethodService() {
         latestSpaceAdvice=null
         lastKnownSelection=info?.initialSelStart?.takeIf{it>=0}
         lastAppliedCorrection=null
+        lastRejectedCorrection=null
         val viewStart=SystemClock.elapsedRealtimeNanos()
         super.onStartInputView(info,restarting)
         stopLiveTranslation()
@@ -1902,7 +1905,8 @@ class AetherImeService : InputMethodService() {
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
         val input=currentInputConnection ?:return
-        if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo)) {
+        if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo) ||
+            !KeyPopTypingRules.textAllowsSuggestions(currentInputEditorInfo?.inputType?:0)) {
             predictionGeneration++
             predictionPending?.let{predictionHandler.removeCallbacks(it)}
             bar.visibility=View.GONE
@@ -1922,6 +1926,7 @@ class AetherImeService : InputMethodService() {
             translatorOpen && translateSourceChoice in 0..2 -> translateSourceChoice
             translatorOpen && word.isNotBlank() -> KeyPopTextLanguage.detect(word,language)
             language!=0 && prefs.getBoolean("romanMode",false) -> 0
+            word.isNotBlank() -> KeyPopTextLanguage.detect(word,language)
             else -> language
         }
         val key="$language|$translatorOpen|$predLang|$before|$nextWords"
@@ -1963,11 +1968,18 @@ class AetherImeService : InputMethodService() {
                         previous=previous,
                         beforeCursor=if(prefs.getBoolean("contextPredictions",true))
                             before else "")
-                val values=(personal+dictionary).distinct().take(8)
-                // The Auto-correct switch governs replacements only;
-                // spelling suggestions remain available when it is OFF.
+                // The Auto-correct switch governs replacements only.
+                // All sources must compete in one ranking instead of placing
+                // every personal candidate ahead of every dictionary result.
                 val spelling=if(word.length>=3)
                     lexicon.correction(predLang,word,before) else null
+                val feedback=if(word.length>=3)
+                    runCatching{personalLanguage.rejectionWeights(
+                        predLang,word,(personal+dictionary+listOfNotNull(spelling)).distinct())}
+                        .getOrDefault(emptyMap()) else emptyMap()
+                val safeSpelling=spelling?.takeUnless{(feedback[it]?:0)>=2}
+                val values=KeyPopUnifiedPrediction.rank(predLang,word,before,
+                    personal,dictionary,safeSpelling,feedback,8)
                 val grammar=if(word.isNotEmpty() && prefs.getBoolean("grammarHints",true))
                     KeyPopGrammarRules.suggest(before,predLang) else null
                 KeyPopDiagnostics.observePredictionCompute(this,
@@ -1976,8 +1988,8 @@ class AetherImeService : InputMethodService() {
                 predictionHandler.post {
                     if(token!=predictionGeneration || lastSuggestionContext!=key ||
                         bar!==suggestionBar || sensitive(currentInputEditorInfo))return@post
-                    latestSpaceAdvice=SpaceAdvice(predLang,before,word,spelling,grammar)
-                    renderSuggestions(bar,before,word,predLang,values,spelling,grammar)
+                    latestSpaceAdvice=SpaceAdvice(predLang,before,word,safeSpelling,grammar)
+                    renderSuggestions(bar,before,word,predLang,values,safeSpelling,grammar)
                 }
             }
         }
@@ -2032,6 +2044,8 @@ class AetherImeService : InputMethodService() {
             if(!accepted)return
             learnAsync(predLang,replacement)
             learnPersonalAsync(predLang,before.dropLast(word.length),replacement)
+            if(!replacement.equals(actual,ignoreCase=true))
+                correctionFeedbackAsync(predLang,actual,replacement,true)
             refreshSuggestions()
         }
         val offers=mutableListOf<Pair<String,()->Unit>>()
@@ -2097,14 +2111,16 @@ class AetherImeService : InputMethodService() {
     }
     /** Dictionary/user-learning writes are never performed on the key UI thread. */
     private fun learnAsync(lang:Int,word:String) {
-        if(word.isBlank() || predictionExecutor.isShutdown)return
+        if(word.isBlank() || predictionExecutor.isShutdown ||
+            sensitive(currentInputEditorInfo) ||
+            !KeyPopTypingRules.textAllowsLearning(currentInputEditorInfo?.inputType?:0))return
         predictionExecutor.execute {runCatching{lexicon.learn(lang,word)}}
     }
     /** Learns only explicitly committed words, never pasted clipboard text,
      * previous chat messages, password fields, URLs or email inputs. */
     private fun learnPersonalAsync(lang:Int,before:String,committed:String) {
         if(predictionExecutor.isShutdown || sensitive(currentInputEditorInfo) ||
-            !KeyPopTypingRules.textAllowsAutomaticChanges(
+            !KeyPopTypingRules.textAllowsLearning(
                 currentInputEditorInfo?.inputType?:0))return
         if(!prefs.getBoolean("personalHistoryLearning",true))return
         val parts=committed.trim().split(Regex("\\s+"))
@@ -2117,6 +2133,17 @@ class AetherImeService : InputMethodService() {
             }
         }
     }
+    /** Feedback storage uses HMAC identities, never plaintext typed histories. */
+    private fun correctionFeedbackAsync(lang:Int,source:String,target:String,
+                                        accepted:Boolean) {
+        if(sensitive(currentInputEditorInfo) ||
+            !KeyPopTypingRules.textAllowsLearning(
+                currentInputEditorInfo?.inputType?:0))return
+        personalLearningExecutor.execute {
+            runCatching{personalLanguage.feedback(lang,source,target,accepted)}
+        }
+    }
+
     private fun press(value:String) {
         val pressStart=SystemClock.elapsedRealtimeNanos()
         lastKeyboardTouchAt=SystemClock.uptimeMillis()
@@ -2126,7 +2153,9 @@ class AetherImeService : InputMethodService() {
             if(value=="↵") {translateBeforeSend();return}
             if(value=="SPACE" && prefs.getBoolean("autoCorrect",true)) {
                 val fragment=trailingWordPattern.find(translateDraft)?.value.orEmpty()
-                val corrected=lexicon.correction(language,fragment)
+                val corrected=latestSpaceAdvice?.takeIf {
+                    it.language==language && it.word==fragment
+                }?.correction ?:lexicon.fastCorrection(language,fragment)
                 if(corrected!=null) {
                     translateDraft=translateDraft.dropLast(fragment.length)+
                         KeyPopPredictionContext.wordCase(corrected,fragment,translateDraft)
@@ -2167,6 +2196,11 @@ class AetherImeService : InputMethodService() {
                 if(entry!=null && entry.editor==currentInputEditorInfo?.packageName &&
                     KeyPopTypingRules.canUndoRecentCorrection(preceding,entry.original,
                         entry.corrected,SystemClock.elapsedRealtime()-entry.time)) {
+                    lastRejectedCorrection=entry.original to entry.corrected
+                    val feedbackLanguage=if(language!=0 &&
+                        prefs.getBoolean("romanMode",false))0 else language
+                    correctionFeedbackAsync(feedbackLanguage,entry.original,
+                        entry.corrected,false)
                     connection?.beginBatchEdit()
                     connection?.deleteSurroundingText(entry.corrected.length+1,0)
                     connection?.commitText(entry.original,1)
@@ -2225,8 +2259,10 @@ class AetherImeService : InputMethodService() {
                     val before=currentInputConnection?.let{readContext(it,48)}.orEmpty()
                     val word=trailingWordPattern.find(before)?.value.orEmpty()
                     if(word.isNotBlank()) {
-                        val predLang=if(language!=0 &&
-                            prefs.getBoolean("romanMode",false))0 else language
+                        // Roman key events are Latin, but after a Space
+                        // converts the word, store the resulting word under
+                        // its native Urdu/Sindhi language, not English.
+                        val predLang=language
                         val inputType=currentInputEditorInfo?.inputType?:0
                         val corrected=if(KeyPopTypingRules.autocorrectEnabled(
                                 prefs.getBoolean("autoCorrect",true),inputType)) {
@@ -2236,7 +2272,9 @@ class AetherImeService : InputMethodService() {
                                 it.language==predLang && it.word==word &&
                                     it.before.takeLast(48)==before
                             }?.correction
-                            val candidate=cached ?:lexicon.fastCorrection(predLang,word)
+                            val candidate=(cached ?:lexicon.fastCorrection(predLang,word))
+                                ?.takeUnless{lastRejectedCorrection==
+                                    (word to it)}
                             if(!prefs.getBoolean("correctMissingSpaces",true) &&
                                 candidate?.contains(' ')==true)
                                 null else candidate
@@ -2251,7 +2289,7 @@ class AetherImeService : InputMethodService() {
                                 it.language==predLang && it.before.takeLast(48)==before
                             }?.grammar ?: KeyPopGrammarRules.suggest(before,predLang)
                             else null
-                        val committed=if(grammar!=null &&
+                        val committed=if(grammar!=null && grammar.automatic &&
                             grammar.remove<=before.length) {
                             editorContext.clear()
                             currentInputConnection?.deleteSurroundingText(grammar.remove,0)

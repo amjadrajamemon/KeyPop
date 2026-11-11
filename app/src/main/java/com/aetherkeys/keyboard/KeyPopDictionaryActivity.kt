@@ -51,7 +51,7 @@ class KeyPopDictionaryActivity:Activity() {
         root.removeAllViews()
         add(label("KEYPOP  /  PERSONAL DICTIONARY",12f,accent),4)
         add(label("Words that matter to you",25f),4)
-        add(label("Edit learned words by language. Everything stays on-device; learning from typing is off until you enable it.",13f,dim),16)
+        add(label("Manage personal words and local learning. Learning follows the switch below; disable it at any time.",13f,dim),16)
         val options=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
         KeyPopLayouts.languages.forEachIndexed{index,name->
             val control=button(name){language=index;render()}
@@ -64,7 +64,7 @@ class KeyPopDictionaryActivity:Activity() {
         val toggle=Switch(this).apply{
             text="Learn new words automatically"
             setTextColor(white);textSize=14f
-            isChecked=preferences.getBoolean("learningEnabled",false)
+            isChecked=preferences.getBoolean("learningEnabled",true)
             setOnCheckedChangeListener {_,checked->
                 preferences.edit().putBoolean("learningEnabled",checked).apply()
             }
@@ -122,6 +122,29 @@ class KeyPopDictionaryActivity:Activity() {
                 .setPositiveButton("Clear"){_,_->lexicon.clearLearned(language);showWords()}
                 .show()
         },10)
+        add(button("Erase all learned words and personal typing patterns") {
+            AlertDialog.Builder(this)
+                .setTitle("Erase all personalized typing history?")
+                .setMessage("This removes learned words in English, Urdu and Sindhi, "+
+                    "encrypted phrase frequencies and correction feedback. "+
+                    "The built-in dictionary and clipboard remain untouched.")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Erase") {_,_->
+                    Thread {
+                        val result=runCatching {
+                            for(lang in 0..2)lexicon.clearLearned(lang)
+                            KeyPopPersonalLanguageModel(applicationContext).clear()
+                        }
+                        runOnUiThread {
+                            Toast.makeText(this,
+                                if(result.isSuccess)"Personal typing history erased"
+                                else "Unable to clear personal typing history",
+                                Toast.LENGTH_LONG).show()
+                            if(result.isSuccess)showWords()
+                        }
+                    }.start()
+                }.show()
+        },8)
         add(button("Done"){finish()})
     }
 }

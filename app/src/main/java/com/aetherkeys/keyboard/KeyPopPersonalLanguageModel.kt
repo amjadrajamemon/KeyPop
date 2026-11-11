@@ -25,7 +25,7 @@ import javax.crypto.spec.GCMParameterSpec
 class KeyPopPersonalLanguageModel(context:Context) {
     private val app=context.applicationContext
     private val prefs=app.getSharedPreferences("keypop",Context.MODE_PRIVATE)
-    private val helper=object:SQLiteOpenHelper(app,"keypop_personal_phrases.db",null,1) {
+    private val helper=object:SQLiteOpenHelper(app,"keypop_personal_phrases.db",null,2) {
         override fun onCreate(db:SQLiteDatabase) {
             db.execSQL("CREATE TABLE next_words ("+
                 "context_id TEXT NOT NULL, word_id TEXT NOT NULL, "+
@@ -33,9 +33,19 @@ class KeyPopPersonalLanguageModel(context:Context) {
                 "last_seen INTEGER NOT NULL, "+
                 "PRIMARY KEY(context_id,word_id))")
             db.execSQL("CREATE INDEX idx_next_words ON next_words(context_id, uses DESC)")
+            createFeedback(db)
+        }
+        private fun createFeedback(db:SQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS correction_feedback ("+
+                "lang INTEGER NOT NULL, source_id TEXT NOT NULL, target_id TEXT NOT NULL, "+
+                "accepted INTEGER NOT NULL DEFAULT 0, undone INTEGER NOT NULL DEFAULT 0, "+
+                "last_seen INTEGER NOT NULL, "+
+                "PRIMARY KEY(lang,source_id,target_id))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_feedback_source "+
+                "ON correction_feedback(lang,source_id)")
         }
         override fun onUpgrade(db:SQLiteDatabase,old:Int,new:Int) {
-            error("Unsupported personal dictionary schema: protect existing data")
+            if(old<2)createFeedback(db)
         }
     }
     private val secureKey:SecretKey by lazy {
@@ -75,30 +85,35 @@ class KeyPopPersonalLanguageModel(context:Context) {
         c.init(Cipher.DECRYPT_MODE,aesKey,GCMParameterSpec(128,data.copyOfRange(0,12)))
         return String(c.doFinal(data.copyOfRange(12,data.size)),Charsets.UTF_8)
     }
+    // Most users have no explicit correction feedback. Avoid a SQLite read
+    // on every prediction for an empty feedback table.
+    private var feedbackPresent:Boolean?=null
     private var cachedContextKey:String?=null
     private var cachedWords:List<String> = emptyList()
-    private val tokenize=Regex("[\\p{L}]{2,28}")
-    private fun normalize(value:String):String=value.lowercase(Locale.ROOT)
+    private val tokenize=Regex("[\\p{L}\\p{M}]+(?:['’][\\p{L}\\p{M}]+)*")
+    private fun normalize(value:String):String=KeyPopUnicodeWords.normalize(value)
     private fun words(text:String):List<String> =
-        tokenize.findAll(normalize(text.takeLast(240))).map{it.value}.take(40).toList()
+        tokenize.findAll(normalize(text.takeLast(240))).map{it.value}
+            .filter{it.length in 2..28}.take(40).toList()
     /** Never memorize numeric, URL-like, email-like, command or suspicious text. */
     fun canLearn(text:String,word:String):Boolean {
         val context=text.takeLast(100)
-        return word.length in 2..28 && word.all{it.isLetter()} &&
+        return KeyPopUnicodeWords.isToken(word) &&
             !context.any{it.isDigit()} &&
             listOf("@","://","/","\\","=","#","[","]","{","}").none{it in context} &&
             context.none{it=='\n'||it=='\r'}
     }
     private fun contexts(language:Int,words:List<String>):List<String> {
         if(words.isEmpty())return emptyList()
-        val last=words.takeLast(2)
+        val last=words.takeLast(3)
         val one="l$language|"+last.last()
-        // Trigram > bigram > personal global frequency. This is why
-        // repeated words can reappear outside their original sentence.
         val global="l$language|*"
-        return if(last.size>=2)
-            listOf("l$language|"+last.joinToString("|"),one,global)
-            else listOf(one,global)
+        return when {
+            last.size>=3 -> listOf("l$language|"+last.joinToString("|"),
+                "l$language|"+last.takeLast(2).joinToString("|"),one,global)
+            last.size==2 -> listOf("l$language|"+last.joinToString("|"),one,global)
+            else ->listOf(one,global)
+        }
     }
     /** Pass a snapshot fetched once on Space, not a live InputConnection. */
     @Synchronized fun observe(language:Int,before:String,committed:String) {
@@ -190,7 +205,7 @@ class KeyPopPersonalLanguageModel(context:Context) {
             val all=words(segment)
             if(all.size !in 2..75)continue
             for(i in 1 until all.size) {
-                val history=all.subList((i-2).coerceAtLeast(0),i)
+                val history=all.subList((i-3).coerceAtLeast(0),i)
                 val context=history.joinToString(" ")+" "
                 if(canLearn(context,all[i])){
                     observe(language,context,all[i])
@@ -200,7 +215,60 @@ class KeyPopPersonalLanguageModel(context:Context) {
         }
         return added
     }
+    /** Explicit acceptance or immediate undo trains the correction policy,
+     * without storing raw text: source/target use keyed HMAC identifiers. */
+    @Synchronized fun feedback(language:Int,original:String,replacement:String,
+                               accepted:Boolean) {
+        if(!prefs.getBoolean("learningEnabled",true) ||
+            !prefs.getBoolean("personalHistoryLearning",true))return
+        val source=normalize(original);val target=normalize(replacement)
+        if(source.length !in 2..28 || target.length !in 2..28 ||
+            !KeyPopUnicodeWords.isToken(source) ||
+            !KeyPopUnicodeWords.isToken(target))return
+        feedbackPresent=true
+        val a=signature("source|"+source)
+        val b=signature("target|"+target)
+        val db=helper.writableDatabase
+        db.execSQL("INSERT OR IGNORE INTO correction_feedback "+
+            "(lang,source_id,target_id,accepted,undone,last_seen) VALUES (?,?,?,0,0,?)",
+            arrayOf(language,a,b,System.currentTimeMillis()))
+        db.execSQL("UPDATE correction_feedback SET "+
+            (if(accepted)"accepted=MIN(accepted+1,10000)" else
+                "undone=MIN(undone+1,10000)")+
+            ", last_seen=? WHERE lang=? AND source_id=? AND target_id=?",
+            arrayOf(System.currentTimeMillis(),language,a,b))
+    }
+    /** Read on background predictor only, never the keypress thread. */
+    @Synchronized fun rejectionWeights(language:Int,original:String,
+                              candidates:List<String>):Map<String,Int> {
+        if(!prefs.getBoolean("personalHistoryLearning",true) ||
+            !prefs.getBoolean("learningEnabled",true) ||
+            original.length !in 3..28 || candidates.isEmpty())return emptyMap()
+        if(feedbackPresent==null) {
+            helper.readableDatabase.rawQuery(
+                "SELECT 1 FROM correction_feedback LIMIT 1",null).use {
+                feedbackPresent=it.moveToFirst()
+            }
+        }
+        if(feedbackPresent!=true)return emptyMap()
+        val id=signature("source|"+normalize(original))
+        val records=HashMap<String,Int>()
+        helper.readableDatabase.query("correction_feedback",
+            arrayOf("target_id","accepted","undone"),"lang=? AND source_id=?",
+            arrayOf(language.toString(),id),null,null,null,"64").use{cursor->
+            while(cursor.moveToNext())
+                records[cursor.getString(0)]=
+                    (cursor.getInt(2)*2-cursor.getInt(1)).coerceAtLeast(0)
+        }
+        return candidates.associateWith{
+            records[signature("target|"+normalize(it))]?:0
+        }.filterValues{it>0}
+    }
     @Synchronized fun clear() {
         helper.writableDatabase.delete("next_words",null,null)
+        helper.writableDatabase.delete("correction_feedback",null,null)
+        feedbackPresent=false
+        cachedContextKey=null
+        cachedWords=emptyList()
     }
 }
