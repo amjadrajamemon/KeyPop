@@ -601,6 +601,194 @@ class MainActivity:Activity() {
             }
         }
     }
+    /** Settings preview renders using exactly the same styling functions as
+     * the active IME; every adjustment repaints while the dialog stays open. */
+    private fun suggestionAppearanceEditor() {
+        val column=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(13),dp(9),dp(13),dp(12))
+        }
+        val previewContainer=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(6),dp(6),dp(6),dp(8))
+            background=shape(card,12,edge)
+        }
+        column.addView(text("LIVE PREVIEW · Placement relative to toolbar",13f,accent,true))
+        column.addView(previewContainer,LinearLayout.LayoutParams(-1,dp(117)).apply {
+            bottomMargin=dp(8)
+        })
+        fun updatePreview() {
+            previewContainer.removeAllViews()
+            val toolbar=TextView(this).apply {
+                text="▦   Clipboard     ✦   Translate     ⚙   Settings"
+                textSize=12f
+                gravity=Gravity.CENTER
+                setTextColor(ink)
+                background=shape(0xFF334D60.toInt(),9)
+            }
+            val toolbarParams=LinearLayout.LayoutParams(-1,dp(41))
+            val prediction=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            for(word in listOf("improved","improvements","improving")) {
+                val key=android.widget.Button(this).apply {
+                    text=word;isAllCaps=false;setOnClickListener{}
+                }
+                KeyPopSuggestionStyle.addChip(this,prediction,key)
+            }
+            KeyPopSuggestionStyle.applyRow(this,prediction)
+            val rowParams=LinearLayout.LayoutParams(-1,dp(
+                KeyPopSuggestionStyle.heightDp(this))).apply{
+                topMargin=dp(3)
+            }
+            if(KeyPopSuggestionStyle.position(this)==KeyPopSuggestionStyle.ABOVE_TOOLBAR) {
+                previewContainer.addView(prediction,rowParams)
+                previewContainer.addView(toolbar,toolbarParams)
+            }else {
+                previewContainer.addView(toolbar,toolbarParams)
+                previewContainer.addView(prediction,rowParams)
+            }
+        }
+        fun save(key:String,value:Int) {
+            prefs.edit().putInt(key,value).apply()
+            updatePreview()
+        }
+        fun colorEditor(title:String,prefKey:String,initial:Int) {
+            val rgb=LinearLayout(this).apply{
+                orientation=LinearLayout.VERTICAL
+                setPadding(dp(12),dp(5),dp(12),dp(8))
+            }
+            val channels=intArrayOf(Color.red(initial),Color.green(initial),
+                Color.blue(initial))
+            val header=text("Color: #"+String.format("%06X",initial and 0xFFFFFF),
+                15f,ink,true)
+            rgb.addView(header)
+            listOf("Red","Green","Blue").forEachIndexed {index,name->
+                val label=text(name+": "+channels[index],13f,ink)
+                rgb.addView(label)
+                val slider=SeekBar(this).apply {
+                    max=255;progress=channels[index]
+                    contentDescription=name+" channel for "+title
+                    setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+                        override fun onProgressChanged(bar:SeekBar?,n:Int,user:Boolean){
+                            if(!user)return
+                            channels[index]=n
+                            label.text=name+": "+n
+                            val color=Color.rgb(channels[0],channels[1],channels[2])
+                            header.text="Color: #"+String.format("%06X",
+                                color and 0xFFFFFF)
+                            prefs.edit().putInt("suggestionPalette",6)
+                                .putInt(prefKey,color).apply()
+                            updatePreview()
+                        }
+                        override fun onStartTrackingTouch(bar:SeekBar?){}
+                        override fun onStopTrackingTouch(bar:SeekBar?){}
+                    })
+                }
+                rgb.addView(slider)
+            }
+            AlertDialog.Builder(this).setTitle(title)
+                .setView(rgb).setPositiveButton("Done",null).show()
+        }
+        column.addView(text("Position",14f,ink,true))
+        val placements=android.widget.RadioGroup(this).apply {
+            orientation=android.widget.RadioGroup.HORIZONTAL
+        }
+        listOf("Above toolbar","Below toolbar").forEachIndexed{index,name->
+            val radio=android.widget.RadioButton(this).apply {
+                text=name;textSize=13f;setTextColor(ink)
+                id=android.view.View.generateViewId()
+                isChecked=KeyPopSuggestionStyle.position(this@MainActivity)==index
+                setOnClickListener{save("suggestionPosition",index)}
+            }
+            placements.addView(radio,android.widget.RadioGroup.LayoutParams(
+                0,dp(42),1f))
+        }
+        column.addView(placements)
+        column.addView(text("Color theme",14f,ink,true))
+        val palettePanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+        KeyPopSuggestionStyle.paletteNames.forEachIndexed{index,name->
+            val radio=android.widget.RadioButton(this).apply {
+                text=name;textSize=13f;setTextColor(ink)
+                isChecked=KeyPopSuggestionStyle.palette(this@MainActivity)==index
+                setOnClickListener{save("suggestionPalette",index)}
+            }
+            palettePanel.addView(radio)
+        }
+        // Exclusive selection across all seven theme choices.
+        val paletteGroup=android.widget.RadioGroup(this).apply {
+            orientation=android.widget.RadioGroup.VERTICAL
+        }
+        while(palettePanel.childCount>0){
+            val child=palettePanel.getChildAt(0)
+            palettePanel.removeViewAt(0)
+            child.id=android.view.View.generateViewId()
+            paletteGroup.addView(child)
+        }
+        column.addView(paletteGroup)
+        column.addView(text("Custom colors · Adjust RGB values live",14f,accent,true))
+        action(column,"Background color","Choose an exact RGB color"){
+            colorEditor("Suggestion background","suggestionBackgroundColor",
+                prefs.getInt("suggestionBackgroundColor",0xFF213746.toInt()))
+        }
+        action(column,"Suggestion chip color","Color of each suggested word"){
+            colorEditor("Suggestion chip","suggestionChipColor",
+                prefs.getInt("suggestionChipColor",0xFF38566B.toInt()))
+        }
+        action(column,"Prediction text color","Text color independent of keyboard theme"){
+            colorEditor("Prediction text","suggestionTextColor",
+                prefs.getInt("suggestionTextColor",Color.WHITE))
+        }
+        fun slider(title:String,key:String,min:Int,max:Int,initial:Int,suffix:String) {
+            val value=prefs.getInt(key,initial).coerceIn(min,max)
+            val label=text("$title: $value$suffix",14f,ink,true)
+            column.addView(label)
+            column.addView(SeekBar(this).apply {
+                this.max=max-min;progress=value-min
+                contentDescription=title
+                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+                    override fun onProgressChanged(s:SeekBar?,n:Int,user:Boolean){
+                        val current=n+min
+                        label.text="$title: $current$suffix"
+                        if(user)save(key,current)
+                    }
+                    override fun onStartTrackingTouch(s:SeekBar?){}
+                    override fun onStopTrackingTouch(s:SeekBar?){}
+                })
+            })
+        }
+        slider("Prediction font size","suggestionFont",12,32,17," sp")
+        slider("Prediction row height","suggestionHeight",38,78,45," dp")
+        slider("Space between suggestions","suggestionGap",0,16,4," dp")
+        slider("Suggestion corner rounding","suggestionCorner",0,28,12," dp")
+        slider("Row background opacity","suggestionOpacity",45,100,100,"%")
+        column.addView(Switch(this).apply {
+            text="Bold suggestion text";setTextColor(ink)
+            isChecked=KeyPopSuggestionStyle.bold(this@MainActivity)
+            setOnCheckedChangeListener{_,checked->
+                prefs.edit().putBoolean("suggestionBold",checked).apply()
+                updatePreview()
+            }
+        })
+        action(column,"Restore suggestion-row defaults"){
+            prefs.edit()
+                .remove("suggestionPosition").remove("suggestionPalette")
+                .remove("suggestionBackgroundColor").remove("suggestionChipColor")
+                .remove("suggestionTextColor").remove("suggestionFont")
+                .remove("suggestionHeight").remove("suggestionGap")
+                .remove("suggestionCorner").remove("suggestionOpacity")
+                .remove("suggestionBold").apply()
+            Toast.makeText(this,"Prediction row defaults restored",
+                Toast.LENGTH_SHORT).show()
+            updatePreview()
+        }
+        updatePreview()
+        val scrolling=ScrollView(this).apply {
+            isFillViewport=false
+            addView(column)
+        }
+        AlertDialog.Builder(this).setTitle("Suggestion Row · Live Customization")
+            .setView(scrolling).setPositiveButton("Done",null).show()
+    }
+
     private fun typing(){
         heading("Typing & Size","Configure behavior first, then appearance and feedback")
         addBlock {
@@ -638,8 +826,12 @@ class MainActivity:Activity() {
             option(this,"Always show toolbar while typing","alwaysShowToolbar",true)
             addView(text("When disabled, the Material toolbar gives way to suggestions "+
                 "while you type. When enabled, both remain visible.",12f,muted))
-            range(this,"Suggestion font size","suggestionFont",12,24,17)
-            range(this,"Suggestion strip height","suggestionHeight",38,64,45)
+            action(this,"Customize suggestion row · Live preview",
+                "Position, fonts, text/chip colors, background, opacity, height, spacing and corners") {
+                suggestionAppearanceEditor()
+            }
+            addView(text("Set above or below the toolbar, preview changes instantly, and "+
+                "retain your settings across English, Urdu and Sindhi keyboards.",12f,muted))
         }
         addBlock {
             addView(text("04   KEYBOARD SIZE",13f,accent,true))
