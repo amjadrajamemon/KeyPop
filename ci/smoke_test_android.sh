@@ -93,9 +93,37 @@ grep -Fq "$PKG" forensic-evidence/ime-details.txt
 # prediction strip. Inspect the actual active IME's accessibility hierarchy
 # with an ordinary focused EditText on the running Android emulator.
 echo "[visual] Focus real text field and verify visible prediction row"
+# Force a fresh Activity rather than reusing the launcher started above.
+# Otherwise the test-only intent extra might never reach onCreate.
+adb shell am force-stop "$PKG"
 adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopHomeActivity" \
     --ez keypopVisualSmoke true > forensic-evidence/prediction-focus.txt
 sleep 3
+adb shell uiautomator dump /sdcard/keypop-prediction-host.xml >/dev/null
+adb exec-out cat /sdcard/keypop-prediction-host.xml \
+    > forensic-evidence/prediction-host.xml
+# Tapping the actual EditText provides an explicit user action and works on
+# Android versions that refuse showSoftInput() during Activity startup.
+coords="$(python3 - <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+root=ET.parse('forensic-evidence/prediction-host.xml').getroot()
+for node in root.iter('node'):
+    if node.get('class','').endswith('EditText'):
+        match=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',node.get('bounds',''))
+        if match:
+            x1,y1,x2,y2=map(int,match.groups())
+            print((x1+x2)//2,(y1+y2)//2)
+            sys.exit(0)
+print('Could not locate a visible keyboard test EditText',file=sys.stderr)
+sys.exit(1)
+PY
+)"
+read -r tap_x tap_y <<< "$coords"
+adb shell input tap "$tap_x" "$tap_y"
+sleep 3
+adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
 adb shell uiautomator dump /sdcard/keypop-prediction-idle.xml >/dev/null
 adb exec-out cat /sdcard/keypop-prediction-idle.xml \
     > forensic-evidence/prediction-idle.xml
