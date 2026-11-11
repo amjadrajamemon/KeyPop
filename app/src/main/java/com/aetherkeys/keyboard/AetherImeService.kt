@@ -66,7 +66,7 @@ class AetherImeService : InputMethodService() {
     private var contextCacheMisses=0
     private var lastKeyboardTouchAt=0L
     private var lastKnownSelection:Int?=null
-    private val trailingWordPattern=Regex("[\\p{L}]+$")
+    private val trailingWordPattern=Regex("[\\p{L}\\p{M}]+(?:['’][\\p{L}\\p{M}]+)*$")
     // Cache immutable visual primitives once per keyboard rebuild, not per key.
     private var renderSkin:KeyPopSkin?=null
     private var regularKeyBackground:android.graphics.drawable.Drawable?=null
@@ -1902,7 +1902,8 @@ class AetherImeService : InputMethodService() {
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
         val input=currentInputConnection ?:return
-        if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo)) {
+        if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo) ||
+            !KeyPopTypingRules.textAllowsSuggestions(currentInputEditorInfo?.inputType?:0)) {
             predictionGeneration++
             predictionPending?.let{predictionHandler.removeCallbacks(it)}
             bar.visibility=View.GONE
@@ -2097,14 +2098,16 @@ class AetherImeService : InputMethodService() {
     }
     /** Dictionary/user-learning writes are never performed on the key UI thread. */
     private fun learnAsync(lang:Int,word:String) {
-        if(word.isBlank() || predictionExecutor.isShutdown)return
+        if(word.isBlank() || predictionExecutor.isShutdown ||
+            sensitive(currentInputEditorInfo) ||
+            !KeyPopTypingRules.textAllowsLearning(currentInputEditorInfo?.inputType?:0))return
         predictionExecutor.execute {runCatching{lexicon.learn(lang,word)}}
     }
     /** Learns only explicitly committed words, never pasted clipboard text,
      * previous chat messages, password fields, URLs or email inputs. */
     private fun learnPersonalAsync(lang:Int,before:String,committed:String) {
         if(predictionExecutor.isShutdown || sensitive(currentInputEditorInfo) ||
-            !KeyPopTypingRules.textAllowsAutomaticChanges(
+            !KeyPopTypingRules.textAllowsLearning(
                 currentInputEditorInfo?.inputType?:0))return
         if(!prefs.getBoolean("personalHistoryLearning",true))return
         val parts=committed.trim().split(Regex("\\s+"))
