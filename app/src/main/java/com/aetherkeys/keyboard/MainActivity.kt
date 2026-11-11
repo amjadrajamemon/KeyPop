@@ -700,7 +700,7 @@ class MainActivity:Activity() {
                 setOnClickListener{save("suggestionPosition",index)}
             }
             placements.addView(radio,android.widget.RadioGroup.LayoutParams(
-                0,dp(42),1f))
+                0,dp(42)).apply{weight=1f})
         }
         column.addView(placements)
         column.addView(text("Color theme",14f,ink,true))
