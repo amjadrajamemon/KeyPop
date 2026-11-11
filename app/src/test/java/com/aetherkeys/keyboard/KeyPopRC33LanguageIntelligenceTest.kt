@@ -76,8 +76,15 @@ class KeyPopRC33LanguageIntelligenceTest {
     @Test fun noSuggestionFlagsOrSensitiveInputTypesCannotEnterPredictionPipeline() {
         val regular=InputType.TYPE_CLASS_TEXT
         assertTrue(KeyPopTypingRules.textAllowsSuggestions(regular))
-        assertFalse(KeyPopTypingRules.textAllowsSuggestions(
-            regular or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS))
+        // Search apps routinely set NO_SUGGESTIONS to suppress the Android
+        // spellchecker. A user-enabled KeyPop row must remain visible and
+        // offer generic predictions, without learning or silent edits.
+        val searchType=regular or InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT or
+            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        assertTrue(KeyPopTypingRules.textAllowsSuggestions(searchType))
+        assertFalse(KeyPopTypingRules.textAllowsLearning(searchType))
+        assertFalse(KeyPopTypingRules.autocorrectEnabled(true,searchType))
+        assertFalse(KeyPopTypingRules.autoPunctuationEnabled(true,searchType))
         assertFalse(KeyPopTypingRules.textAllowsLearning(
             regular or InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD))
         assertFalse(KeyPopTypingRules.textAllowsSuggestions(
