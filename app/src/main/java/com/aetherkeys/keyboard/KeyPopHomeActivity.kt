@@ -117,6 +117,18 @@ class KeyPopHomeActivity : Activity() {
                 android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             typingTest.setText("How do")
             typingTest.setSelection(typingTest.text.length)
+            // Provide the real on-screen bounds of this debug-only test
+            // field to adb, avoiding flaky UIAutomator null roots and
+            // hardcoded coordinates across device densities.
+            typingTest.postDelayed({
+                val box=android.graphics.Rect()
+                if(typingTest.getGlobalVisibleRect(box)) {
+                    getSharedPreferences("keypop_visual_test",MODE_PRIVATE).edit()
+                        .putInt("field_center_x",box.centerX())
+                        .putInt("field_center_y",box.centerY())
+                        .apply()
+                }
+            },850)
         }
         if(intent.getBooleanExtra("keypopVisualSmoke",false) ||
             searchVisualSmoke) {
