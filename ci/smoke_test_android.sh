@@ -170,6 +170,33 @@ adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopHomeActivity" \
 sleep 3
 adb shell ime enable "$SERVICE"
 adb shell ime set "$SERVICE"
+# Programmatic showSoftInput() can be denied during app launch, and simply
+# choosing an IME does not force it to attach. Reproduce the user's real tap
+# on the search field after KeyPop is selected using that field's measured
+# screen coordinates (not a guessed emulator position).
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    adb shell run-as "$PKG" cat shared_prefs/keypop_visual_test.xml \
+        > forensic-evidence/search-field-tap-coordinates.xml 2>/dev/null || true
+    if grep -Fq 'name="field_center_x"' forensic-evidence/search-field-tap-coordinates.xml &&
+       grep -Fq 'name="field_center_y"' forensic-evidence/search-field-tap-coordinates.xml; then
+        break
+    fi
+    sleep 1
+done
+coordinates="$(python3 - <<'PY'
+import xml.etree.ElementTree as ET
+root=ET.parse('forensic-evidence/search-field-tap-coordinates.xml').getroot()
+vals={node.attrib.get('name'):node.attrib.get('value')
+      for node in root if node.tag=='int'}
+x,y=vals.get('field_center_x'),vals.get('field_center_y')
+if x is None or y is None:
+    raise SystemExit('Search field was not positioned by the debug Activity')
+print(x,y)
+PY
+)"
+read -r search_x search_y <<< "$coordinates"
+adb shell input tap "$search_x" "$search_y"
+sleep 2
 search_ok=0
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
     sleep 1
