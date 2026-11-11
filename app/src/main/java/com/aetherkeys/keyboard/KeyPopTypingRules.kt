@@ -1,6 +1,7 @@
 package com.aetherkeys.keyboard
 
 import android.text.InputType
+import android.view.inputmethod.EditorInfo
 
 /** Pure policy for keyboard assistance; shared by IME and regression tests. */
 object KeyPopTypingRules {
@@ -20,28 +21,30 @@ object KeyPopTypingRules {
             InputType.TYPE_TEXT_VARIATION_PHONETIC
         )
     }
-    /**
-     * Show explicitly enabled keyboard suggestions in ordinary text/search
-     * fields even when the host sets NO_SUGGESTIONS to disable the system
-     * spellchecker. The host opt-out STILL disables automatic text changes
-     * and personal history learning; passwords, email, URI and other
-     * restricted input variations never enter suggestion generation.
-     */
-    fun textAllowsSuggestions(inputType:Int):Boolean {
-        val kind=inputType and InputType.TYPE_MASK_CLASS
-        if(kind!=InputType.TYPE_CLASS_TEXT)return false
-        val variation=inputType and InputType.TYPE_MASK_VARIATION
-        return variation !in setOf(
+    /** Local suggestions can be available even when automatic edits and learning are disabled. */
+    fun textAllowsSuggestions(inputType:Int,imeOptions:Int=0):Boolean {
+        if(inputType and InputType.TYPE_MASK_CLASS!=InputType.TYPE_CLASS_TEXT)return false
+        return when(inputType and InputType.TYPE_MASK_VARIATION) {
             InputType.TYPE_TEXT_VARIATION_PASSWORD,
             InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
             InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
             InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
             InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
-            InputType.TYPE_TEXT_VARIATION_URI,
-            InputType.TYPE_TEXT_VARIATION_FILTER,
-            InputType.TYPE_TEXT_VARIATION_PHONETIC
-        )
+            InputType.TYPE_TEXT_VARIATION_PHONETIC -> false
+            InputType.TYPE_TEXT_VARIATION_URI ->
+                imeOptions and EditorInfo.IME_MASK_ACTION==EditorInfo.IME_ACTION_SEARCH ||
+                    inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS!=0
+            else -> true
+        }
     }
+
+    fun isAddressEditor(inputType:Int):Boolean =
+        inputType and InputType.TYPE_MASK_CLASS==InputType.TYPE_CLASS_TEXT &&
+            inputType and InputType.TYPE_MASK_VARIATION==InputType.TYPE_TEXT_VARIATION_URI
+
+    /** A combined search/address box can predict words in a query without touching a URL. */
+    fun isAddressToken(before:String):Boolean =
+        before.takeLastWhile{!it.isWhitespace()}.any{it in "./:@?#%\\=&+"}
 
     fun textAllowsLearning(inputType:Int):Boolean =
         textAllowsAutomaticChanges(inputType)

@@ -17,7 +17,6 @@ class KeyPopSizingPreview(context: Context): View(context) {
     private val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
     private val rect=RectF()
-    private val letters=listOf("qwertyuiop","asdfghjkl","⇧zxcvbnm⌫")
     private fun dp(value:Float)=value*resources.displayMetrics.density
 
     init { contentDescription="Live keyboard size preview" }
@@ -43,9 +42,13 @@ class KeyPopSizingPreview(context: Context): View(context) {
 
         val percent=prefs.getInt("keyboardWidthPercent",100).coerceIn(65,100)/100f
         val layoutWidth=(w-dp(14f))*percent
-        val left=(w-layoutWidth)/2f
+        val floating=prefs.getBoolean("floating",false)
+        val offset=if(floating)prefs.getInt("floatX",0)*.35f else 0f
+        val left=((w-layoutWidth)/2f+offset).coerceIn(0f,(w-layoutWidth).coerceAtLeast(0f))
         val topInset=dp(9f)
-        val bottomInset=dp(7f)
+        val lift=prefs.getInt("bottomLift",0).coerceIn(0,96)+
+            if(floating)prefs.getInt("floatY",16).coerceIn(0,90) else 0
+        val bottomInset=dp(7f+lift*.21f)
         val numberRow=prefs.getBoolean("numberRow",true)
         val keyHeight=dp(prefs.getInt("height",51).coerceIn(36,90)*.325f)
         val spacing=dp(prefs.getInt("spacing",4).coerceIn(1,10)*.62f)
@@ -53,7 +56,9 @@ class KeyPopSizingPreview(context: Context): View(context) {
         val font=dp((prefs.getInt("font",19).coerceIn(12,32)*.49f).coerceIn(7f,13f))
         val keyset=KeyPopKeysets.selectedId(context)
         val geometry=KeyboardPresetCatalog.selected(context)
-        val rows=if(numberRow)listOf("1234567890")+letters else letters
+        val letters=KeyPopLayouts.active(context,prefs.getInt("language",0).coerceIn(0,2))
+            .mapIndexed { i,row -> if(i==2)listOf("⇧")+row+listOf("⌫") else row }
+        val rows=if(numberRow)listOf(KeyPopRowParity.digits)+letters else letters
         val footer=KeyPopKeysets.footer(keyset,false)
         val totalHeight=dp(11f)+(rows.size+1)*keyHeight+rows.size*spacing
         // Keep baseline fixed: rising key height increases the preview upward.
@@ -79,15 +84,14 @@ class KeyPopSizingPreview(context: Context): View(context) {
             canvas.drawText(label,x+keyWidth/2f,y+capHeight*.68f,paint)
         }
         var y=firstY+dp(11f)
-        rows.forEachIndexed {rowIndex,row ->
-            val side=if(row.length==9)dp(11f) else dp(3f)
+        rows.forEach { row ->
+            val side=if(row.size==9)dp(11f) else dp(3f)
             val available=layoutWidth-2*side
-            val weights=row.map { KeyboardPresetCatalog.keyWeight(geometry.id,it.toString()) }
+            val weights=row.map { KeyboardPresetCatalog.keyWeight(geometry.id,it) }
             val total=weights.sum()
-            val free=(available-spacing*(row.length-1)).coerceAtLeast(1f)
+            val free=(available-spacing*(row.size-1)).coerceAtLeast(1f)
             var x=left+side
-            row.forEachIndexed {index,ch->
-                val symbol=ch.toString()
+            row.forEachIndexed {index,symbol->
                 val keyWidth=free*weights[index]/total
                 key(symbol,x,y,keyWidth,symbol=="⇧" || symbol=="⌫")
                 x+=keyWidth+spacing

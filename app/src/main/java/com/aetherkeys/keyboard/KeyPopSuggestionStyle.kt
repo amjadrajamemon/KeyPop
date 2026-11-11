@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
+import androidx.core.graphics.ColorUtils
 
 /**
  * One source of truth for the suggestion strip and its Settings live preview.
@@ -88,7 +89,13 @@ object KeyPopSuggestionStyle {
 
     fun applyChip(c:Context,button:Button) {
         button.textSize=fontSize(c).toFloat()
-        button.setTextColor(textColor(c))
+        val chip=chipColor(c)
+        val surface=ColorUtils.compositeColors(chip,KeyPopSkins.active(c).surface or
+            Color.BLACK)
+        val requested=textColor(c)
+        val ink=if(ColorUtils.calculateContrast(requested,surface)>=4.5)requested
+            else if(ColorUtils.calculateContrast(Color.WHITE,surface)>=4.5)Color.WHITE else Color.BLACK
+        button.setTextColor(ink)
         button.typeface=Typeface.create("sans-serif-medium",
             if(bold(c))Typeface.BOLD else Typeface.NORMAL)
         button.isAllCaps=false
@@ -100,7 +107,8 @@ object KeyPopSuggestionStyle {
         button.minWidth=0
         button.minimumWidth=0
         button.setPadding(dp(c,3),0,dp(c,3),0)
-        button.background=panel(c,chipColor(c),radiusDp(c))
+        button.backgroundTintList=null
+        button.background=panel(c,chip,radiusDp(c))
         val margin=dp(c,gapDp(c))/2
         val params=button.layoutParams as? LinearLayout.LayoutParams
         if(params!=null) {

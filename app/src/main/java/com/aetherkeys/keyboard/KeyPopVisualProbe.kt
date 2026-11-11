@@ -5,50 +5,54 @@ import android.content.pm.ApplicationInfo
 import android.graphics.Rect
 import android.os.SystemClock
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.LinearLayout
 
-/**
- * DEBUGGABLE builds only. Records the *attached IME view* geometry, selected
- * toolbar relationship and current visible prediction text. Unlike
- * UIAutomator dumps, this does not depend on an unstable accessibility root.
- * CI reads the values using adb run-as; no typed content is uploaded by
- * release APKs. The probe file is absent in production-signed builds.
- */
+/** Checks attached keyboard views only for KeyPop's dedicated debug test fields. */
 object KeyPopVisualProbe {
-    fun capture(context:Context,row:LinearLayout,toolbar:LinearLayout?,
-                typed:String) {
-        if(context.applicationInfo.flags and
-            ApplicationInfo.FLAG_DEBUGGABLE==0)return
+    const val FIELD_PREFIX="com.aetherkeys.keyboard.predictionSmoke:"
+
+    fun capture(context:Context,info:EditorInfo?,row:LinearLayout,
+                toolbar:LinearLayout?,typed:String) {
+        if(info==null || context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE==0 ||
+            info.packageName!=context.packageName)return
+        val marker=info.privateImeOptions ?:return
+        if(!marker.startsWith(FIELD_PREFIX))return
         row.postDelayed({
-            if(row.parent==null)return@postDelayed
+            if(!row.isAttachedToWindow || row.parent==null)return@postDelayed
             val bounds=Rect()
-            val visible=row.visibility==View.VISIBLE && row.isShown &&
-                row.getGlobalVisibleRect(bounds) && bounds.width()>0 &&
-                bounds.height()>0
-            val displayed=(0 until row.childCount).mapNotNull{index ->
+            val visible=row.isShown && row.getGlobalVisibleRect(bounds) && !bounds.isEmpty
+            val chips=if(visible)(0 until row.childCount).mapNotNull { index ->
                 (row.getChildAt(index) as? Button)?.takeIf {
-                    it.visibility==View.VISIBLE && it.text.isNotBlank()
-                }?.text?.toString()
+                    it.isShown && it.text.isNotBlank() && it.getGlobalVisibleRect(Rect())
+                }
+            } else emptyList()
+            val alternatives=chips.filter {
+                it.isEnabled && it.contentDescription?.startsWith("Suggestion: ")==true &&
+                    !it.text.toString().equals(typed,ignoreCase=true)
             }
-            val relative=if(toolbar!=null && row.parent===toolbar.parent) {
-                val parent=row.parent as? LinearLayout
-                val rowIndex=parent?.indexOfChild(row)?:-1
-                val toolbarIndex=parent?.indexOfChild(toolbar)?:-1
-                if(rowIndex>=0 && toolbarIndex>=0) {
-                    if(rowIndex<toolbarIndex)"above" else "below"
-                }else "unknown"
-            }else "unknown"
-            context.getSharedPreferences("keypop_visual_probe",
-                Context.MODE_PRIVATE).edit()
+            val choice=alternatives.firstOrNull {
+                it.text.startsWith("improvem",ignoreCase=true)
+            }
+            val point=IntArray(2)
+            choice?.getLocationOnScreen(point)
+            val parent=row.parent as? LinearLayout
+            val placement=if(parent!=null && toolbar?.parent===parent) {
+                if(parent.indexOfChild(row)<parent.indexOfChild(toolbar))"above" else "below"
+            } else ""
+            context.getSharedPreferences("keypop_visual_probe",Context.MODE_PRIVATE).edit()
+                .putString("field",marker.removePrefix(FIELD_PREFIX))
                 .putBoolean("active_visible",visible)
-                .putInt("visible_chips",displayed.size)
-                .putString("labels",displayed.joinToString("|"))
+                .putInt("visible_chips",chips.size)
+                .putString("suggestions",alternatives.joinToString("|"){it.text.toString()})
                 .putString("typed",typed.take(64))
-                .putString("placement",relative)
+                .putString("placement",placement)
                 .putInt("row_height_px",bounds.height())
+                .putInt("choice_x",if(choice==null)0 else point[0]+choice.width/2)
+                .putInt("choice_y",if(choice==null)0 else point[1]+choice.height/2)
                 .putLong("updated_uptime",SystemClock.uptimeMillis())
                 .apply()
-        },160L)
+        },120L)
     }
 }

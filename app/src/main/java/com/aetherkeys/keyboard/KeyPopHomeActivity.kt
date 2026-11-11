@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -11,11 +12,14 @@ import android.os.Bundle
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
@@ -60,6 +64,11 @@ class KeyPopHomeActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor=bg
         window.navigationBarColor=bg
+        if(applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE!=0 &&
+            intent.getBooleanExtra("keypopPredictionSmoke",false)) {
+            showPredictionSmoke()
+            return
+        }
         val scroll=ScrollView(this).apply {
             isFillViewport=true
             setBackgroundColor(bg)
@@ -107,37 +116,6 @@ class KeyPopHomeActivity : Activity() {
             }
         }
         column.addView(typingTest,LinearLayout.LayoutParams(-1,-2))
-        // Reproduce Google-style search editors that explicitly set the
-        // system NO_SUGGESTIONS flag. This check uses a real InputConnection
-        // and real active KeyPop IME rather than an isolated helper view.
-        val searchVisualSmoke=intent.getBooleanExtra("keypopSearchVisualSmoke",false)
-        if(searchVisualSmoke) {
-            typingTest.inputType=android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT or
-                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            typingTest.setText("How do")
-            typingTest.setSelection(typingTest.text.length)
-            // Provide the real on-screen bounds of this debug-only test
-            // field to adb, avoiding flaky UIAutomator null roots and
-            // hardcoded coordinates across device densities.
-            typingTest.postDelayed({
-                val box=android.graphics.Rect()
-                if(typingTest.getGlobalVisibleRect(box)) {
-                    getSharedPreferences("keypop_visual_test",MODE_PRIVATE).edit()
-                        .putInt("field_center_x",box.centerX())
-                        .putInt("field_center_y",box.centerY())
-                        .apply()
-                }
-            },850)
-        }
-        if(intent.getBooleanExtra("keypopVisualSmoke",false) ||
-            searchVisualSmoke) {
-            typingTest.requestFocus()
-            typingTest.postDelayed({
-                (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                    .showSoftInput(typingTest,InputMethodManager.SHOW_IMPLICIT)
-            },650)
-        }
         addButton(column,"Choose language packs · download selected directions") {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
         }
@@ -147,16 +125,14 @@ class KeyPopHomeActivity : Activity() {
         column.addView(text("For Gboard-style screenshot offers, grant "+
             "Allow all photos in the permission dialog. KeyPop can then "+
             "save new captures to its encrypted screenshot archive.",13f,muted))
-        addButton(column,"Settings · Themes · Layouts · Translation") {
+        addButton(column,"KeyPop settings") {
             startActivity(Intent(this,MainActivity::class.java)
                 .putExtra("openSection","settingsHome")
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         }
         column.addView(text("English ↔ Urdu works offline with downloaded Google ML Kit packs. Sindhi model files are experimental and must pass independent translation checks.",13f,muted))
         val settings=getSharedPreferences("keypop",MODE_PRIVATE)
-        if(!intent.getBooleanExtra("keypopVisualSmoke",false) &&
-            !intent.getBooleanExtra("keypopSearchVisualSmoke",false) &&
-            !settings.getBoolean("firstSindhiOfferV100",false)) {
+        if(!settings.getBoolean("firstSindhiOfferV100",false)) {
             settings.edit().putBoolean("firstSindhiOfferV100",true).apply()
             column.post {
                 if(!isFinishing && !isDestroyed) {
@@ -171,6 +147,71 @@ class KeyPopHomeActivity : Activity() {
             }
         }
     }
+    private fun showPredictionSmoke() {
+        getSharedPreferences("keypop_visual_probe",MODE_PRIVATE).edit().clear().commit()
+        val coordinates=getSharedPreferences("keypop_visual_test",MODE_PRIVATE)
+        coordinates.edit().clear().commit()
+        val preferences=getSharedPreferences("keypop",MODE_PRIVATE)
+        val root=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(12),0,dp(12),0)
+            isFocusableInTouchMode=true
+            setBackgroundColor(bg)
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root){view,insets->
+            view.setPadding(dp(12),insets.getInsets(WindowInsetsCompat.Type.systemBars()).top,dp(12),0)
+            insets
+        }
+        val fields=linkedMapOf<String,android.view.View>()
+        fun field(id:String,title:String,type:Int,options:Int) {
+            val editor=EditText(this).apply {
+                setSingleLine(true)
+                inputType=type
+                imeOptions=options or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                privateImeOptions=KeyPopVisualProbe.FIELD_PREFIX+id
+                hint=title
+                setTextColor(ink)
+                setHintTextColor(muted)
+                textSize=15f
+                setPadding(dp(8),0,dp(8),0)
+            }
+            fields[id]=editor
+            root.addView(editor,LinearLayout.LayoutParams(-1,dp(48)))
+        }
+        val textClass=InputType.TYPE_CLASS_TEXT
+        val noSuggestions=InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        field("plain","Message",textClass,EditorInfo.IME_ACTION_DONE)
+        field("web","Web search",textClass or InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT or noSuggestions,
+            EditorInfo.IME_ACTION_SEARCH)
+        field("address","Private search or address",textClass or InputType.TYPE_TEXT_VARIATION_URI or noSuggestions,
+            EditorInfo.IME_ACTION_GO or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING)
+        field("password","Password",textClass or InputType.TYPE_TEXT_VARIATION_PASSWORD,EditorInfo.IME_ACTION_DONE)
+        val suggestions=Switch(this).apply {
+            text="Show word suggestions"
+            setTextColor(ink)
+            isChecked=preferences.getBoolean("suggestions",true)
+            setOnCheckedChangeListener { _,checked ->
+                preferences.edit().putBoolean("suggestions",checked).apply()
+            }
+            isFocusable=false
+        }
+        fields["toggle"]=suggestions
+        root.addView(suggestions,LinearLayout.LayoutParams(-1,dp(44)))
+        root.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ ->
+            val values=coordinates.edit()
+            for((name,view) in fields) {
+                val point=IntArray(2)
+                view.getLocationOnScreen(point)
+                values.putInt(name+"_x",point[0]+view.width/2)
+                    .putInt(name+"_y",point[1]+view.height/2)
+            }
+            values.apply()
+        }
+        setContentView(root)
+        root.requestFocus()
+        ViewCompat.requestApplyInsets(root)
+    }
+
     override fun onResume() {
         super.onResume()
         if(!::keyboardStatus.isInitialized)return

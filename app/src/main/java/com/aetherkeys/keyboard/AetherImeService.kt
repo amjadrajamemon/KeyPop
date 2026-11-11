@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.database.ContentObserver
 import android.provider.MediaStore
 import android.os.Handler
@@ -39,7 +40,6 @@ import android.widget.ScrollView
 import android.widget.PopupMenu
 import android.widget.HorizontalScrollView
 import android.widget.TextView
-import android.widget.SeekBar
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.widget.Toast
@@ -58,9 +58,22 @@ class AetherImeService : InputMethodService() {
     private var suggestionBar:LinearLayout?=null
     /** Real toolbar, shared between Material and alternate styles. */
     private var suggestionToolbar:LinearLayout?=null
-    private val keyGeometryPositions=HashMap<Button,Triple<Int,Int,Int>>()
-    private var materialTopBar:LinearLayout?=null
+    private var inputViewActive=false
+    private var suggestionReadRetries=0
     private var lastSuggestionContext:String?=null
+    private val suggestionPrefsListener=SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if(inputViewActive && suggestionBar!=null) {
+            when {
+                key=="suggestions" || key=="alwaysShowToolbar" || key=="predictNext" ||
+                    key=="contextPredictions" || key=="aggressivePredictions" ||
+                    key=="grammarHints" -> {
+                    cancelSuggestionWork()
+                    refreshSuggestions()
+                }
+                key?.startsWith("suggestion")==true && key!="suggestionSpace" -> draw()
+            }
+        }
+    }
     private val predictionExecutor=Executors.newSingleThreadExecutor()
     private val predictionHandler=Handler(Looper.getMainLooper())
     // A short-lived RAM-only mirror avoids remote editor IPC on every key.
@@ -79,7 +92,7 @@ class AetherImeService : InputMethodService() {
     private var latestSpaceAdvice:SpaceAdvice?=null
     private var predictionPending:Runnable?=null
     private var suggestionRefreshTask:Runnable?=null
-    private var predictionGeneration=0
+    @Volatile private var predictionGeneration=0
     private val personalLanguage by lazy {KeyPopPersonalLanguageModel(this)}
     private val personalLearningExecutor=Executors.newSingleThreadExecutor()
     private val repeatHandler=Handler(Looper.getMainLooper())
@@ -110,7 +123,6 @@ class AetherImeService : InputMethodService() {
     private var toolsOpen=false
     private var toolsPage=0
     private var resizeOpen=false
-    private val renderedRows=ArrayList<Pair<LinearLayout,Int>>()
     private var navSafeBottomPx=0
     private var lastImeOrientation=0
     private var translatorOpen=false
@@ -267,6 +279,7 @@ class AetherImeService : InputMethodService() {
         androidx.core.content.ContextCompat.registerReceiver(
             this,speechReceiver,filter,androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         clipboard.addPrimaryClipChangedListener(clipListener)
+        prefs.registerOnSharedPreferenceChangeListener(suggestionPrefsListener)
         // Load the ~39k-word prediction index on its own executor. Never
         // make the Space key perform first-use disk I/O or file parsing.
         // Defer the one-off 39k-word index build until the keyboard has had
@@ -285,10 +298,9 @@ class AetherImeService : InputMethodService() {
         themeAnimator?.cancel();themeAnimator=null;liveBackground=null
         try { unregisterReceiver(speechReceiver) } catch(_:Exception) {}
         try { clipboard.removePrimaryClipChangedListener(clipListener) } catch(_:Exception) {}
-        predictionGeneration++
-        predictionPending?.let{predictionHandler.removeCallbacks(it)}
-        suggestionRefreshTask?.let{predictionHandler.removeCallbacks(it)}
-        suggestionRefreshTask=null
+        inputViewActive=false
+        prefs.unregisterOnSharedPreferenceChangeListener(suggestionPrefsListener)
+        cancelSuggestionWork()
         predictionExecutor.shutdownNow()
         personalLearningExecutor.shutdownNow()
         imagePreviewExecutor.shutdownNow()
@@ -383,6 +395,7 @@ class AetherImeService : InputMethodService() {
     }
     override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
         super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
+        if(!inputViewActive)return
         lastKnownSelection=newSelStart.takeIf{newSelStart==newSelEnd && it>=0}
         val ourEdit=editorContext.selectionChanged(newSelStart,newSelEnd)
         // press() already scheduled the prediction for our own edits.
@@ -395,6 +408,9 @@ class AetherImeService : InputMethodService() {
     }
 
     override fun onFinishInputView(finishingInput:Boolean) {
+        inputViewActive=false
+        cancelSuggestionWork()
+        suggestionBar?.visibility=View.GONE
         editorContext.clear()
         lastKnownSelection=null
         latestSpaceAdvice=null
@@ -405,11 +421,6 @@ class AetherImeService : InputMethodService() {
         lastAppliedCorrection=null
         lastRejectedCorrection=null
         stopBackspaceRepeating()
-        predictionGeneration++
-        predictionPending?.let{predictionHandler.removeCallbacks(it)}
-        predictionPending=null
-        suggestionRefreshTask?.let{predictionHandler.removeCallbacks(it)}
-        suggestionRefreshTask=null
         screenshotSlot=null
         stopLiveTranslation()
         themeAnimator?.pause()
@@ -428,6 +439,7 @@ class AetherImeService : InputMethodService() {
         lastRejectedCorrection=null
         val viewStart=SystemClock.elapsedRealtimeNanos()
         super.onStartInputView(info,restarting)
+        inputViewActive=true
         stopLiveTranslation()
         stopBackspaceRepeating()
         clipsOpen=false;emojiOpen=false;cursorTools=false;translatorOpen=false;writingOpen=false
@@ -450,9 +462,6 @@ class AetherImeService : InputMethodService() {
             pendingSpeech=null;pendingSpeechSend=false
         }
         draw()
-        // The InputConnection often becomes valid only after the view has
-        // attached. Do not rely on the initial synchronous draw to fill chips.
-        current?.post {requestSuggestionRefresh(0)}
         startScreenshotObserver()
         floatingShell?.post {
             floatingShell?.let { ViewCompat.requestApplyInsets(it) }
@@ -550,56 +559,6 @@ class AetherImeService : InputMethodService() {
         root.layoutParams=params
         shell.requestLayout()
     }
-    private fun refreshRowHeights() {
-        val height=prefs.getInt("height",51).coerceIn(36,90)
-        renderedRows.forEach { (row,offset)->
-            for(i in 0 until row.childCount) {
-                val v=row.getChildAt(i)
-                if(v !is Button)continue
-                val layout=v.layoutParams
-                val token=v.tag as? String ?: ""
-                val bonus=KeyboardPresetCatalog.controlHeightBonus(token)+
-                    (if(token=="SPACE")12 else 0)
-                val position=(v as? Button)?.let{keyGeometryPositions[it]}
-                val actual=d(((height+offset+bonus)*
-                    KeyPopKeyGeometry.heightPercent(this,
-                        position?.first?:language,position?.second?:-1,
-                        position?.third?:-1,token)/100f)
-                    .toInt().coerceAtLeast(30))
-                if(layout.height!=actual) {layout.height=actual;v.layoutParams=layout}
-            }
-            row.requestLayout()
-        }
-        current?.requestLayout()
-        floatingShell?.requestLayout()
-    }
-    /** In-place key styling updates while the slider remains attached to its view. */
-    private fun refreshKeyAppearance() {
-        val skin=palette()
-        val regular=KeyPopGlass.key(this,skin,false)
-        val primary=KeyPopGlass.key(this,skin,true)
-        val radius=KeyPopSkins.radius(skin,prefs.getInt("round",13)).toInt().coerceIn(1,40)
-        val font=prefs.getInt("font",17).coerceIn(12,24).toFloat()
-        val space=d(prefs.getInt("spacing",4).coerceIn(1,10)/2)
-        keyViews.forEach { (key,label)->
-            val heavy=label=="↵" || label=="⇧" ||
-                (label=="SPACE" && skin.shape==3)
-            val foreground=if(heavy)primary else regular
-            val bg=foreground.constantState?.newDrawable()?.mutate()
-                ?:KeyPopGlass.key(this,skin,heavy)
-            key.background=android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(
-                    (skin.accent and 0x00FFFFFF) or (0x55 shl 24)),bg,null)
-            key.textSize=KeyboardPresetCatalog.keyTextSize(
-                label,key.text.toString(),font)
-            val layout=key.layoutParams as? LinearLayout.LayoutParams
-            if(layout!=null) {
-                layout.leftMargin=space;layout.rightMargin=space
-                key.layoutParams=layout
-            }
-        }
-        current?.requestLayout()
-    }
     /** In-place resizing avoids detaching the gesture target during a drag. */
     private fun showResizePanel(root:LinearLayout) {
         val skin=palette()
@@ -607,18 +566,17 @@ class AetherImeService : InputMethodService() {
         // this lightweight canvas pinned so resizing stays visible on every drag.
         val preview=KeyPopSizingPreview(this)
         root.addView(preview,LinearLayout.LayoutParams(-1,d(160)))
-        var heightSlider:SeekBar?=null
         val panel=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
             setPadding(d(8),d(8),d(8),d(8))
             background=gradient(skin.surface,skin.background,12,skin.accent)
         }
         val title=TextView(this).apply{
-            text="SIZE & POSITION  ·  Drag the handle or use sliders"
+            text="Quick resize"
             textSize=12f;setTextColor(skin.ink)
         }
         panel.addView(title)
-        val handle=chip("↕  DRAG TO RESIZE KEY HEIGHT") {}
+        val handle=chip("Drag to change key height") {}
         handle.contentDescription="Hold and drag vertically to resize the keyboard"
         var downY=0f
         var startHeight=51
@@ -634,7 +592,6 @@ class AetherImeService : InputMethodService() {
                         .toInt().coerceIn(36,90)
                     if(prefs.getInt("height",51)!=next){
                         prefs.edit().putInt("height",next).apply()
-                        heightSlider?.progress=next-36
                         preview.refresh()
                     }
                     true
@@ -646,7 +603,7 @@ class AetherImeService : InputMethodService() {
         }
         panel.addView(handle,LinearLayout.LayoutParams(-1,d(45)).apply{topMargin=d(6)})
         if(prefs.getBoolean("floating",false)) {
-            val move=chip("✥  DRAG TO MOVE FLOATING KEYBOARD") {}
+            val move=chip("Drag to move keyboard") {}
             move.contentDescription="Drag to reposition the floating keyboard"
             var firstX=0f;var firstY=0f
             var initialX=0;var initialY=0
@@ -673,73 +630,17 @@ class AetherImeService : InputMethodService() {
             }
             panel.addView(move,LinearLayout.LayoutParams(-1,d(42)).apply{topMargin=d(4)})
         }
-        fun adjust(name:String,pref:String,min:Int,max:Int,initial:Int,onUpdate:()->Unit) {
-            val caption=TextView(this).apply{
-                text=name+"  ·  "+initial
-                textSize=12f;setTextColor(skin.ink)
-            }
-            panel.addView(caption)
-            val slider=SeekBar(this).apply {
-                this.max=max-min
-                progress=(prefs.getInt(pref,initial).coerceIn(min,max)-min)
-                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(s:SeekBar?,p:Int,fromUser:Boolean){
-                        caption.text=name+"  ·  "+(p+min)
-                        if(fromUser){
-                            prefs.edit().putInt(pref,p+min).apply()
-                            preview.refresh()
-                            onUpdate()
-                        }
-                    }
-                    override fun onStartTrackingTouch(s:SeekBar?){}
-                    override fun onStopTrackingTouch(s:SeekBar?){}
-                })
-            }
-            if(pref=="height")heightSlider=slider
-            panel.addView(slider)
-        }
-        // Settings update the pinned preview. Real keys are reconstructed only
-        // once on Done, not on every pixel moved by a finger.
-        adjust("Key height (dp)","height",36,90,51){}
-        adjust("Keyboard width (%)","keyboardWidthPercent",65,100,100){}
-        adjust("Key spacing (dp)","spacing",1,10,4){}
-        adjust("Key label size (sp)","font",12,32,19){}
-        adjust("Key corners (dp)","round",3,40,13){}
-        adjust("Above navigation bar (dp)","bottomLift",0,96,0){}
-        lateinit var numberSwitch:Button
-        numberSwitch=chip(if(prefs.getBoolean("numberRow",true))
-            "Number row: ON" else "Number row: OFF") {
-            val enabled=!prefs.getBoolean("numberRow",true)
-            prefs.edit().putBoolean("numberRow",enabled).apply()
-            numberSwitch.text=if(enabled)"Number row: ON" else "Number row: OFF"
-            preview.refresh()
-        }
-        numberSwitch.contentDescription="Toggle dedicated number row"
-        panel.addView(numberSwitch,LinearLayout.LayoutParams(-1,d(42)))
-        if(prefs.getBoolean("floating",false)){
-            adjust("Floating left/right","floatX",-d(75),d(75),0){applyFloatingLayout()}
-            adjust("Floating lift (dp)","floatY",0,90,16){applyFloatingLayout()}
-        }
-        panel.addView(chip("✎  Resize each key · live preview") {
-            val screen=Intent(this,MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                putExtra("openSection","typing")
-                putExtra("openResizeDialog",true)
-            }
-            startActivity(screen)
-        },LinearLayout.LayoutParams(-1,d(44)).apply{bottomMargin=d(7)})
+        panel.addView(chip("Size & keys settings") {
+            startActivity(Intent(this,MainActivity::class.java)
+                .putExtra("openSection","designSize")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        },LinearLayout.LayoutParams(-1,d(44)).apply{topMargin=d(6)})
         val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
         fun action(label:String,weight:Float,fn:()->Unit){
             actions.addView(chip(label,onTap=fn),LinearLayout.LayoutParams(0,d(40),weight).apply{
                 rightMargin=d(4)
             })
-        }
-        action("Reset",1f){
-            prefs.edit().putInt("height",51).putInt("keyboardWidthPercent",100)
-                .putInt("bottomLift",0).putInt("spacing",4).putInt("font",17)
-                .putInt("round",13).putBoolean("numberRow",true)
-                .putBoolean("floating",false).apply()
-            resizeOpen=false;draw()
         }
         action("Floating: "+(if(prefs.getBoolean("floating",false))"On" else "Off"),1.3f){
             val activate=!prefs.getBoolean("floating",false)
@@ -749,10 +650,11 @@ class AetherImeService : InputMethodService() {
             e.apply()
             draw()
         }
-        action("✓ Done",1f){resizeOpen=false;draw()}
+        action("Done",1f){resizeOpen=false;draw()}
         panel.addView(actions)
         val available=resources.displayMetrics.heightPixels
-        val panelHeight=KeyboardSizingRules.boundedPanelHeight(available,d(280))
+        val panelHeight=KeyboardSizingRules.boundedPanelHeight(available,
+            d(if(prefs.getBoolean("floating",false))216 else 168))
         root.addView(ScrollView(this).apply {
             isFillViewport=false
             overScrollMode=View.OVER_SCROLL_IF_CONTENT_SCROLLS
@@ -1015,14 +917,8 @@ class AetherImeService : InputMethodService() {
         screenshotSlot=null
         suggestionBar=null
         suggestionToolbar=null
-        materialTopBar=null
-        lastSuggestionContext=null
-        predictionGeneration++
-        predictionPending?.let{predictionHandler.removeCallbacks(it)}
-        predictionPending=null
+        cancelSuggestionWork()
         keyViews.clear()
-        keyGeometryPositions.clear()
-        renderedRows.clear()
         val s=KeyPopSkins.active(this)
         renderSkin=s
         regularKeyBackground=KeyPopGlass.key(this,s,false)
@@ -1076,7 +972,7 @@ class AetherImeService : InputMethodService() {
                     leftMargin=d(2);rightMargin=d(2)
                 })
             }
-            iconAction(KeyPopToolbarGlyph.Kind.GRID,"Open feature grid and resize tools"){
+            iconAction(KeyPopToolbarGlyph.Kind.GRID,"Open keyboard tools"){
                 toolsOpen=!toolsOpen;if(toolsOpen)toolsPage=0;resizeOpen=false;draw()
             }
             iconAction(KeyPopToolbarGlyph.Kind.CLIPBOARD,"Open clipboard history"){
@@ -1116,7 +1012,7 @@ class AetherImeService : InputMethodService() {
                 draw()
                 if(translatorOpen) scheduleLiveTranslation(80)
             }
-            iconAction(KeyPopToolbarGlyph.Kind.THEMES,"Preview theme gallery without changing your active theme"){
+            iconAction(KeyPopToolbarGlyph.Kind.THEMES,"Open keyboard theme settings"){
                 startActivity(Intent(this,MainActivity::class.java)
                     .putExtra("openSection","themes")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -1132,7 +1028,6 @@ class AetherImeService : InputMethodService() {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             root.addView(top,LinearLayout.LayoutParams(-1,d(43)))
-            materialTopBar=top
             suggestionToolbar=top
         } else {
         val toolbar=LinearLayout(this).apply {
@@ -1323,7 +1218,7 @@ class AetherImeService : InputMethodService() {
                             .putExtra("target",prefs.getInt("autoTarget",if(language==0)1 else 0))
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
-                    "◈  Themes" to {
+                    "◈  Theme" to {
                         startActivity(Intent(this,MainActivity::class.java)
                             .putExtra("openSection","themes")
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -1333,7 +1228,7 @@ class AetherImeService : InputMethodService() {
                         startActivity(Intent(this,KeyPopScreenshotHistoryActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     },
-                    "⌨  Layouts" to {
+                    "⌨  Layout" to {
                         startActivity(Intent(this,MainActivity::class.java)
                             .putExtra("openSection","layouts")
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -1376,7 +1271,6 @@ class AetherImeService : InputMethodService() {
             showResizePanel(root)
             return
         }
-        suggestionBar=null
         if(clipsOpen && !secure) { drawClips(root); return }
         if(writingOpen && !secure && !isNumeric) showWritingPanel(root)
         if(translatorOpen && !secure && !isNumeric &&
@@ -1385,36 +1279,19 @@ class AetherImeService : InputMethodService() {
             showEmojiPanel(root)
             if(!emojiSearch)return
         }
-        // A host search box can set NO_SUGGESTIONS to suppress Android's
-        // default spellchecker. It must not make the user's explicitly
-        // enabled KeyPop prediction row disappear. Secret fields stay blocked.
-        if(!isNumeric && !symbols && !emojiOpen &&
-            prefs.getBoolean("suggestions",true) &&
-            KeyPopTypingRules.textAllowsSuggestions(
-                currentInputEditorInfo?.inputType?:0)) {
-            val bar=LinearLayout(this).apply{
-                orientation=LinearLayout.HORIZONTAL
-                gravity=Gravity.CENTER_VERTICAL
-                contentDescription="KeyPop word prediction and suggestion row"
-            }
-            val preferred=KeyPopSuggestionStyle.heightDp(this)
-            // Attach directly adjacent to the real toolbar. Both Material
-            // and alternate styles support above/below positioning.
-            val anchor=suggestionToolbar
-            val anchorIndex=if(anchor!=null)root.indexOfChild(anchor) else -1
+        if(!emojiOpen) {
+            val bar=LinearLayout(this)
+            val anchorIndex=suggestionToolbar?.let{root.indexOfChild(it)} ?: -1
             val insertion=if(anchorIndex<0)0 else
                 anchorIndex+if(KeyPopSuggestionStyle.position(this)==
                     KeyPopSuggestionStyle.ABOVE_TOOLBAR)0 else 1
-            root.addView(bar,insertion,LinearLayout.LayoutParams(-1,d(preferred)))
-            suggestionBar=bar
-            // Precreate the strip and populate it after the IME attaches.
-            for(i in 0 until 3) {
-                val chip=chip(""){}
-                KeyPopSuggestionStyle.addChip(this,bar,chip)
-            }
+            root.addView(bar,insertion,LinearLayout.LayoutParams(
+                -1,d(KeyPopSuggestionStyle.heightDp(this))))
+            repeat(3) { KeyPopSuggestionStyle.addChip(this,bar,chip(""){}) }
             KeyPopSuggestionStyle.applyRow(this,bar)
+            suggestionBar=bar
             KeyPopSuggestionPresentation.waiting(bar)
-            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,"")
+            updateSuggestionVisibility(bar)
             requestSuggestionRefresh(0)
         }
         if(cursorTools) {
@@ -1546,7 +1423,6 @@ class AetherImeService : InputMethodService() {
             keyViews.add(button to label)
             val indexInLayout=if(layoutRow==2 && label !in setOf("⇧","⌫"))index-1
                 else if(label in setOf("⇧","⌫"))-1 else index
-            keyGeometryPositions[button]=Triple(layoutLanguage,layoutRow,indexInLayout)
             val widthFactor=KeyPopKeyGeometry.widthPercent(this,layoutLanguage,
                 layoutRow,indexInLayout,label)/100f
             val bonus=KeyboardPresetCatalog.controlHeightBonus(label)+
@@ -1563,7 +1439,6 @@ class AetherImeService : InputMethodService() {
             })
         }
         parent.addView(row)
-        renderedRows.add(row to (height-prefs.getInt("height",51).coerceIn(36,90)))
     }
     /** Slide on Space to move the caret; long press for an explicit language menu. */
     /** Gboard-like deletion: tap removes one character, hold repeats and accelerates.
@@ -1929,25 +1804,48 @@ class AetherImeService : InputMethodService() {
      * main thread, debounced 28 ms, and stale results are discarded.
      * Three chip views are reused instead of recreated on every keystroke.
      */
-    /** Fetch from the remote editor only when the mirror is uninitialized
-     * or invalidated by a caret movement. Never retain sensitive content. */
-    private fun readContext(input:InputConnection,limit:Int):String {
-        if(sensitive(currentInputEditorInfo))return ""
-        // Never mirror or inspect secrets in password/secure editors.
-        editorContext.text()?.let{
+    /** Fetch from the editor when our transient mirror has no current snapshot. */
+    private fun readContext(input:InputConnection,limit:Int):String =
+        if(sensitive(currentInputEditorInfo))"" else readMirroredContext(input,limit).orEmpty()
+
+    private fun readMirroredContext(input:InputConnection,limit:Int):String? {
+        editorContext.text()?.let {
             contextCacheHits++
             return it.takeLast(limit)
         }
         contextCacheMisses++
         val start=SystemClock.elapsedRealtimeNanos()
-        val fresh=input.getTextBeforeCursor(256,0)?.toString().orEmpty()
-        KeyPopDiagnostics.observeEditorRead(this,
-            SystemClock.elapsedRealtimeNanos()-start)
-        editorContext.seed(fresh,lastKnownSelection)
-        return fresh.takeLast(limit)
+        val fresh=input.getTextBeforeCursor(256,0)?.toString()
+        KeyPopDiagnostics.observeEditorRead(this,SystemClock.elapsedRealtimeNanos()-start)
+        if(fresh!=null)editorContext.seed(fresh,lastKnownSelection)
+        return fresh?.takeLast(limit)
     }
+
+    private fun cancelSuggestionWork() {
+        predictionGeneration++
+        predictionPending?.let{predictionHandler.removeCallbacks(it)}
+        predictionPending=null
+        suggestionRefreshTask?.let{predictionHandler.removeCallbacks(it)}
+        suggestionRefreshTask=null
+        lastSuggestionContext=null
+        latestSpaceAdvice=null
+        suggestionReadRetries=0
+    }
+
+    private fun suggestionsEnabled(info:EditorInfo?):Boolean =
+        inputViewActive && info!=null && prefs.getBoolean("suggestions",true) &&
+            KeyPopTypingRules.textAllowsSuggestions(info.inputType,info.imeOptions)
+
+    private fun updateSuggestionVisibility(bar:LinearLayout):Boolean {
+        val show=suggestionsEnabled(currentInputEditorInfo)
+        bar.visibility=if(show)View.VISIBLE else View.GONE
+        suggestionToolbar?.visibility=if(KeyPopPredictionContext.toolbarVisible(
+            prefs.getBoolean("alwaysShowToolbar",true),show))View.VISIBLE else View.GONE
+        return show
+    }
+
     private fun requestSuggestionRefresh(delayMs:Long=12L) {
-        suggestionRefreshTask?.let { predictionHandler.removeCallbacks(it) }
+        suggestionRefreshTask?.let{predictionHandler.removeCallbacks(it)}
         val task=Runnable {
             suggestionRefreshTask=null
             refreshSuggestions()
@@ -1955,35 +1853,47 @@ class AetherImeService : InputMethodService() {
         suggestionRefreshTask=task
         predictionHandler.postDelayed(task,delayMs)
     }
-    /** Only one editor snapshot is fetched for a burst of selection updates. */
+
+    private fun probeSuggestions(bar:LinearLayout,word:String) {
+        KeyPopVisualProbe.capture(this,currentInputEditorInfo,bar,suggestionToolbar,word)
+    }
+
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
-        if(numeric(currentInputEditorInfo) ||
-            !KeyPopTypingRules.textAllowsSuggestions(
-                currentInputEditorInfo?.inputType?:0)) {
-            predictionGeneration++
-            predictionPending?.let{predictionHandler.removeCallbacks(it)}
+        val info=currentInputEditorInfo
+        if(!updateSuggestionVisibility(bar) || info==null) {
+            cancelSuggestionWork()
+            KeyPopSuggestionPresentation.waiting(bar)
             bar.visibility=View.GONE
-            materialTopBar?.visibility=View.VISIBLE
+            probeSuggestions(bar,"")
             return
         }
         val input=currentInputConnection
-        if(input==null) {
+        val draft=translatorOpen && translateDraftMode
+        val privateMode=sensitive(info) || !KeyPopTypingRules.textAllowsLearning(info.inputType)
+        // Private and search fields can use the current text for generic offline
+        // predictions. Keep these reads out of the editor mirror and learned models.
+        val before=when {
+            draft -> translateDraft.takeLast(140)
+            input==null -> null
+            privateMode -> input.getTextBeforeCursor(140,0)?.toString()
+            else -> readMirroredContext(input,140)
+        }
+        if(before==null) {
+            val attempts=suggestionReadRetries
+            cancelSuggestionWork()
+            suggestionReadRetries=attempts+1
             KeyPopSuggestionPresentation.waiting(bar)
-            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,"")
+            probeSuggestions(bar,"")
+            // A connection may briefly be unavailable when Android attaches or
+            // restarts the editor, even though the keyboard is already shown.
+            if(attempts<3)requestSuggestionRefresh(60L*(attempts+1))
             return
         }
-        val before=if(translatorOpen && translateDraftMode)translateDraft.takeLast(140)
-            else readContext(input,140)
+        suggestionReadRetries=0
+        val address=KeyPopTypingRules.isAddressEditor(info.inputType)
         val word=trailingWordPattern.find(before)?.value.orEmpty()
         val nextWords=prefs.getBoolean("predictNext",true)
-        // Enabled means visible even in an empty text field: an empty
-        // editor should offer starter next words, not silently hide the bar.
-        val show=prefs.getBoolean("suggestions",true)
-        materialTopBar?.visibility=if(KeyPopPredictionContext.toolbarVisible(
-            prefs.getBoolean("alwaysShowToolbar",true),show))
-            View.VISIBLE else View.GONE
-        bar.visibility=if(show)View.VISIBLE else View.GONE
         val predLang=when {
             translatorOpen && translateSourceChoice in 0..2 -> translateSourceChoice
             translatorOpen && word.isNotBlank() -> KeyPopTextLanguage.detect(word,language)
@@ -1991,55 +1901,39 @@ class AetherImeService : InputMethodService() {
             word.isNotBlank() -> KeyPopTextLanguage.detect(word,language)
             else -> language
         }
-        val key="$language|$translatorOpen|$predLang|$before|$nextWords"
-        if(lastSuggestionContext==key && bar.visibility==View.VISIBLE)return
+        val key="$language|$translatorOpen|$predLang|${info.inputType}|${info.imeOptions}|$before|$nextWords"
+        if(lastSuggestionContext==key)return
+        cancelSuggestionWork()
         lastSuggestionContext=key
-        val token=++predictionGeneration
-        predictionPending?.let{predictionHandler.removeCallbacks(it)}
-        predictionPending=null
-        if(!show) {
-            // Reuse the same three chip widgets after Space instead of
-            // allocating and measuring replacements on the next letter.
+        if((address && KeyPopTypingRules.isAddressToken(before)) ||
+            (word.isEmpty() && !nextWords)) {
+            KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
+            probeSuggestions(bar,"")
             return
         }
-        // Immediately expose what the person typed; never show a stale
-        // *correction* from the previous word while the new word is entering.
-        // Keep the strip visibly useful even while asynchronous word
-        // ranking is running or has no candidate for this context.
         if(word.isNotEmpty())KeyPopSuggestionPresentation.composing(bar,word)
         else KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
-        KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
-        val without=before.removeSuffix(word).trimEnd()
-        val previous=trailingWordPattern.find(without)?.value.orEmpty()
+        probeSuggestions(bar,word)
+
+        val previous=trailingWordPattern.find(before.removeSuffix(word).trimEnd())?.value.orEmpty()
+        val useContext=prefs.getBoolean("contextPredictions",true)
+        val limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3
+        val showGrammar=prefs.getBoolean("grammarHints",true)
+        val token=predictionGeneration
         val task=Runnable {
+            predictionPending=null
             if(predictionExecutor.isShutdown)return@Runnable
             predictionExecutor.execute {
                 if(token!=predictionGeneration)return@execute
-                val predictionStart=SystemClock.elapsedRealtimeNanos()
-                // Personal context is retrieved only on the prediction
-                // executor. Never query encrypted SQLite on the key UI thread.
-                // NO_PERSONALIZED_LEARNING and NO_SUGGESTIONS field flags
-                // suppress personal context, but not generic offline words.
-                val privateMode=sensitive(currentInputEditorInfo) ||
-                    !KeyPopTypingRules.textAllowsLearning(
-                        currentInputEditorInfo?.inputType?:0)
-                val personal=if(!privateMode &&
-                    prefs.getBoolean("contextPredictions",true))
+                val start=SystemClock.elapsedRealtimeNanos()
+                val personal=if(!privateMode && useContext)
                     runCatching{personalLanguage.candidates(predLang,before,word,3)}
                         .getOrDefault(emptyList()) else emptyList()
-                val dictionary=if(word.isEmpty())
-                    lexicon.nextWords(predLang,previous,before)
-                    else lexicon.suggestions(predLang,word,
-                        limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
-                        previous=previous,
-                        beforeCursor=if(!privateMode &&
-                            prefs.getBoolean("contextPredictions",true))
-                            before else "")
-                // The Auto-correct switch governs replacements only.
-                // All sources must compete in one ranking instead of placing
-                // every personal candidate ahead of every dictionary result.
+                val dictionary=if(word.isEmpty())lexicon.nextWords(predLang,previous,before)
+                    else lexicon.suggestions(predLang,word,limit,previous,
+                        beforeCursor=if(useContext)before else "",allowPersonal=!privateMode)
                 val spelling=if(word.length>=3)
-                    lexicon.correction(predLang,word,before) else null
+                    lexicon.correction(predLang,word,before,allowPersonal=!privateMode) else null
                 val feedback=if(word.length>=3 && !privateMode)
                     runCatching{personalLanguage.rejectionWeights(
                         predLang,word,(personal+dictionary+listOfNotNull(spelling)).distinct())}
@@ -2047,19 +1941,17 @@ class AetherImeService : InputMethodService() {
                 val safeSpelling=spelling?.takeUnless{(feedback[it]?:0)>=2}
                 val values=KeyPopUnifiedPrediction.rank(predLang,word,before,
                     personal,dictionary,safeSpelling,feedback,8)
-                val grammar=if(word.isNotEmpty() && !privateMode &&
-                    prefs.getBoolean("grammarHints",true))
+                val grammar=if(word.isNotEmpty() && !privateMode && showGrammar)
                     KeyPopGrammarRules.suggest(before,predLang) else null
                 KeyPopDiagnostics.observePredictionCompute(this,
-                    SystemClock.elapsedRealtimeNanos()-predictionStart)
+                    SystemClock.elapsedRealtimeNanos()-start)
                 if(token!=predictionGeneration)return@execute
                 predictionHandler.post {
-                    if(token!=predictionGeneration || lastSuggestionContext!=key ||
-                        bar!==suggestionBar ||
-                        !KeyPopTypingRules.textAllowsSuggestions(
-                            currentInputEditorInfo?.inputType?:0))return@post
-                    latestSpaceAdvice=SpaceAdvice(predLang,before,word,safeSpelling,grammar)
-                    renderSuggestions(bar,before,word,predLang,values,safeSpelling,grammar)
+                    if(token!=predictionGeneration || bar!==suggestionBar ||
+                        !suggestionsEnabled(currentInputEditorInfo))return@post
+                    if(!privateMode)
+                        latestSpaceAdvice=SpaceAdvice(predLang,before,word,safeSpelling,grammar)
+                    renderSuggestions(bar,before,word,predLang,values,safeSpelling,grammar,token)
                 }
             }
         }
@@ -2067,16 +1959,12 @@ class AetherImeService : InputMethodService() {
         predictionHandler.postDelayed(task,16L)
     }
     private fun renderSuggestions(bar:LinearLayout,before:String,word:String,
-        predLang:Int,values:List<String>,spelling:String?,grammar:KeyPopGrammarFix?) {
-        val size=KeyPopSuggestionStyle.fontSize(this)
-        while(bar.childCount<3) {
-            val button=chip(""){}
-            button.textSize=size.toFloat()
-            button.setSingleLine(true)
-            button.ellipsize=android.text.TextUtils.TruncateAt.END
-            KeyPopSuggestionStyle.addChip(this,bar,button)
-        }
+        predLang:Int,values:List<String>,spelling:String?,grammar:KeyPopGrammarFix?,token:Int) {
+        fun stillCurrent():Boolean = token==predictionGeneration && bar===suggestionBar &&
+            suggestionsEnabled(currentInputEditorInfo)
+
         fun replaceWord(choice:String) {
+            if(!stillCurrent())return
             lastAppliedCorrection=null
             if(translatorOpen && translateDraftMode) {
                 val actual=trailingWordPattern.find(translateDraft)?.value.orEmpty()
@@ -2095,21 +1983,26 @@ class AetherImeService : InputMethodService() {
                 return
             }
             val connection=currentInputConnection ?:return
-            val actual=trailingWordPattern.find(
-                connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
-            if(actual!=word ||
-                !KeyPopTypingRules.textAllowsSuggestions(
-                    currentInputEditorInfo?.inputType?:0))return
+            val editorBefore=connection.getTextBeforeCursor(140,0)?.toString() ?:return
+            if(editorBefore!=before)return
+            val actual=trailingWordPattern.find(editorBefore)?.value.orEmpty()
+            if(actual!=word)return
+            val address=KeyPopTypingRules.isAddressEditor(currentInputEditorInfo?.inputType?:0)
+            val after=connection.getTextAfterCursor(3,0)?.toString()
+            if(address && (KeyPopTypingRules.isAddressToken(editorBefore) ||
+                    after==null || after.firstOrNull()?.isWhitespace()==false))return
+            val replacement=if(address)KeyPopTypingRules.preservesCase(actual,choice)
+                else KeyPopPredictionContext.wordCase(choice,actual,before)
+            val committed=if(!address && prefs.getBoolean("suggestionSpace",true))
+                KeyPopPredictionContext.committedWord(replacement,after.orEmpty()) else replacement
             editorContext.clear()
             connection.beginBatchEdit()
-            if(actual.isNotEmpty())connection.deleteSurroundingText(actual.length,0)
-            val replacement=KeyPopPredictionContext.wordCase(choice,actual,before)
-            val after=connection.getTextAfterCursor(3,0)?.toString().orEmpty()
-            val committed=if(prefs.getBoolean("suggestionSpace",true))
-                KeyPopPredictionContext.committedWord(replacement,after)
-                else replacement
-            val accepted=connection.commitText(committed,1)
-            connection.endBatchEdit()
+            val accepted=try {
+                (actual.isEmpty() || connection.deleteSurroundingText(actual.length,0)) &&
+                    connection.commitText(committed,1)
+            } finally {
+                connection.endBatchEdit()
+            }
             if(!accepted)return
             learnAsync(predLang,replacement)
             learnPersonalAsync(predLang,before.dropLast(word.length),replacement)
@@ -2132,7 +2025,7 @@ class AetherImeService : InputMethodService() {
                 offers.add(("✓ "+grammar.label) to {
                     val conn=currentInputConnection
                     val actual=conn?.getTextBeforeCursor(grammar.remove,0)?.toString().orEmpty()
-                    if(actual.length==grammar.remove && before.endsWith(actual)) {
+                    if(stillCurrent() && actual.length==grammar.remove && before.endsWith(actual)) {
                         editorContext.clear()
                         conn?.beginBatchEdit()
                         conn?.deleteSurroundingText(grammar.remove,0)
@@ -2154,7 +2047,7 @@ class AetherImeService : InputMethodService() {
         }
         if(offers.isEmpty()) {
             KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
-            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
+            probeSuggestions(bar,word)
             return
         }
         for(i in 0..2) {
@@ -2165,14 +2058,12 @@ class AetherImeService : InputMethodService() {
                 // typed word must never inflate into one giant full-width key.
                 button.visibility=View.INVISIBLE
             } else {
-                KeyPopSuggestionStyle.applyChip(this,button)
-                button.textSize=size.toFloat()
                 button.text=offer.first
                 KeyPopSuggestionPresentation.markAvailable(button,offer.first)
                 button.setOnClickListener {tapFeedback(button);offer.second.invoke()}
             }
         }
-        KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
+        probeSuggestions(bar,word)
     }
     /** Re-label only changed Latin keys instead of rebuilding the full IME. */
     private fun updateShiftKeys() {
@@ -2419,8 +2310,9 @@ class AetherImeService : InputMethodService() {
                 val prior=connection?.let{readContext(it,120)}.orEmpty()
                 val sentenceStart=prior.isBlank() || prior.trimEnd().lastOrNull() in listOf('.','!','?','\n')
                 val latinMode=language==0 || prefs.getBoolean("romanMode",false)
-                val capital=shift || (latinMode &&
-                    !sensitive(currentInputEditorInfo) &&
+                val inputType=currentInputEditorInfo?.inputType?:0
+                val capital=shift || (latinMode && !sensitive(currentInputEditorInfo) &&
+                    KeyPopTypingRules.textAllowsAutomaticChanges(inputType) &&
                     prefs.getBoolean("autoCap",true) && sentenceStart)
                 val variation=(currentInputEditorInfo?.inputType ?: 0) and
                     InputType.TYPE_MASK_VARIATION

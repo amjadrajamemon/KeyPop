@@ -120,12 +120,13 @@ class KeyPopLexicon(context:Context) {
             .map{it.word to it.tier}
     }
 
-    private fun rankedFuzzy(input:String,beforeCursor:String):List<KeyPopFuzzyRanker.Match> {
-        val key=input+"|"+beforeCursor.takeLast(80)
-        recentFuzzy?.let{if(it.first==key)return it.second}
+    private fun rankedFuzzy(input:String,beforeCursor:String,
+                            cache:Boolean=true):List<KeyPopFuzzyRanker.Match> {
+        val key=if(cache)input+"|"+beforeCursor.takeLast(80) else null
+        if(key!=null)recentFuzzy?.let{if(it.first==key)return it.second}
         val context=KeyPopPredictionContext.parse(beforeCursor,input)
         val ranked=KeyPopFuzzyRanker.rank(input,fuzzyCandidates(input),context,8)
-        recentFuzzy=key to ranked
+        if(key!=null)recentFuzzy=key to ranked
         return ranked
     }
 
@@ -209,15 +210,17 @@ class KeyPopLexicon(context:Context) {
         word in english || word=="predict" || (scowlReady &&
             scowlIndex[word.take(2)].orEmpty().any{it.word==word})
 
-    fun joinedWordCorrection(lang:Int,typed:String):String? {
+    fun joinedWordCorrection(lang:Int,typed:String,allowPersonal:Boolean=true):String? {
         if(lang!=0)return null
         val normalized=typed.trim().lowercase(Locale.ROOT)
-        if(normalized in store.getStringSet("manual_0",emptySet()).orEmpty())return null
+        if(allowPersonal && normalized in store.getStringSet("manual_0",emptySet()).orEmpty())
+            return null
         return KeyPopWordJoinRules.split(normalized,::isKnownEnglish)
     }
     fun suggestions(lang:Int,fragment:String,limit:Int=3,previous:String="",
-                    beforeCursor:String=""):List<String> {
-        val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+                    beforeCursor:String="",allowPersonal:Boolean=true):List<String> {
+        val learned=if(allowPersonal)store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+            else emptySet()
         val familiar=if(lang==0)rankCandidates(fragment) else emptyList()
         val base=when(lang){1->urdu;2->sindhi;else->english}
         val prefix=fragment.lowercase(Locale.ROOT).take(2)
@@ -234,7 +237,7 @@ class KeyPopLexicon(context:Context) {
         // A valid or clearly completable stem should not spend another 2,200
         // comparisons on speculative corrections after every keypress.
         val fuzzy=if(lang==0 && !originalKnown && strongPrefix<3)
-            rankedFuzzy(normalized,beforeCursor)
+            rankedFuzzy(normalized,beforeCursor,cache=allowPersonal)
                 .filter{it.tier<=20}.take(4).map{it.word} else emptyList()
         val completions=KeyPopTypingIntelligence.suggestions(lang,fragment,previous,
             relevantLearned,8,dictionary,tiers,beforeCursor)
@@ -246,7 +249,7 @@ class KeyPopLexicon(context:Context) {
         val ordered=if(exact.isNotEmpty())
             exact.take(2)+fuzzy.take(3)+completions
             else fuzzy.take(3)+completions
-        return (listOfNotNull(joinedWordCorrection(lang,fragment))+
+        return (listOfNotNull(joinedWordCorrection(lang,fragment,allowPersonal))+
             listOfNotNull(KeyPopTypingIntelligence.correction(lang,fragment))+
             ordered).distinct().filter{it!=normalized}
             .take(limit.coerceIn(1,8))
@@ -279,21 +282,23 @@ class KeyPopLexicon(context:Context) {
             ?.takeIf{it.tier<=20}?.word
     }
 
-    fun correction(lang:Int,word:String,beforeCursor:String=""):String? {
+    fun correction(lang:Int,word:String,beforeCursor:String="",
+                   allowPersonal:Boolean=true):String? {
         val normalized=word.trim().lowercase(Locale.ROOT)
-        val manual=store.getStringSet("manual_"+lang,emptySet()).orEmpty()
-        if(normalized in manual)return null
+        if(allowPersonal && normalized in store.getStringSet("manual_"+lang,emptySet()).orEmpty())
+            return null
         val base=when(lang){1->urdu;2->sindhi;else->english}
         if(normalized in base)return null
-        joinedWordCorrection(lang,word)?.let{return it}
-        val learned=store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+        joinedWordCorrection(lang,word,allowPersonal)?.let{return it}
+        val learned=if(allowPersonal)store.getStringSet("learned_"+lang,emptySet()).orEmpty()
+            else emptySet()
         KeyPopTypingIntelligence.correction(lang,word,learned)?.let{return it}
         if(lang!=0 || normalized.length !in 4..22 ||
             normalized in learned || !scowlReady || !normalized.all{it in 'a'..'z'})
             return null
         if(isKnownEnglish(normalized))return null
         return KeyPopFuzzyRanker.automatic(
-            rankedFuzzy(normalized,beforeCursor),
+            rankedFuzzy(normalized,beforeCursor,cache=allowPersonal),
             prefs.getBoolean("aggressivePredictions",true))
     }
     /** Frequent-word glide decoder indexed by starting and ending keys.

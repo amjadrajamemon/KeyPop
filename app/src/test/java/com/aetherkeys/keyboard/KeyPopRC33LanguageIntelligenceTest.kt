@@ -1,6 +1,7 @@
 package com.aetherkeys.keyboard
 
 import android.text.InputType
+import android.view.inputmethod.EditorInfo
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -91,5 +92,25 @@ class KeyPopRC33LanguageIntelligenceTest {
             regular or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS))
         assertFalse(KeyPopTypingRules.textAllowsLearning(
             regular or InputType.TYPE_TEXT_VARIATION_URI))
+    }
+
+    @Test fun browserAndFilterPredictionsKeepAutomaticEditsAndHistoryOff() {
+        val address=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        val combined=address or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        val privateOptions=EditorInfo.IME_ACTION_GO or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+        val filter=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_FILTER
+        assertTrue(KeyPopTypingRules.textAllowsSuggestions(combined,privateOptions))
+        assertTrue(KeyPopTypingRules.textAllowsSuggestions(address,EditorInfo.IME_ACTION_SEARCH))
+        assertFalse(KeyPopTypingRules.textAllowsSuggestions(address,EditorInfo.IME_ACTION_GO))
+        assertTrue(KeyPopTypingRules.textAllowsSuggestions(filter,EditorInfo.IME_ACTION_SEARCH))
+        assertFalse(KeyPopTypingRules.textAllowsAutomaticChanges(combined))
+        assertFalse(KeyPopTypingRules.textAllowsLearning(filter))
+        assertFalse(KeyPopTypingRules.isAddressToken("how do I improvem"))
+        assertTrue(KeyPopTypingRules.isAddressToken("www.example.com"))
+        assertTrue(KeyPopTypingRules.isAddressToken("https://example.org/pa"))
+        assertFalse(KeyPopTypingRules.textAllowsSuggestions(
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,privateOptions))
+        assertFalse(KeyPopTypingRules.textAllowsSuggestions(
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD,privateOptions))
     }
 }

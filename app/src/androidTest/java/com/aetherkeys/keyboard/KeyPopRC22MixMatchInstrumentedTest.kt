@@ -49,33 +49,35 @@ class KeyPopRC22MixMatchInstrumentedTest {
         }
     }
     private fun find(node:View,needle:String):TextView? {
-        if(node is TextView && node.text?.toString()?.contains(needle)==true)return node
+        if(node is TextView && node.text?.toString()?.let{it==needle || (needle.endsWith(":") && it.startsWith(needle))}==true)return node
         if(node is ViewGroup)for(i in 0 until node.childCount) {
             find(node.getChildAt(i),needle)?.let{return it}
         }
         return null
     }
-    @Test fun unifiedDesignShowsIndependentKeysAndLiveResizeEntry() {
+    @Test fun customizationHubOpensLayoutAndSuggestionSettings() {
         ActivityScenario.launch(MainActivity::class.java).use{scenario->
             scenario.onActivity{activity->
-                var entry:View?=find(activity.window.decorView,"Customize Keyboard")
-                assertNotNull("Missing one-screen keyboard customization",entry)
-                while(entry!=null && !entry!!.hasOnClickListeners()) {
-                    entry=entry!!.parent as? View
-                }
-                assertNotNull("Customize Keyboard cannot open",entry)
-                entry!!.performClick()
                 val root=activity.window.decorView
-                assertNotNull("Theme selector missing",find(root,"Theme"))
-                assertNotNull("Layout selector missing",find(root,"Layout"))
-                assertNotNull("Keys and Symbols selector missing",find(root,"Keys & Symbols"))
-                assertNotNull("Live resizing entry missing",find(root,"Resize keys"))
+                fun click(label:String) {
+                    var entry:View?=find(root,label)
+                    while(entry!=null && !entry.hasOnClickListeners())entry=entry.parent as? View
+                    assertNotNull("Missing customization entry: $label",entry)
+                    entry!!.performClick()
+                }
+                click("Customize Keyboard")
+                assertNotNull("Theme entry missing",find(root,"Theme"))
+                assertNotNull("Size entry missing",find(root,"Size & keys"))
+                click("Layout")
+                assertNotNull("Keys and symbols selector missing",find(root,"Keys & symbols"))
                 assertNotNull("Active keyset not shown",
                     find(root,KeyPopKeysets.all.first {
                         it.id==KeyPopKeysets.selectedId(activity)
                     }.name))
-                assertNull("Old confusing Apply control still displayed",
-                    find(root,"Apply keys and symbols only"))
+                activity.onBackPressed()
+                click("Suggestion strip")
+                assertNotNull("Suggestion visibility missing",find(root,"Show word suggestions"))
+                assertNotNull("Suggestion height missing",find(root,"Strip height:"))
                 assertTrue("Available keysets were lost",listOf(
                     KeyPopKeysets.GBOARD,KeyPopKeysets.SAMSUNG,KeyPopKeysets.SWIFTKEY
                 ).all{KeyPopKeysets.valid(it)})

@@ -79,20 +79,27 @@ class KeyPopRC34ResizeAndNavigationInstrumentedTest {
             assertTrue("Spacebar preview must physically get taller",after>before)
         }finally{KeyPopKeyGeometry.resetAllDimensions(context)}
     }
-    @Test fun settingsBackReturnsOneLevelAndResizeControlsAreLabeled() {
+    @Test fun overallSizeAndIndividualKeyControlsHaveSeparatePagesAndBackPaths() {
         ActivityScenario.launch(MainActivity::class.java).use{scenario->
             scenario.onActivity{activity->
-                assertTrue(clickText(activity.window.decorView,"Typing & Size"))
-                assertTrue(allLabels(activity.window.decorView).any{
-                    it.contains("PREDICTIONS & GRAMMAR")})
+                val root=activity.window.decorView
+                assertTrue(clickText(root,"Customize Keyboard"))
+                assertTrue(clickText(root,"Size & keys"))
+                assertTrue(allLabels(root).any{it.startsWith("Keyboard width:")})
+                assertTrue(clickText(root,"Individual keys"))
+                assertTrue(allLabels(root).any{it.startsWith("Selected key width:")})
+                assertFalse(allLabels(root).any{it.startsWith("Keyboard width:")})
+            }
+            scenario.recreate()
+            scenario.onActivity{activity->
+                val root=activity.window.decorView
+                assertTrue(allLabels(root).any{it.startsWith("Selected key width:")})
                 activity.onBackPressed()
-                assertTrue(allLabels(activity.window.decorView).any{
-                    it.contains("Your keyboard, your settings")})
-                assertTrue(clickText(activity.window.decorView,"Typing & Size"))
-                assertTrue(clickText(activity.window.decorView,"Resize keys"))
-                // AlertDialog belongs to its own Window; activity.decorView
-                // cannot see it. Check physical preview separately above,
-                // and verify that this launcher opens the dialog without crash.
+                assertTrue(allLabels(root).any{it.startsWith("Keyboard width:")})
+                activity.onBackPressed()
+                assertTrue(allLabels(root).contains("Suggestion strip"))
+                activity.onBackPressed()
+                assertTrue(allLabels(root).contains("KeyPop Settings"))
             }
         }
     }
