@@ -1926,6 +1926,7 @@ class AetherImeService : InputMethodService() {
             translatorOpen && translateSourceChoice in 0..2 -> translateSourceChoice
             translatorOpen && word.isNotBlank() -> KeyPopTextLanguage.detect(word,language)
             language!=0 && prefs.getBoolean("romanMode",false) -> 0
+            word.isNotBlank() -> KeyPopTextLanguage.detect(word,language)
             else -> language
         }
         val key="$language|$translatorOpen|$predLang|$before|$nextWords"
@@ -2152,7 +2153,9 @@ class AetherImeService : InputMethodService() {
             if(value=="↵") {translateBeforeSend();return}
             if(value=="SPACE" && prefs.getBoolean("autoCorrect",true)) {
                 val fragment=trailingWordPattern.find(translateDraft)?.value.orEmpty()
-                val corrected=lexicon.correction(language,fragment)
+                val corrected=latestSpaceAdvice?.takeIf {
+                    it.language==language && it.word==fragment
+                }?.correction ?:lexicon.fastCorrection(language,fragment)
                 if(corrected!=null) {
                     translateDraft=translateDraft.dropLast(fragment.length)+
                         KeyPopPredictionContext.wordCase(corrected,fragment,translateDraft)
@@ -2284,7 +2287,7 @@ class AetherImeService : InputMethodService() {
                                 it.language==predLang && it.before.takeLast(48)==before
                             }?.grammar ?: KeyPopGrammarRules.suggest(before,predLang)
                             else null
-                        val committed=if(grammar!=null &&
+                        val committed=if(grammar!=null && grammar.automatic &&
                             grammar.remove<=before.length) {
                             editorContext.clear()
                             currentInputConnection?.deleteSurroundingText(grammar.remove,0)
