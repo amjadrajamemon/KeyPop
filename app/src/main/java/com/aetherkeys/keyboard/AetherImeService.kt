@@ -1408,6 +1408,7 @@ class AetherImeService : InputMethodService() {
             }
             KeyPopSuggestionStyle.applyRow(this,bar)
             KeyPopSuggestionPresentation.waiting(bar)
+            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,"")
             requestSuggestionRefresh(0)
         }
         if(cursorTools) {
@@ -1962,6 +1963,7 @@ class AetherImeService : InputMethodService() {
         val input=currentInputConnection
         if(input==null) {
             KeyPopSuggestionPresentation.waiting(bar)
+            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,"")
             return
         }
         val before=if(translatorOpen && translateDraftMode)translateDraft.takeLast(140)
@@ -1999,6 +2001,7 @@ class AetherImeService : InputMethodService() {
         // ranking is running or has no candidate for this context.
         if(word.isNotEmpty())KeyPopSuggestionPresentation.composing(bar,word)
         else KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
+        KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
         val without=before.removeSuffix(word).trimEnd()
         val previous=trailingWordPattern.find(without)?.value.orEmpty()
         val task=Runnable {
@@ -2132,6 +2135,7 @@ class AetherImeService : InputMethodService() {
         }
         if(offers.isEmpty()) {
             KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
+            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
             return
         }
         for(i in 0..2) {
@@ -2149,6 +2153,7 @@ class AetherImeService : InputMethodService() {
                 button.setOnClickListener {tapFeedback(button);offer.second.invoke()}
             }
         }
+        KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
     }
     /** Re-label only changed Latin keys instead of rebuilding the full IME. */
     private fun updateShiftKeys() {
