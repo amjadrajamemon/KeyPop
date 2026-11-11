@@ -14,6 +14,10 @@ class KeyPopLexicon(context:Context) {
     private data class RankedWord(val word:String,val tier:Int)
     @Volatile private var scowlReady=false
     private val firstLetterIndex=HashMap<Char,List<RankedWord>>()
+    // Common-word deletion index recovers missing leading letters without
+    // scanning all 39,000 SCOWL forms on every keystroke.
+    private val deleteIndex=HashMap<String,MutableList<RankedWord>>()
+    @Volatile private var recentFuzzy:Pair<String,List<KeyPopFuzzyRanker.Match>>?=null
     private val scowlIndex by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         val index=HashMap<String,MutableList<RankedWord>>()
         val oneLetter=HashMap<Char,MutableList<RankedWord>>()
@@ -29,6 +33,11 @@ class KeyPopLexicon(context:Context) {
                     if(word.length !in 2..24 || word.any { !it.isLetter() })return@forEach
                     val item=RankedWord(word,tier)
                     index.getOrPut(word.take(2)){ArrayList()}.add(item)
+                    if(tier<=10 && word.length in 3..16)for(i in word.indices) {
+                        val key=word.removeRange(i,i+1)
+                        val items=deleteIndex.getOrPut(key){ArrayList()}
+                        if(items.size<32)items.add(item)
+                    }
                     if(tier<=10)oneLetter.getOrPut(word[0]){ArrayList()}.add(item)
                 }
             }
@@ -93,18 +102,26 @@ class KeyPopLexicon(context:Context) {
         val keys=linkedSetOf(input.take(2),""+input[1]+input[0])
         for(letter in nearby(input[0]))keys.add(""+letter+input[1])
         for(letter in nearby(input[1]))keys.add(""+input[0]+letter)
-        return keys.asSequence()
+        val deletes=(sequenceOf(input)+input.indices.asSequence()
+            .map{input.removeRange(it,it+1)}).distinct()
+        val fromDeletes=deletes.flatMap{deleteIndex[it].orEmpty().asSequence()}
+        val fromBuckets=keys.asSequence()
             .flatMap{scowlIndex[it].orEmpty().asSequence()}
+        return (fromDeletes+fromBuckets)
             .filter { it.tier<=35 &&
                 kotlin.math.abs(it.word.length-input.length)<=2 }
             .distinctBy{it.word}
-            .take(2200)
+            .take(2400)
             .map{it.word to it.tier}
     }
 
     private fun rankedFuzzy(input:String,beforeCursor:String):List<KeyPopFuzzyRanker.Match> {
+        val key=input+"|"+beforeCursor.takeLast(80)
+        recentFuzzy?.let{if(it.first==key)return it.second}
         val context=KeyPopPredictionContext.parse(beforeCursor,input)
-        return KeyPopFuzzyRanker.rank(input,fuzzyCandidates(input),context,8)
+        val ranked=KeyPopFuzzyRanker.rank(input,fuzzyCandidates(input),context,8)
+        recentFuzzy=key to ranked
+        return ranked
     }
 
     private val store=context.getSharedPreferences("keypop_lexicon",Context.MODE_PRIVATE)
