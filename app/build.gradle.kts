@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 48
-        versionName = "1.0.32-rc33-unified-typing-intelligence" 
+        versionCode = 49
+        versionName = "1.0.33-rc34-live-key-resize" 
     }
     splits {
         abi {
@@ -42,7 +42,7 @@ android {
         debug {
             // Debug builds retain an ephemeral test-only signature and their
             // OWN app identity. Never distribute them as an upgrade path.
-            applicationIdSuffix = ".previewv133"
+            applicationIdSuffix = ".previewv134"
             versionNameSuffix = "-debug-test-only"
         }
         release {

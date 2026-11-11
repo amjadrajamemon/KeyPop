@@ -45,6 +45,7 @@ class MainActivity:Activity() {
     private lateinit var content:LinearLayout
     private lateinit var scroller:ScrollView
     private var section="settingsHome"
+    private val pageHistory=ArrayDeque<String>()
     private var previewThemeIndex=-1
     private var previewLayoutIndex=-1
     private var previewKeysetIndex=-1
@@ -153,69 +154,159 @@ class MainActivity:Activity() {
             orientation=LinearLayout.VERTICAL
             setPadding(dp(12),dp(8),dp(12),0)
         }
-        val preview=KeyPopSizingPreview(this)
-        shell.addView(preview,LinearLayout.LayoutParams(-1,dp(170)))
-        val sliders=mutableListOf<Triple<SeekBar,String,Int>>()
-        val controls=LinearLayout(this).apply {
-            orientation=LinearLayout.VERTICAL
-            setPadding(0,dp(12),0,dp(8))
-        }
-        fun sizeSlider(label:String,key:String,min:Int,max:Int,default:Int,unit:String) {
-            val caption=text("",13f,ink)
-            val bar=SeekBar(this).apply {
-                this.max=max-min
-                progress=prefs.getInt(key,default).coerceIn(min,max)-min
+        val caption=text("Tap any key below, then adjust its individual width or height. Changes appear live and remain saved.",13f,ink)
+        shell.addView(caption)
+        var language=0
+        val languageSwitch=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
+        lateinit var keyWidth:SeekBar
+        lateinit var keyHeight:SeekBar
+        lateinit var widthLabel:TextView
+        lateinit var heightLabel:TextView
+        lateinit var selectionLabel:TextView
+        lateinit var board:KeyPopLiveKeyEditor
+        fun updateSelection() {
+            val token=board.selectedToken
+            val row=board.selectedRow
+            val col=board.selectedColumn
+            val display=if(token=="SPACE")"Spacebar" else when(token) {
+                "⇧"->"Shift / Case";"⌫"->"Backspace";"↵"->"Enter"
+                ","->"Comma";"."->"Period";else->token
             }
-            caption.text="$label: ${bar.progress+min}$unit"
-            bar.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seek:SeekBar?,value:Int,user:Boolean){
-                    caption.text="$label: ${value+min}$unit"
-                    if(user){
-                        prefs.edit().putInt(key,value+min).apply()
-                        preview.refresh()
-                    }
-                }
-                override fun onStartTrackingTouch(seek:SeekBar?){}
-                override fun onStopTrackingTouch(seek:SeekBar?){}
-            })
-            controls.addView(caption)
-            controls.addView(bar)
-            sliders.add(Triple(bar,key,min))
+            selectionLabel.text="SELECTED KEY: $display · "+KeyPopLayouts.languages[language]
+            val width=KeyPopKeyGeometry.widthPercent(this,language,row,col,token)
+            val height=KeyPopKeyGeometry.heightPercent(this,language,row,col,token)
+            widthLabel.text="Selected key width: $width%"
+            heightLabel.text="Selected key height: $height%"
+            keyWidth.progress=width-65
+            keyHeight.progress=height-70
         }
-        sizeSlider("Key height","height",36,90,51," dp")
+        board=KeyPopLiveKeyEditor(this){_,_,_->
+            updateSelection()
+        }
+        KeyPopLayouts.languages.forEachIndexed {index,name->
+            val option=android.widget.Button(this).apply{
+                text=name;textSize=12f;isAllCaps=false
+                setOnClickListener {
+                    language=index
+                    board.activeLanguage=index
+                    board.selectedRow=-1;board.selectedColumn=-1
+                    board.selectedToken="SPACE"
+                    board.refresh()
+                    // Refresh selected values after switching language.
+                    val selectedWidth=KeyPopKeyGeometry.widthPercent(
+                        this@MainActivity,index,-1,-1,"SPACE")
+                    val selectedHeight=KeyPopKeyGeometry.heightPercent(
+                        this@MainActivity,index,-1,-1,"SPACE")
+                    selectionLabel.text="SELECTED KEY: Spacebar · "+name
+                    widthLabel.text="Selected key width: $selectedWidth%"
+                    heightLabel.text="Selected key height: $selectedHeight%"
+                    keyWidth.progress=selectedWidth-65
+                    keyHeight.progress=selectedHeight-70
+                }
+            }
+            languageSwitch.addView(option,LinearLayout.LayoutParams(0,dp(38),1f))
+        }
+        shell.addView(languageSwitch)
+        val previewArea=ScrollView(this).apply {
+            isFillViewport=false
+            addView(board)
+        }
+        shell.addView(previewArea,LinearLayout.LayoutParams(-1,dp(255)))
+        val controls=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL;setPadding(0,dp(7),0,dp(8))
+        }
+        selectionLabel=text("SELECTED KEY: Spacebar · English",14f,accent,true)
+        controls.addView(selectionLabel)
+        widthLabel=text("Selected key width: 100%",14f,ink,true)
+        controls.addView(widthLabel)
+        keyWidth=SeekBar(this).apply{
+            max=190-65;progress=35
+            contentDescription="Adjust the selected key width in real time"
+            setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+                override fun onProgressChanged(bar:SeekBar?,value:Int,user:Boolean){
+                    if(!user)return
+                    val target=board.selectedToken
+                    val width=value+65
+                    KeyPopKeyGeometry.setWidthPercent(this@MainActivity,
+                        language,board.selectedRow,board.selectedColumn,target,width)
+                    widthLabel.text="Selected key width: $width%"
+                    board.refresh()
+                }
+                override fun onStartTrackingTouch(s:SeekBar?){}
+                override fun onStopTrackingTouch(s:SeekBar?){}
+            })
+        }
+        controls.addView(keyWidth)
+        heightLabel=text("Selected key height: 100%",14f,ink,true)
+        controls.addView(heightLabel)
+        keyHeight=SeekBar(this).apply{
+            max=180-70;progress=30
+            contentDescription="Adjust the selected key height in real time"
+            setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+                override fun onProgressChanged(bar:SeekBar?,value:Int,user:Boolean){
+                    if(!user)return
+                    val height=value+70
+                    KeyPopKeyGeometry.setHeightPercent(this@MainActivity,
+                        language,board.selectedRow,board.selectedColumn,
+                        board.selectedToken,height)
+                    heightLabel.text="Selected key height: $height%"
+                    board.refresh()
+                }
+                override fun onStartTrackingTouch(s:SeekBar?){}
+                override fun onStopTrackingTouch(s:SeekBar?){}
+            })
+        }
+        controls.addView(keyHeight)
+        updateSelection()
+        controls.addView(text("WHOLE KEYBOARD · live settings",14f,accent,true))
+        val general=mutableListOf<Triple<SeekBar,String,Int>>()
+        fun sizeSlider(label:String,key:String,min:Int,max:Int,initial:Int,unit:String) {
+            val title=text("$label: ${prefs.getInt(key,initial).coerceIn(min,max)}$unit",
+                14f,ink,true)
+            val slider=SeekBar(this).apply{
+                this.max=max-min
+                progress=prefs.getInt(key,initial).coerceIn(min,max)-min
+                contentDescription=label
+                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+                    override fun onProgressChanged(s:SeekBar?,v:Int,user:Boolean){
+                        title.text="$label: ${v+min}$unit"
+                        if(user){prefs.edit().putInt(key,v+min).apply();board.refresh()}
+                    }
+                    override fun onStartTrackingTouch(s:SeekBar?){}
+                    override fun onStopTrackingTouch(s:SeekBar?){}
+                })
+            }
+            controls.addView(title);controls.addView(slider)
+            general.add(Triple(slider,key,min))
+        }
+        sizeSlider("All keys · base height","height",36,90,51," dp")
         sizeSlider("Keyboard width","keyboardWidthPercent",65,100,100,"%")
-        sizeSlider("Key spacing","spacing",1,10,4," dp")
-        sizeSlider("Key text","font",12,32,19," sp")
-        sizeSlider("Corners","round",3,40,13," dp")
-        val numberRow=Switch(this).apply {
-            text="Number row"
-            setTextColor(ink)
+        sizeSlider("Horizontal key spacing","spacing",1,10,4," dp")
+        sizeSlider("Key text size","font",12,32,19," sp")
+        sizeSlider("Corner rounding","round",3,40,13," dp")
+        val numberRow=Switch(this).apply{
+            text="Show number row";setTextColor(ink)
             isChecked=prefs.getBoolean("numberRow",true)
-            setOnCheckedChangeListener{_,on->
-                prefs.edit().putBoolean("numberRow",on).apply()
-                preview.refresh()
+            setOnCheckedChangeListener{_,yes->
+                prefs.edit().putBoolean("numberRow",yes).apply();board.refresh()
             }
         }
         controls.addView(numberRow)
-        action(controls,"Reset size"){
+        action(controls,"Reset all key dimensions to defaults"){
+            KeyPopKeyGeometry.resetAllDimensions(this)
             prefs.edit().putInt("height",51).putInt("keyboardWidthPercent",100)
-                .putInt("spacing",4).putInt("font",19).putInt("round",13)
-                .putBoolean("numberRow",true).apply()
-            val defaults=mapOf("height" to 51,"keyboardWidthPercent" to 100,
+                .putInt("spacing",4).putInt("font",19).putInt("round",13).apply()
+            val values=mapOf("height" to 51,"keyboardWidthPercent" to 100,
                 "spacing" to 4,"font" to 19,"round" to 13)
-            sliders.forEach{(seek,key,min)->seek.progress=defaults.getValue(key)-min}
-            numberRow.isChecked=true
-            preview.refresh()
+            general.forEach{(bar,key,min)->bar.progress=values.getValue(key)-min}
+            board.refresh()
+            updateSelection()
         }
-        val area=ScrollView(this).apply {
-            isFillViewport=false
-            isVerticalScrollBarEnabled=false
-            addView(controls)
-        }
-        val height=(resources.displayMetrics.heightPixels/resources.displayMetrics.density*.42f)
-            .toInt().coerceIn(220,350)
-        shell.addView(area,LinearLayout.LayoutParams(-1,dp(height)))
-        AlertDialog.Builder(this).setTitle("Resize Keyboard")
+        val scroll=ScrollView(this).apply{isVerticalScrollBarEnabled=true;addView(controls)}
+        val available=(resources.displayMetrics.heightPixels/resources.displayMetrics.density*
+            .36f).toInt().coerceIn(220,360)
+        shell.addView(scroll,LinearLayout.LayoutParams(-1,dp(available)))
+        AlertDialog.Builder(this).setTitle("Live Key-by-Key Resizing")
             .setView(shell).setPositiveButton("Done",null).show()
     }
     override fun onCreate(savedInstanceState:Bundle?){
@@ -245,7 +336,12 @@ class MainActivity:Activity() {
         if(section !in setOf("settingsHome","typing","languagePacks","themes",
                 "layouts","keysets","design","translation","security","tools","onboarding"))
             section="settingsHome"
-        navigate(section)
+        val target=section
+        section="settingsHome"
+        if(target!="settingsHome")pageHistory.addLast("settingsHome")
+        navigate(target,false)
+        if(intent.getBooleanExtra("openResizeDialog",false))
+            content.post {showResizeDialog()}
     }
     override fun onResume(){
         super.onResume()
@@ -256,11 +352,15 @@ class MainActivity:Activity() {
         ticker.removeCallbacks(refresh)
         super.onPause()
     }
-    // Back exits the settings task in one step. The visible "All Settings"
-    // control remains available when the user intentionally wants the index.
+    /** Android Back and our toolbar Back share the same one-level history. */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed(){
-        finish()
+        backOneSection()
+    }
+    private fun backOneSection() {
+        if(pageHistory.isNotEmpty())navigate(pageHistory.removeLast(),false)
+        else if(section!="settingsHome")navigate("settingsHome",false)
+        else finish()
     }
     override fun onNewIntent(intent:Intent){
         super.onNewIntent(intent)
@@ -268,8 +368,11 @@ class MainActivity:Activity() {
         val target=intent.getStringExtra("openSection")?:"settingsHome"
         navigate(if(target=="settings")"typing" else target)
     }
-    private fun navigate(destination:String){
-        section=if(destination in setOf("themes","layouts","keysets"))"design" else destination
+    private fun navigate(destination:String,record:Boolean=true){
+        val next=if(destination in setOf("themes","layouts","keysets"))"design" else destination
+        if(record && next!=section)pageHistory.addLast(section)
+        if(next=="settingsHome" && record)pageHistory.clear()
+        section=next
         downloadMessage=null;downloadProgress=null
         content.removeAllViews()
         val header=LinearLayout(this).apply {
@@ -289,7 +392,15 @@ class MainActivity:Activity() {
         header.addView(close,LinearLayout.LayoutParams(-2,dp(42)))
         content.addView(header)
         if(section!="settingsHome") {
-            action(content,"‹  All Settings"){navigate("settingsHome")}
+            val previous=pageHistory.lastOrNull()?:"settingsHome"
+            val parentLabel=when(previous) {
+                "design"->"Keyboard Design";"typing"->"Typing & Size"
+                "tools"->"Tools";"translation"->"Translation"
+                "security"->"Clipboard & Security";else->"All Settings"
+            }
+            action(content,"‹  Back to $parentLabel"){backOneSection()}
+            if(previous!="settingsHome")
+                action(content,"All Settings"){navigate("settingsHome")}
         }
         try {
             when(section){
