@@ -1385,7 +1385,13 @@ class AetherImeService : InputMethodService() {
             showEmojiPanel(root)
             if(!emojiSearch)return
         }
-        if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !emojiOpen) {
+        // A host search box can set NO_SUGGESTIONS to suppress Android's
+        // default spellchecker. It must not make the user's explicitly
+        // enabled KeyPop prediction row disappear. Secret fields stay blocked.
+        if(!isNumeric && !symbols && !emojiOpen &&
+            prefs.getBoolean("suggestions",true) &&
+            KeyPopTypingRules.textAllowsSuggestions(
+                currentInputEditorInfo?.inputType?:0)) {
             val bar=LinearLayout(this).apply{
                 orientation=LinearLayout.HORIZONTAL
                 gravity=Gravity.CENTER_VERTICAL
@@ -1952,8 +1958,9 @@ class AetherImeService : InputMethodService() {
     /** Only one editor snapshot is fetched for a burst of selection updates. */
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
-        if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo) ||
-            !KeyPopTypingRules.textAllowsSuggestions(currentInputEditorInfo?.inputType?:0)) {
+        if(numeric(currentInputEditorInfo) ||
+            !KeyPopTypingRules.textAllowsSuggestions(
+                currentInputEditorInfo?.inputType?:0)) {
             predictionGeneration++
             predictionPending?.let{predictionHandler.removeCallbacks(it)}
             bar.visibility=View.GONE
@@ -2011,7 +2018,13 @@ class AetherImeService : InputMethodService() {
                 val predictionStart=SystemClock.elapsedRealtimeNanos()
                 // Personal context is retrieved only on the prediction
                 // executor. Never query encrypted SQLite on the key UI thread.
-                val personal=if(prefs.getBoolean("contextPredictions",true))
+                // NO_PERSONALIZED_LEARNING and NO_SUGGESTIONS field flags
+                // suppress personal context, but not generic offline words.
+                val privateMode=sensitive(currentInputEditorInfo) ||
+                    !KeyPopTypingRules.textAllowsLearning(
+                        currentInputEditorInfo?.inputType?:0)
+                val personal=if(!privateMode &&
+                    prefs.getBoolean("contextPredictions",true))
                     runCatching{personalLanguage.candidates(predLang,before,word,3)}
                         .getOrDefault(emptyList()) else emptyList()
                 val dictionary=if(word.isEmpty())
@@ -2019,28 +2032,32 @@ class AetherImeService : InputMethodService() {
                     else lexicon.suggestions(predLang,word,
                         limit=if(prefs.getBoolean("aggressivePredictions",true))8 else 3,
                         previous=previous,
-                        beforeCursor=if(prefs.getBoolean("contextPredictions",true))
+                        beforeCursor=if(!privateMode &&
+                            prefs.getBoolean("contextPredictions",true))
                             before else "")
                 // The Auto-correct switch governs replacements only.
                 // All sources must compete in one ranking instead of placing
                 // every personal candidate ahead of every dictionary result.
                 val spelling=if(word.length>=3)
                     lexicon.correction(predLang,word,before) else null
-                val feedback=if(word.length>=3)
+                val feedback=if(word.length>=3 && !privateMode)
                     runCatching{personalLanguage.rejectionWeights(
                         predLang,word,(personal+dictionary+listOfNotNull(spelling)).distinct())}
                         .getOrDefault(emptyMap()) else emptyMap()
                 val safeSpelling=spelling?.takeUnless{(feedback[it]?:0)>=2}
                 val values=KeyPopUnifiedPrediction.rank(predLang,word,before,
                     personal,dictionary,safeSpelling,feedback,8)
-                val grammar=if(word.isNotEmpty() && prefs.getBoolean("grammarHints",true))
+                val grammar=if(word.isNotEmpty() && !privateMode &&
+                    prefs.getBoolean("grammarHints",true))
                     KeyPopGrammarRules.suggest(before,predLang) else null
                 KeyPopDiagnostics.observePredictionCompute(this,
                     SystemClock.elapsedRealtimeNanos()-predictionStart)
                 if(token!=predictionGeneration)return@execute
                 predictionHandler.post {
                     if(token!=predictionGeneration || lastSuggestionContext!=key ||
-                        bar!==suggestionBar || sensitive(currentInputEditorInfo))return@post
+                        bar!==suggestionBar ||
+                        !KeyPopTypingRules.textAllowsSuggestions(
+                            currentInputEditorInfo?.inputType?:0))return@post
                     latestSpaceAdvice=SpaceAdvice(predLang,before,word,safeSpelling,grammar)
                     renderSuggestions(bar,before,word,predLang,values,safeSpelling,grammar)
                 }
@@ -2080,7 +2097,9 @@ class AetherImeService : InputMethodService() {
             val connection=currentInputConnection ?:return
             val actual=trailingWordPattern.find(
                 connection.getTextBeforeCursor(140,0)?.toString().orEmpty())?.value.orEmpty()
-            if(actual!=word || sensitive(currentInputEditorInfo))return
+            if(actual!=word ||
+                !KeyPopTypingRules.textAllowsSuggestions(
+                    currentInputEditorInfo?.inputType?:0))return
             editorContext.clear()
             connection.beginBatchEdit()
             if(actual.isNotEmpty())connection.deleteSurroundingText(actual.length,0)
