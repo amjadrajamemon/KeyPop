@@ -70,7 +70,7 @@ adb install -r "$TEST_APK"
 adb logcat -c
 echo "[2/6] Assert Android Activity views and privacy-safe Google Translate handoff intents"
 adb shell am instrument -w -r \
-  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest,com.aetherkeys.keyboard.KeyPopRC10DictionarySmokeTest,com.aetherkeys.keyboard.KeyPopRC11InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC12InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC17ClipboardBackupInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC18TypingPerformanceInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC19ScreenshotSetupInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC20ClipboardUiInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC21PersonalArchiveInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC22MixMatchInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC23LatencyInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC24GlassInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC26PredictionInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC27ControlGeometryInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC33AdaptiveTypingInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC33QualityMetricsInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC34ResizeAndNavigationInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC35SuggestionDesignInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC35SuggestionStyleInstrumentedTest \
+  -e class com.aetherkeys.keyboard.KeyPopRuntimeSmokeTest,com.aetherkeys.keyboard.GoogleTranslateHandoffTest,com.aetherkeys.keyboard.KeyPopRC10DictionarySmokeTest,com.aetherkeys.keyboard.KeyPopRC11InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC12InstrumentedTest,com.aetherkeys.keyboard.KeyPopRC17ClipboardBackupInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC18TypingPerformanceInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC19ScreenshotSetupInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC20ClipboardUiInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC21PersonalArchiveInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC22MixMatchInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC23LatencyInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC24GlassInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC26PredictionInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC27ControlGeometryInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC33AdaptiveTypingInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC33QualityMetricsInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC34ResizeAndNavigationInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC35SuggestionDesignInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC35SuggestionStyleInstrumentedTest,com.aetherkeys.keyboard.KeyPopRC36SearchAndOptionsInstrumentedTest \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" \
   | tee forensic-evidence/instrumentation.txt
 grep -E 'OK \([0-9]+ tests?\)' forensic-evidence/instrumentation.txt
@@ -159,6 +159,37 @@ fi
 echo "PASS: real attached KeyPop IME row visible while empty and after typing"
 adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
 grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-ime-state.txt
+
+# Reproduce the reported Google search input on a genuine Android EditText.
+# It sets WEB_EDIT_TEXT + NO_SUGGESTIONS, which historically hid the strip
+# despite the keyboard's Suggestions setting being enabled.
+echo "[search] Verify KeyPop predictions remain visible in host NO_SUGGESTIONS fields"
+adb shell am force-stop "$PKG"
+adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopHomeActivity" \
+    --ez keypopSearchVisualSmoke true > forensic-evidence/search-field-launch.txt
+sleep 3
+adb shell ime enable "$SERVICE"
+adb shell ime set "$SERVICE"
+search_ok=0
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    read_live_probe > forensic-evidence/search-field-prediction-probe.xml
+    if grep -Fq 'name="active_visible" value="true"' forensic-evidence/search-field-prediction-probe.xml &&
+       grep -Fq '<string name="typed">do</string>' forensic-evidence/search-field-prediction-probe.xml &&
+       grep -Eq '<int name="visible_chips" value="[1-9]' forensic-evidence/search-field-prediction-probe.xml; then
+        search_ok=1
+        break
+    fi
+done
+adb exec-out screencap -p > forensic-evidence/search-field-keypop-screenshot.png
+if [ "$search_ok" != 1 ]; then
+    echo "REGRESSION: KeyPop suggestion strip is hidden in Google-style search editors" >&2
+    cat forensic-evidence/search-field-prediction-probe.xml >&2 || true
+    exit 1
+fi
+adb shell dumpsys input_method > forensic-evidence/search-field-ime-state.txt
+grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/search-field-ime-state.txt
+echo "PASS: KeyPop suggestion strip visibly attached while typing 'How do' in a NO_SUGGESTIONS search editor"
 
 echo "[5/6] Verify installation identity"
 adb shell pm path "$PKG" | tee forensic-evidence/installed-package.txt
