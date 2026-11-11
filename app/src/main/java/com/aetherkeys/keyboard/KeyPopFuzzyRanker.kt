@@ -91,7 +91,7 @@ object KeyPopFuzzyRanker {
             runnerUp==null && best.distance==1 &&
                 best.tier<=10 && best.score>=380 ->best.word
             runnerUp==null ->null
-            best.distance==1 && best.score>=325 &&
+            best.distance==1 && best.score>=315 &&
                 margin>=oneEditMargin ->best.word
             best.distance==2 && best.tier<=10 && best.score>=245 &&
                 margin>=twoEditMargin ->best.word
