@@ -20,10 +20,28 @@ object KeyPopTypingRules {
             InputType.TYPE_TEXT_VARIATION_PHONETIC
         )
     }
-    /** Fields that opt out of suggestions must never be sent through the
-     * prediction, dictionary-learning or personal-history pipeline. */
-    fun textAllowsSuggestions(inputType:Int):Boolean =
-        textAllowsAutomaticChanges(inputType)
+    /**
+     * Show explicitly enabled keyboard suggestions in ordinary text/search
+     * fields even when the host sets NO_SUGGESTIONS to disable the system
+     * spellchecker. The host opt-out STILL disables automatic text changes
+     * and personal history learning; passwords, email, URI and other
+     * restricted input variations never enter suggestion generation.
+     */
+    fun textAllowsSuggestions(inputType:Int):Boolean {
+        val kind=inputType and InputType.TYPE_MASK_CLASS
+        if(kind!=InputType.TYPE_CLASS_TEXT)return false
+        val variation=inputType and InputType.TYPE_MASK_VARIATION
+        return variation !in setOf(
+            InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_URI,
+            InputType.TYPE_TEXT_VARIATION_FILTER,
+            InputType.TYPE_TEXT_VARIATION_PHONETIC
+        )
+    }
 
     fun textAllowsLearning(inputType:Int):Boolean =
         textAllowsAutomaticChanges(inputType)
