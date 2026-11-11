@@ -718,6 +718,14 @@ class AetherImeService : InputMethodService() {
             adjust("Floating left/right","floatX",-d(75),d(75),0){applyFloatingLayout()}
             adjust("Floating lift (dp)","floatY",0,90,16){applyFloatingLayout()}
         }
+        panel.addView(chip("✎  Resize each key · live preview") {
+            val screen=Intent(this,MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra("openSection","typing")
+                putExtra("openResizeDialog",true)
+            }
+            startActivity(screen)
+        },LinearLayout.LayoutParams(-1,d(44)).apply{bottomMargin=d(7)})
         val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
         fun action(label:String,weight:Float,fn:()->Unit){
             actions.addView(chip(label,onTap=fn),LinearLayout.LayoutParams(0,d(40),weight).apply{
