@@ -529,13 +529,10 @@ class MainActivity:Activity() {
             val radio=android.widget.RadioButton(this).apply {
                 text=label
                 textSize=15f
-                setTextColor(ink)
-                setButtonTintList(android.content.res.ColorStateList.valueOf(accent))
-                background=shape(card,10,edge)
+                KeyPopOptionStyle.decorate(this@MainActivity,this)
                 id=android.view.View.generateViewId()
                 isChecked=index==selected
                 contentDescription="Choose "+label
-                setPadding(dp(12),dp(5),dp(10),dp(5))
                 setOnClickListener {
                     if(apply(index)) {
                         value.text=label
@@ -720,10 +717,8 @@ class MainActivity:Activity() {
         val palettePanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         KeyPopSuggestionStyle.paletteNames.forEachIndexed{index,name->
             val radio=android.widget.RadioButton(this).apply {
-                text=name;textSize=14f;setTextColor(ink)
-                background=shape(card,9,edge)
-                setButtonTintList(android.content.res.ColorStateList.valueOf(accent))
-                setPadding(dp(10),dp(3),dp(8),dp(3))
+                text=name;textSize=14f
+                KeyPopOptionStyle.decorate(this@MainActivity,this)
                 isChecked=KeyPopSuggestionStyle.palette(this@MainActivity)==index
                 setOnClickListener{save("suggestionPalette",index)}
             }
