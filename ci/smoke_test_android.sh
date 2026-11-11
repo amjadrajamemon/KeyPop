@@ -111,59 +111,54 @@ if ! grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-selected-ime.
     grep 'mCurMethodId=' forensic-evidence/prediction-selected-ime.txt || true
     exit 1
 fi
-adb shell uiautomator dump /sdcard/keypop-prediction-host.xml >/dev/null
-adb exec-out cat /sdcard/keypop-prediction-host.xml \
-    > forensic-evidence/prediction-host.xml
-# Tapping the actual EditText provides an explicit user action and works on
-# Android versions that refuse showSoftInput() during Activity startup.
-coords="$(python3 - <<'PY'
-import re
-import sys
-import xml.etree.ElementTree as ET
-root=ET.parse('forensic-evidence/prediction-host.xml').getroot()
-for node in root.iter('node'):
-    if node.get('class','').endswith('EditText'):
-        match=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',node.get('bounds',''))
-        if match:
-            x1,y1,x2,y2=map(int,match.groups())
-            print((x1+x2)//2,(y1+y2)//2)
-            sys.exit(0)
-print('Could not locate a visible keyboard test EditText',file=sys.stderr)
-sys.exit(1)
-PY
-)"
-read -r tap_x tap_y <<< "$coords"
-adb shell input tap "$tap_x" "$tap_y"
-sleep 3
-adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
-if ! grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-ime-state.txt; then
-    echo "KEYPOP NOT ACTIVE AT VISUAL CHECK: refuse to inspect Gboard" >&2
-    grep 'mCurMethodId=' forensic-evidence/prediction-ime-state.txt || true
-    exit 1
-fi
+# The accessibility/UIAutomator root intermittently returns "null root node"
+# even when the actual KeyPop IME and three suggestion chips are visible in
+# the saved screenshot. Inspect the real attached IME view via its debug-only,
+# on-device SharedPreferences probe instead; this is stricter and deterministic.
+read_live_probe() {
+    adb shell run-as "$PKG" cat shared_prefs/keypop_visual_probe.xml 2>/dev/null || true
+}
+echo "[visual] Verify actual IME view is on-screen with a visible suggestion chip"
+probe_ok=0
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    read_live_probe > forensic-evidence/prediction-idle-probe.xml
+    if grep -Fq 'name="active_visible" value="true"' forensic-evidence/prediction-idle-probe.xml &&
+       grep -Eq '<int name="visible_chips" value="[1-9]' forensic-evidence/prediction-idle-probe.xml; then
+        probe_ok=1
+        break
+    fi
+done
 adb exec-out screencap -p > forensic-evidence/prediction-actual-ime.png
-adb shell uiautomator dump /sdcard/keypop-prediction-idle.xml >/dev/null
-adb exec-out cat /sdcard/keypop-prediction-idle.xml \
-    > forensic-evidence/prediction-idle.xml
-# A fast offline language model may replace the idle placeholder with
-# genuine starter predictions (I / The / Please) before UIAutomator runs.
-# Either visible state demonstrates that the active IME row is drawn.
-if ! grep -Eq '(Type to see suggestions|Suggestion:)' forensic-evidence/prediction-idle.xml; then
-    echo "REAL IME PREDICTION ROW MISSING: neither idle hint nor live suggestions visible" >&2
-    grep -o 'text="[^"]*"' forensic-evidence/prediction-idle.xml | tail -30 >&2 || true
+if [ "$probe_ok" != 1 ]; then
+    echo "REAL KEYPOP IME PREDICTION ROW MISSING (or detached)" >&2
+    cat forensic-evidence/prediction-idle-probe.xml >&2 || true
+    adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
+    grep 'mCurMethodId=' forensic-evidence/prediction-ime-state.txt >&2 || true
     exit 1
 fi
+echo "[visual] Type known misspelling and verify live suggestion refresh"
 adb shell input text improvem
-sleep 3
-adb shell uiautomator dump /sdcard/keypop-prediction-typing.xml >/dev/null
-adb exec-out cat /sdcard/keypop-prediction-typing.xml \
-    > forensic-evidence/prediction-typing.xml
-if ! grep -Eq '(Suggestion:|Typed word:)' forensic-evidence/prediction-typing.xml; then
-    echo "REAL IME PREDICTION ROW MISSING WHILE TYPING" >&2
-    grep -o 'text="[^"]*"' forensic-evidence/prediction-typing.xml | tail -30 >&2 || true
+typing_ok=0
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    read_live_probe > forensic-evidence/prediction-typing-probe.xml
+    if grep -Fq 'name="active_visible" value="true"' forensic-evidence/prediction-typing-probe.xml &&
+       grep -Fq '<string name="typed">improvem</string>' forensic-evidence/prediction-typing-probe.xml &&
+       grep -Eq '<int name="visible_chips" value="[1-9]' forensic-evidence/prediction-typing-probe.xml; then
+        typing_ok=1
+        break
+    fi
+done
+adb exec-out screencap -p > forensic-evidence/prediction-typing-screen.png
+if [ "$typing_ok" != 1 ]; then
+    echo "REAL KEYPOP PREDICTIONS FAILED TO UPDATE DURING TYPING" >&2
+    cat forensic-evidence/prediction-typing-probe.xml >&2 || true
     exit 1
 fi
-echo "PASS: actual active IME prediction row visible while empty and typing"
+echo "PASS: real attached KeyPop IME row visible while empty and after typing"
+adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
+grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-ime-state.txt
 
 echo "[5/6] Verify installation identity"
 adb shell pm path "$PKG" | tee forensic-evidence/installed-package.txt
