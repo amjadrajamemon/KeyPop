@@ -95,21 +95,22 @@ class KeyPopPersonalLanguageModel(context:Context) {
     /** Never memorize numeric, URL-like, email-like, command or suspicious text. */
     fun canLearn(text:String,word:String):Boolean {
         val context=text.takeLast(100)
-        return word.length in 2..28 && word.all{it.isLetter()} &&
+        return KeyPopUnicodeWords.isToken(word) &&
             !context.any{it.isDigit()} &&
             listOf("@","://","/","\\","=","#","[","]","{","}").none{it in context} &&
             context.none{it=='\n'||it=='\r'}
     }
     private fun contexts(language:Int,words:List<String>):List<String> {
         if(words.isEmpty())return emptyList()
-        val last=words.takeLast(2)
+        val last=words.takeLast(3)
         val one="l$language|"+last.last()
-        // Trigram > bigram > personal global frequency. This is why
-        // repeated words can reappear outside their original sentence.
         val global="l$language|*"
-        return if(last.size>=2)
-            listOf("l$language|"+last.joinToString("|"),one,global)
-            else listOf(one,global)
+        return when {
+            last.size>=3 -> listOf("l$language|"+last.joinToString("|"),
+                "l$language|"+last.takeLast(2).joinToString("|"),one,global)
+            last.size==2 -> listOf("l$language|"+last.joinToString("|"),one,global)
+            else ->listOf(one,global)
+        }
     }
     /** Pass a snapshot fetched once on Space, not a live InputConnection. */
     @Synchronized fun observe(language:Int,before:String,committed:String) {
@@ -201,7 +202,7 @@ class KeyPopPersonalLanguageModel(context:Context) {
             val all=words(segment)
             if(all.size !in 2..75)continue
             for(i in 1 until all.size) {
-                val history=all.subList((i-2).coerceAtLeast(0),i)
+                val history=all.subList((i-3).coerceAtLeast(0),i)
                 val context=history.joinToString(" ")+" "
                 if(canLearn(context,all[i])){
                     observe(language,context,all[i])
