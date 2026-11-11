@@ -596,7 +596,7 @@ class MainActivity:Activity() {
                     KeyPopKeysets.apply(this@MainActivity,KeyPopKeysets.all[index].id)
                 }
             }
-            action(this,"Resize individual keys","Live height, width, spacing and text size"){
+            action(this,"Resize keys","Live individual key height, width, spacing and text size"){
                 showResizeDialog()
             }
         }
