@@ -85,6 +85,9 @@ class KeyPopPersonalLanguageModel(context:Context) {
         c.init(Cipher.DECRYPT_MODE,aesKey,GCMParameterSpec(128,data.copyOfRange(0,12)))
         return String(c.doFinal(data.copyOfRange(12,data.size)),Charsets.UTF_8)
     }
+    // Most users have no explicit correction feedback. Avoid a SQLite read
+    // on every prediction for an empty feedback table.
+    private var feedbackPresent:Boolean?=null
     private var cachedContextKey:String?=null
     private var cachedWords:List<String> = emptyList()
     private val tokenize=Regex("[\\p{L}\\p{M}]+(?:['’][\\p{L}\\p{M}]+)*")
@@ -222,6 +225,7 @@ class KeyPopPersonalLanguageModel(context:Context) {
         if(source.length !in 2..28 || target.length !in 2..28 ||
             !KeyPopUnicodeWords.isToken(source) ||
             !KeyPopUnicodeWords.isToken(target))return
+        feedbackPresent=true
         val a=signature("source|"+source)
         val b=signature("target|"+target)
         val db=helper.writableDatabase
@@ -240,6 +244,13 @@ class KeyPopPersonalLanguageModel(context:Context) {
         if(!prefs.getBoolean("personalHistoryLearning",true) ||
             !prefs.getBoolean("learningEnabled",true) ||
             original.length !in 3..28 || candidates.isEmpty())return emptyMap()
+        if(feedbackPresent==null) {
+            helper.readableDatabase.rawQuery(
+                "SELECT 1 FROM correction_feedback LIMIT 1",null).use {
+                feedbackPresent=it.moveToFirst()
+            }
+        }
+        if(feedbackPresent!=true)return emptyMap()
         val id=signature("source|"+normalize(original))
         val records=HashMap<String,Int>()
         helper.readableDatabase.query("correction_feedback",
@@ -256,6 +267,7 @@ class KeyPopPersonalLanguageModel(context:Context) {
     @Synchronized fun clear() {
         helper.writableDatabase.delete("next_words",null,null)
         helper.writableDatabase.delete("correction_feedback",null,null)
+        feedbackPresent=false
         cachedContextKey=null
         cachedWords=emptyList()
     }
