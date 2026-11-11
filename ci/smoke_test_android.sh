@@ -99,8 +99,11 @@ sleep 3
 adb shell uiautomator dump /sdcard/keypop-prediction-idle.xml >/dev/null
 adb exec-out cat /sdcard/keypop-prediction-idle.xml \
     > forensic-evidence/prediction-idle.xml
-if ! grep -Fq 'Type to see suggestions' forensic-evidence/prediction-idle.xml; then
-    echo "REAL IME PREDICTION ROW MISSING: idle state not visible" >&2
+# A fast offline language model may replace the idle placeholder with
+# genuine starter predictions (I / The / Please) before UIAutomator runs.
+# Either visible state demonstrates that the active IME row is drawn.
+if ! grep -Eq '(Type to see suggestions|Suggestion:)' forensic-evidence/prediction-idle.xml; then
+    echo "REAL IME PREDICTION ROW MISSING: neither idle hint nor live suggestions visible" >&2
     grep -o 'text="[^"]*"' forensic-evidence/prediction-idle.xml | tail -30 >&2 || true
     exit 1
 fi
