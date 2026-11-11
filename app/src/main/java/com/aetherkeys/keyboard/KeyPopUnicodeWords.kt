@@ -23,5 +23,5 @@ object KeyPopUnicodeWords {
 
     fun isToken(value:String):Boolean =
         value.length in 2..32 && token.matchEntire(value)!=null &&
-            value.first().isLetter() && value.last().isLetter()
+            value.first().isLetter()
 }
