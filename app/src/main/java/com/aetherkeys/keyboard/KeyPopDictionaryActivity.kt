@@ -51,7 +51,7 @@ class KeyPopDictionaryActivity:Activity() {
         root.removeAllViews()
         add(label("KEYPOP  /  PERSONAL DICTIONARY",12f,accent),4)
         add(label("Words that matter to you",25f),4)
-        add(label("Edit learned words by language. Everything stays on-device; learning from typing is off until you enable it.",13f,dim),16)
+        add(label("Manage personal words and local learning. Learning follows the switch below; disable it at any time.",13f,dim),16)
         val options=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
         KeyPopLayouts.languages.forEachIndexed{index,name->
             val control=button(name){language=index;render()}
@@ -64,7 +64,7 @@ class KeyPopDictionaryActivity:Activity() {
         val toggle=Switch(this).apply{
             text="Learn new words automatically"
             setTextColor(white);textSize=14f
-            isChecked=preferences.getBoolean("learningEnabled",false)
+            isChecked=preferences.getBoolean("learningEnabled",true)
             setOnCheckedChangeListener {_,checked->
                 preferences.edit().putBoolean("learningEnabled",checked).apply()
             }
