@@ -77,7 +77,10 @@ class KeyPopHomeActivity : Activity() {
         setContentView(scroll)
         ViewCompat.requestApplyInsets(scroll)
 
-        column.addView(text("KEYPOP  ·  v1.0.18 RC19",29f,teal,true))
+        val installedVersion=runCatching {
+            packageManager.getPackageInfo(packageName,0).versionName
+        }.getOrNull()?:"Preview"
+        column.addView(text("KEYPOP  ·  "+installedVersion,27f,teal,true))
         column.addView(text("Keyboard Setup",24f,ink,true))
         column.addView(text("English ⇄ اردو  •  سنڌي",17f,muted))
         column.addView(text("To type, enable KeyPop in Android settings and choose it as the active keyboard. Installing an APK does not activate it.",14f,muted))
@@ -91,7 +94,7 @@ class KeyPopHomeActivity : Activity() {
                 .showInputMethodPicker()
         }
         column.addView(text("Keyboard test field",15f,teal,true))
-        column.addView(EditText(this).apply {
+        val typingTest=EditText(this).apply {
             hint="Tap here to test the selected keyboard"
             setHintTextColor(muted)
             setTextColor(ink)
@@ -102,7 +105,17 @@ class KeyPopHomeActivity : Activity() {
                 setColor(0xFF27384E.toInt())
                 cornerRadius=dp(10).toFloat()
             }
-        },LinearLayout.LayoutParams(-1,-2))
+        }
+        column.addView(typingTest,LinearLayout.LayoutParams(-1,-2))
+        // An explicit test intent lets CI inspect the REAL active IME view,
+        // rather than only the shared suggestion-row helper widget.
+        if(intent.getBooleanExtra("keypopVisualSmoke",false)) {
+            typingTest.requestFocus()
+            typingTest.postDelayed({
+                (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                    .showSoftInput(typingTest,InputMethodManager.SHOW_IMPLICIT)
+            },650)
+        }
         addButton(column,"Choose language packs · download selected directions") {
             startActivity(Intent(this,KeyPopModelManagerActivity::class.java))
         }
@@ -119,7 +132,8 @@ class KeyPopHomeActivity : Activity() {
         }
         column.addView(text("English ↔ Urdu works offline with downloaded Google ML Kit packs. Sindhi model files are experimental and must pass independent translation checks.",13f,muted))
         val settings=getSharedPreferences("keypop",MODE_PRIVATE)
-        if(!settings.getBoolean("firstSindhiOfferV100",false)) {
+        if(!intent.getBooleanExtra("keypopVisualSmoke",false) &&
+            !settings.getBoolean("firstSindhiOfferV100",false)) {
             settings.edit().putBoolean("firstSindhiOfferV100",true).apply()
             column.post {
                 if(!isFinishing && !isDestroyed) {

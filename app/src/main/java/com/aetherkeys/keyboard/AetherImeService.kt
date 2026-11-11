@@ -56,6 +56,8 @@ class AetherImeService : InputMethodService() {
     private var clipPanelGeneration=0
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
+    /** Real toolbar, shared between Material and alternate styles. */
+    private var suggestionToolbar:LinearLayout?=null
     private val keyGeometryPositions=HashMap<Button,Triple<Int,Int,Int>>()
     private var materialTopBar:LinearLayout?=null
     private var lastSuggestionContext:String?=null
@@ -1012,6 +1014,7 @@ class AetherImeService : InputMethodService() {
         root.removeAllViews()
         screenshotSlot=null
         suggestionBar=null
+        suggestionToolbar=null
         materialTopBar=null
         lastSuggestionContext=null
         predictionGeneration++
@@ -1130,6 +1133,7 @@ class AetherImeService : InputMethodService() {
             }
             root.addView(top,LinearLayout.LayoutParams(-1,d(43)))
             materialTopBar=top
+            suggestionToolbar=top
         } else {
         val toolbar=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL
@@ -1168,6 +1172,7 @@ class AetherImeService : InputMethodService() {
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         }
         root.addView(toolbar,LinearLayout.LayoutParams(-1,d(44)))
+        suggestionToolbar=toolbar
         }
 
         if(toolsOpen) {
@@ -1381,20 +1386,29 @@ class AetherImeService : InputMethodService() {
             if(!emojiSearch)return
         }
         if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !emojiOpen) {
-            val bar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-            val preferred=prefs.getInt("suggestionHeight",45).coerceIn(38,64)
-            root.addView(bar,LinearLayout.LayoutParams(-1,d(
-                if(materialToolbar)preferred else preferred.coerceAtLeast(38))))
+            val bar=LinearLayout(this).apply{
+                orientation=LinearLayout.HORIZONTAL
+                gravity=Gravity.CENTER_VERTICAL
+                contentDescription="KeyPop word prediction and suggestion row"
+            }
+            val preferred=KeyPopSuggestionStyle.heightDp(this)
+            // Attach directly adjacent to the real toolbar. Both Material
+            // and alternate styles support above/below positioning.
+            val anchor=suggestionToolbar
+            val anchorIndex=if(anchor!=null)root.indexOfChild(anchor) else -1
+            val insertion=if(anchorIndex<0)0 else
+                anchorIndex+if(KeyPopSuggestionStyle.position(this)==
+                    KeyPopSuggestionStyle.ABOVE_TOOLBAR)0 else 1
+            root.addView(bar,insertion,LinearLayout.LayoutParams(-1,d(preferred)))
             suggestionBar=bar
             // Precreate the strip and populate it after the IME attaches.
             for(i in 0 until 3) {
-                val chip=chip(if(i==1)"Start typing" else ""){}
-                chip.textSize=prefs.getInt("suggestionFont",17).coerceIn(12,24).toFloat()
-                bar.addView(chip,LinearLayout.LayoutParams(0,d(preferred),1f).apply {
-                    leftMargin=d(2);rightMargin=d(2)
-                })
+                val chip=chip(""){}
+                KeyPopSuggestionStyle.addChip(this,bar,chip)
             }
-            bar.visibility=View.VISIBLE
+            KeyPopSuggestionStyle.applyRow(this,bar)
+            KeyPopSuggestionPresentation.waiting(bar)
+            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,"")
             requestSuggestionRefresh(0)
         }
         if(cursorTools) {
@@ -1938,13 +1952,18 @@ class AetherImeService : InputMethodService() {
     /** Only one editor snapshot is fetched for a burst of selection updates. */
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
-        val input=currentInputConnection ?:return
         if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo) ||
             !KeyPopTypingRules.textAllowsSuggestions(currentInputEditorInfo?.inputType?:0)) {
             predictionGeneration++
             predictionPending?.let{predictionHandler.removeCallbacks(it)}
             bar.visibility=View.GONE
             materialTopBar?.visibility=View.VISIBLE
+            return
+        }
+        val input=currentInputConnection
+        if(input==null) {
+            KeyPopSuggestionPresentation.waiting(bar)
+            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,"")
             return
         }
         val before=if(translatorOpen && translateDraftMode)translateDraft.takeLast(140)
@@ -1978,13 +1997,11 @@ class AetherImeService : InputMethodService() {
         }
         // Immediately expose what the person typed; never show a stale
         // *correction* from the previous word while the new word is entering.
-        for(i in 0 until bar.childCount) {
-            val chip=bar.getChildAt(i) as? Button ?:continue
-            if(word.isNotEmpty() && i==1) {
-                chip.text=word
-                chip.visibility=View.VISIBLE
-            } else chip.visibility=View.INVISIBLE
-        }
+        // Keep the strip visibly useful even while asynchronous word
+        // ranking is running or has no candidate for this context.
+        if(word.isNotEmpty())KeyPopSuggestionPresentation.composing(bar,word)
+        else KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
+        KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
         val without=before.removeSuffix(word).trimEnd()
         val previous=trailingWordPattern.find(without)?.value.orEmpty()
         val task=Runnable {
@@ -2034,16 +2051,13 @@ class AetherImeService : InputMethodService() {
     }
     private fun renderSuggestions(bar:LinearLayout,before:String,word:String,
         predLang:Int,values:List<String>,spelling:String?,grammar:KeyPopGrammarFix?) {
-        val size=prefs.getInt("suggestionFont",17).coerceIn(12,24)
+        val size=KeyPopSuggestionStyle.fontSize(this)
         while(bar.childCount<3) {
             val button=chip(""){}
             button.textSize=size.toFloat()
             button.setSingleLine(true)
             button.ellipsize=android.text.TextUtils.TruncateAt.END
-            bar.addView(button,LinearLayout.LayoutParams(0,d(
-                prefs.getInt("suggestionHeight",45).coerceIn(38,64)),1f).apply {
-                leftMargin=d(2);rightMargin=d(2)
-            })
+            KeyPopSuggestionStyle.addChip(this,bar,button)
         }
         fun replaceWord(choice:String) {
             lastAppliedCorrection=null
@@ -2119,6 +2133,11 @@ class AetherImeService : InputMethodService() {
                 })
             }
         }
+        if(offers.isEmpty()) {
+            KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
+            KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
+            return
+        }
         for(i in 0..2) {
             val button=bar.getChildAt(i) as Button
             val offer=offers.getOrNull(i)
@@ -2127,12 +2146,14 @@ class AetherImeService : InputMethodService() {
                 // typed word must never inflate into one giant full-width key.
                 button.visibility=View.INVISIBLE
             } else {
-                button.visibility=View.VISIBLE
+                KeyPopSuggestionStyle.applyChip(this,button)
                 button.textSize=size.toFloat()
                 button.text=offer.first
+                KeyPopSuggestionPresentation.markAvailable(button,offer.first)
                 button.setOnClickListener {tapFeedback(button);offer.second.invoke()}
             }
         }
+        KeyPopVisualProbe.capture(this,bar,suggestionToolbar,word)
     }
     /** Re-label only changed Latin keys instead of rebuilding the full IME. */
     private fun updateShiftKeys() {

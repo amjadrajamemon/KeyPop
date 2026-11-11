@@ -1,8 +1,8 @@
-name: KeyPop RC34 unified typing intelligence debug APK
+name: KeyPop RC35 unified typing intelligence debug APK
 on:
   push:
     branches:
-      - feature/rc34-live-per-key-resize-navigation-suggestions-20261111
+      - feature/rc35-visible-prediction-and-live-design-preview-20261111
   pull_request:
   workflow_dispatch:
 
@@ -44,51 +44,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.33-rc34-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.34-rc35-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.33-rc34-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.33-rc34-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.34-rc35-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.34-rc35-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-all-five-apks
+          name: KeyPop-v1.0.34-rc35-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-instrumentation
-          path: dist/KeyPop-v1.0.33-rc34-androidTest.apk
+          name: KeyPop-v1.0.34-rc35-instrumentation
+          path: dist/KeyPop-v1.0.34-rc35-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-ARM64
-          path: dist/KeyPop-v1.0.33-rc34-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.34-rc35-ARM64
+          path: dist/KeyPop-v1.0.34-rc35-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-ARM32
-          path: dist/KeyPop-v1.0.33-rc34-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.34-rc35-ARM32
+          path: dist/KeyPop-v1.0.34-rc35-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-x86
-          path: dist/KeyPop-v1.0.33-rc34-x86-debug.apk
+          name: KeyPop-v1.0.34-rc35-x86
+          path: dist/KeyPop-v1.0.34-rc35-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-x86_64
-          path: dist/KeyPop-v1.0.33-rc34-x86_64-debug.apk
+          name: KeyPop-v1.0.34-rc35-x86_64
+          path: dist/KeyPop-v1.0.34-rc35-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-Universal
-          path: dist/KeyPop-v1.0.33-rc34-universal-debug.apk
+          name: KeyPop-v1.0.34-rc35-Universal
+          path: dist/KeyPop-v1.0.34-rc35-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -101,11 +101,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-x86_64
+          name: KeyPop-v1.0.34-rc35-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-instrumentation
+          name: KeyPop-v1.0.34-rc35-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -125,7 +125,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-emulator-forensic-evidence
+          name: KeyPop-v1.0.34-rc35-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -135,15 +135,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC34 integration branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc34-live-per-key-resize-navigation-suggestions-20261111' }}
+    # Publish only the specific RC35 integration branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc35-visible-prediction-and-live-design-preview-20261111' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.33-rc34-all-five-apks
+          name: KeyPop-v1.0.34-rc35-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -152,8 +152,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.33-rc34-debug-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc34-live-per-key-resize-navigation-suggestions-20261111" --jq '.commit.sha')"
+          TAG="v1.0.34-rc35-debug-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc35-visible-prediction-and-live-design-preview-20261111" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
@@ -165,6 +165,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.33-rc34 Debug Preview — Android APKs" \
-              --notes "KeyPop RC34 debug preview: labeled resizing controls, touch-selectable live per-key width/height, taller default spacebar, one-step Back navigation, consistently visible suggestion bar, plus RC33 typing intelligence and multilingual offline acceptance checks. The signed production release is not established by this preview, and real-device Gboard-equivalent typing latency remains unverified. APK test identity: com.aetherkeys.keyboard.previewv134."
+              --title "KeyPop v1.0.34-rc35 Debug Preview — Android APKs" \
+              --notes "KeyPop RC35 debug preview: top-pinned readable suggestion and prediction row, visible idle/typing states, live theme/geometry/keyset/letter-layout selection previews while dialogs stay open, retained RC34 per-key resizing and RC33 adaptive typing, plus offline Sindhi and English-Urdu acceptance tests. The signed production release is not established by this preview, and real-device Gboard-equivalent typing latency remains unverified. APK test identity: com.aetherkeys.keyboard.previewv135."
           fi

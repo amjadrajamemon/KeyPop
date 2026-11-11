@@ -102,11 +102,18 @@ object KeyboardPresetCatalog {
 /** Offline lightweight preview showing real rows, geometry and number-row differences. */
 class KeyboardPresetPreview(
     context:Context,
-    private val candidate:KeyboardErgonomics,
-    private val previewKeyset:Int?=null
+    private var candidate:KeyboardErgonomics,
+    private var previewKeyset:Int?=null
 ):View(context) {
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
     private fun dp(v:Float)=v*resources.displayMetrics.density
+    /** The existing view responds to every choice without rebuilding Settings. */
+    fun showLive(geometry:KeyboardErgonomics=KeyboardPresetCatalog.selected(context),
+                 keyset:Int=KeyPopKeysets.selectedId(context)) {
+        candidate=geometry
+        previewKeyset=keyset
+        postInvalidateOnAnimation()
+    }
     override fun onMeasure(w:Int,h:Int) {
         setMeasuredDimension(MeasureSpec.getSize(w),dp(154f).toInt())
     }
@@ -136,16 +143,18 @@ class KeyboardPresetPreview(
             }
         }
         val footerHeight=dp(28f)
-        val rows=mutableListOf("QWERTYUIOP","ASDFGHJKL","ZXCVBNM")
+        val rows=KeyPopLayouts.active(context,0).map{it.toList()}.toMutableList()
         val numberRow=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
             .getBoolean("numberRow",true)
-        if(numberRow)rows.add(0,"1234567890")
+        if(numberRow)rows.add(0,(1..9).map(Int::toString)+listOf("0"))
         val gap=dp((candidate.spacing*0.7f).coerceIn(2f,4f))
         val available=h-toolbarHeight-footerHeight-dp(7f)-gap*(rows.size-1)
         val rowHeight=available/rows.size
         fun keyCap(label:String,x:Float,y:Float,kw:Float,kh:Float,primary:Boolean,cornerHint:String?){
             val color=if(primary)skin.accent else skin.key
-            val radius=dp((if(material)6 else candidate.radius.coerceIn(5,18)/1.7f).toFloat())
+            val rounding=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                .getInt("round",candidate.radius).coerceIn(3,40)
+            val radius=dp((if(material)rounding*.52f else rounding*.65f).coerceIn(2f,15f))
             val top=KeyPopGlass.blend(color,Color.WHITE,0.14f)
             val lower=KeyPopGlass.blend(color,Color.BLACK,0.12f)
             paint.shader=android.graphics.LinearGradient(x,y,x,y+kh,top,lower,
@@ -155,7 +164,10 @@ class KeyboardPresetPreview(
             paint.textAlign=Paint.Align.CENTER
             paint.typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL)
             paint.color=if(primary)Color.WHITE else skin.ink
-            paint.textSize=dp(if(label.length>=5)7.8f else 10f)
+            val selectedFont=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+                .getInt("font",candidate.font).coerceIn(12,32)
+            paint.textSize=dp(if(label.length>=5)7.8f else
+                (selectedFont*.53f).coerceIn(7.5f,15f))
             canvas.drawText(label,x+kw/2f,y+kh*.65f,paint)
             if(cornerHint!=null){
                 paint.textSize=dp(5.7f)
@@ -165,21 +177,20 @@ class KeyboardPresetPreview(
             }
         }
         rows.forEachIndexed { rowIndex,keys->
-            val visual=if(rowIndex==rows.lastIndex)"⇧"+keys+"⌫" else keys
+            val visual=if(rowIndex==rows.lastIndex)listOf("⇧")+keys+listOf("⌫") else keys
             val y=toolbarHeight+rowIndex*(rowHeight+gap)
             val side=when{
                 candidate.id==KeyboardPresetCatalog.FACETED && rowIndex%2==1->dp(13f)
-                keys.length==9->dp(16f)
+                keys.size==9->dp(16f)
                 else->dp(4.5f)
             }
-            val weights=visual.map{ KeyboardPresetCatalog.keyWeight(candidate.id,it.toString()) }
+            val weights=visual.map{ KeyboardPresetCatalog.keyWeight(candidate.id,it) }
             val sum=weights.sum()
-            val free=(w-2*side-gap*(visual.length-1)).coerceAtLeast(1f)
+            val free=(w-2*side-gap*(visual.size-1)).coerceAtLeast(1f)
             var cursor=side
-            visual.forEachIndexed { i,ch->
-                val key=ch.toString()
+            visual.forEachIndexed { i,key->
                 val kw=free*weights[i]/sum
-                val hint=if(ch.isLetter())
+                val hint=if(key.length==1 && key[0].isLetter())
                     KeyPopRowParity.alternates(
                         KeyPopKeysets.alternates(keyset,key.lowercase(),0),
                         key,numberRow).firstOrNull() else null
@@ -196,7 +207,9 @@ class KeyboardPresetPreview(
         footer.forEachIndexed { i,label->
             val kw=(free*weights[i]/total)
             val show=when(label){"SPACE"->"English";"☺,"->"☺";"↵"->"↵";else->label}
-            keyCap(show,cursor,y,kw,footerHeight-dp(3f),label=="↵",null)
+            val expanded=label=="SPACE"
+            keyCap(show,cursor,if(expanded)y-dp(3f) else y,kw,
+                footerHeight-dp(if(expanded)0f else 3f),label=="↵",null)
             cursor+=kw+gap
         }
         paint.shader=null
