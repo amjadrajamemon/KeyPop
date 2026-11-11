@@ -56,6 +56,8 @@ class AetherImeService : InputMethodService() {
     private var clipPanelGeneration=0
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
+    /** Real toolbar, shared between Material and alternate styles. */
+    private var suggestionToolbar:LinearLayout?=null
     private val keyGeometryPositions=HashMap<Button,Triple<Int,Int,Int>>()
     private var materialTopBar:LinearLayout?=null
     private var lastSuggestionContext:String?=null
@@ -1012,6 +1014,7 @@ class AetherImeService : InputMethodService() {
         root.removeAllViews()
         screenshotSlot=null
         suggestionBar=null
+        suggestionToolbar=null
         materialTopBar=null
         lastSuggestionContext=null
         predictionGeneration++
@@ -1130,6 +1133,7 @@ class AetherImeService : InputMethodService() {
             }
             root.addView(top,LinearLayout.LayoutParams(-1,d(43)))
             materialTopBar=top
+            suggestionToolbar=top
         } else {
         val toolbar=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL
@@ -1168,6 +1172,7 @@ class AetherImeService : InputMethodService() {
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         }
         root.addView(toolbar,LinearLayout.LayoutParams(-1,d(44)))
+        suggestionToolbar=toolbar
         }
 
         if(toolsOpen) {
@@ -1384,22 +1389,24 @@ class AetherImeService : InputMethodService() {
             val bar=LinearLayout(this).apply{
                 orientation=LinearLayout.HORIZONTAL
                 gravity=Gravity.CENTER_VERTICAL
-                background=KeyPopGlass.panel(this@AetherImeService,s)
                 contentDescription="KeyPop word prediction and suggestion row"
             }
-            val preferred=prefs.getInt("suggestionHeight",45).coerceIn(38,64)
-            // Keep prediction in the topmost row where it cannot be pushed
-            // below a large toolbar or hidden behind tall custom key rows.
-            root.addView(bar,0,LinearLayout.LayoutParams(-1,d(preferred)))
+            val preferred=KeyPopSuggestionStyle.heightDp(this)
+            // Attach directly adjacent to the real toolbar. Both Material
+            // and alternate styles support above/below positioning.
+            val anchor=suggestionToolbar
+            val anchorIndex=if(anchor!=null)root.indexOfChild(anchor) else -1
+            val insertion=if(anchorIndex<0)0 else
+                anchorIndex+if(KeyPopSuggestionStyle.position(this)==
+                    KeyPopSuggestionStyle.ABOVE_TOOLBAR)0 else 1
+            root.addView(bar,insertion,LinearLayout.LayoutParams(-1,d(preferred)))
             suggestionBar=bar
             // Precreate the strip and populate it after the IME attaches.
             for(i in 0 until 3) {
                 val chip=chip(""){}
-                chip.textSize=prefs.getInt("suggestionFont",17).coerceIn(12,24).toFloat()
-                bar.addView(chip,LinearLayout.LayoutParams(0,d(preferred),1f).apply {
-                    leftMargin=d(2);rightMargin=d(2)
-                })
+                KeyPopSuggestionStyle.addChip(this,bar,chip)
             }
+            KeyPopSuggestionStyle.applyRow(this,bar)
             KeyPopSuggestionPresentation.waiting(bar)
             requestSuggestionRefresh(0)
         }
@@ -2041,16 +2048,13 @@ class AetherImeService : InputMethodService() {
     }
     private fun renderSuggestions(bar:LinearLayout,before:String,word:String,
         predLang:Int,values:List<String>,spelling:String?,grammar:KeyPopGrammarFix?) {
-        val size=prefs.getInt("suggestionFont",17).coerceIn(12,24)
+        val size=KeyPopSuggestionStyle.fontSize(this)
         while(bar.childCount<3) {
             val button=chip(""){}
             button.textSize=size.toFloat()
             button.setSingleLine(true)
             button.ellipsize=android.text.TextUtils.TruncateAt.END
-            bar.addView(button,LinearLayout.LayoutParams(0,d(
-                prefs.getInt("suggestionHeight",45).coerceIn(38,64)),1f).apply {
-                leftMargin=d(2);rightMargin=d(2)
-            })
+            KeyPopSuggestionStyle.addChip(this,bar,button)
         }
         fun replaceWord(choice:String) {
             lastAppliedCorrection=null
@@ -2138,6 +2142,7 @@ class AetherImeService : InputMethodService() {
                 // typed word must never inflate into one giant full-width key.
                 button.visibility=View.INVISIBLE
             } else {
+                KeyPopSuggestionStyle.applyChip(this,button)
                 button.textSize=size.toFloat()
                 button.text=offer.first
                 KeyPopSuggestionPresentation.markAvailable(button,offer.first)
