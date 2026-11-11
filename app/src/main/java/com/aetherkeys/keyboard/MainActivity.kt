@@ -508,7 +508,11 @@ class MainActivity:Activity() {
                                  apply:(Int)->Boolean) {
         val body=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
-            setPadding(dp(10),dp(7),dp(10),dp(10))
+            setPadding(dp(12),dp(10),dp(12),dp(12))
+            // Android's default AlertDialog can be white even when this
+            // screen is dark. White labels on the default white sheet were
+            // selectable but invisible on the user's phone.
+            background=shape(base,15,edge)
         }
         val hint=text("Choose an option and watch the keyboard preview change immediately.",13f,ink)
         body.addView(hint)
@@ -519,15 +523,19 @@ class MainActivity:Activity() {
         })
         val group=android.widget.RadioGroup(this).apply {
             orientation=android.widget.RadioGroup.VERTICAL
+            background=shape(base,12)
         }
         labels.forEachIndexed {index,label->
             val radio=android.widget.RadioButton(this).apply {
                 text=label
-                textSize=14f
+                textSize=15f
                 setTextColor(ink)
+                setButtonTintList(android.content.res.ColorStateList.valueOf(accent))
+                background=shape(card,10,edge)
                 id=android.view.View.generateViewId()
                 isChecked=index==selected
-                setPadding(dp(6),dp(5),dp(6),dp(5))
+                contentDescription="Choose "+label
+                setPadding(dp(12),dp(5),dp(10),dp(5))
                 setOnClickListener {
                     if(apply(index)) {
                         value.text=label
@@ -537,10 +545,13 @@ class MainActivity:Activity() {
                         "Unable to change "+title.lowercase(),Toast.LENGTH_SHORT).show()
                 }
             }
-            group.addView(radio,android.widget.RadioGroup.LayoutParams(-1,dp(45)))
+            group.addView(radio,android.widget.RadioGroup.LayoutParams(-1,dp(53)).apply {
+                bottomMargin=dp(5)
+            })
         }
         val list=ScrollView(this).apply {
             isFillViewport=false
+            background=shape(base,12)
             addView(group)
         }
         body.addView(list,LinearLayout.LayoutParams(-1,dp(232)))
@@ -607,6 +618,7 @@ class MainActivity:Activity() {
         val column=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
             setPadding(dp(13),dp(9),dp(13),dp(12))
+            background=shape(base,14,edge)
         }
         val previewContainer=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
@@ -655,6 +667,7 @@ class MainActivity:Activity() {
             val rgb=LinearLayout(this).apply{
                 orientation=LinearLayout.VERTICAL
                 setPadding(dp(12),dp(5),dp(12),dp(8))
+                background=shape(base,12,edge)
             }
             val channels=intArrayOf(Color.red(initial),Color.green(initial),
                 Color.blue(initial))
@@ -707,7 +720,10 @@ class MainActivity:Activity() {
         val palettePanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         KeyPopSuggestionStyle.paletteNames.forEachIndexed{index,name->
             val radio=android.widget.RadioButton(this).apply {
-                text=name;textSize=13f;setTextColor(ink)
+                text=name;textSize=14f;setTextColor(ink)
+                background=shape(card,9,edge)
+                setButtonTintList(android.content.res.ColorStateList.valueOf(accent))
+                setPadding(dp(10),dp(3),dp(8),dp(3))
                 isChecked=KeyPopSuggestionStyle.palette(this@MainActivity)==index
                 setOnClickListener{save("suggestionPalette",index)}
             }
