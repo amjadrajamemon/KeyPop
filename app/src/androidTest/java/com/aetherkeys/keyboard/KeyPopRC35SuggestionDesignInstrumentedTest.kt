@@ -31,6 +31,7 @@ class KeyPopRC35SuggestionDesignInstrumentedTest {
     }
 
     @Test fun emptyPredictionRowHasVisibleReadableCenterInsteadOfThreeInvisibleButtons() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
         val row=makeRow()
         KeyPopSuggestionPresentation.waiting(row)
         assertEquals(View.VISIBLE,row.visibility)
@@ -43,9 +44,11 @@ class KeyPopRC35SuggestionDesignInstrumentedTest {
         KeyPopSuggestionPresentation.waiting(row,true)
         assertEquals("Continue typing",(row.getChildAt(1) as Button).text.toString())
         assertEquals(View.VISIBLE,row.visibility)
+        }
     }
 
     @Test fun whileTypingTheExactWordRemainsVisibleEvenBeforeAsyncResults() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
         val row=makeRow()
         KeyPopSuggestionPresentation.composing(row,"improvem")
         assertEquals(View.VISIBLE,row.visibility)
@@ -57,6 +60,7 @@ class KeyPopRC35SuggestionDesignInstrumentedTest {
         assertEquals("Suggestion: improvements",middle.contentDescription)
         assertEquals(View.VISIBLE,middle.visibility)
         assertTrue(middle.isEnabled)
+        }
     }
 
     private fun screenshot(preview:KeyboardPresetPreview):Bitmap {
