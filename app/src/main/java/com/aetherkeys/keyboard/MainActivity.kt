@@ -340,6 +340,8 @@ class MainActivity:Activity() {
         section="settingsHome"
         if(target!="settingsHome")pageHistory.addLast("settingsHome")
         navigate(target,false)
+        if(intent.getBooleanExtra("openResizeDialog",false))
+            content.post {showResizeDialog()}
     }
     override fun onResume(){
         super.onResume()
