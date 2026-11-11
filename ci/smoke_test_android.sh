@@ -88,6 +88,34 @@ adb shell ime enable "$SERVICE"
 adb shell ime set "$SERVICE"
 adb shell dumpsys input_method > forensic-evidence/ime-details.txt
 grep -Fq "$PKG" forensic-evidence/ime-details.txt
+
+# Prior 50 passing instrumentation tests did not catch a user-visible EMPTY
+# prediction strip. Inspect the actual active IME's accessibility hierarchy
+# with an ordinary focused EditText on the running Android emulator.
+echo "[visual] Focus real text field and verify visible prediction row"
+adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopHomeActivity" \
+    --ez keypopVisualSmoke true > forensic-evidence/prediction-focus.txt
+sleep 3
+adb shell uiautomator dump /sdcard/keypop-prediction-idle.xml >/dev/null
+adb exec-out cat /sdcard/keypop-prediction-idle.xml \
+    > forensic-evidence/prediction-idle.xml
+if ! grep -Fq 'Type to see suggestions' forensic-evidence/prediction-idle.xml; then
+    echo "REAL IME PREDICTION ROW MISSING: idle state not visible" >&2
+    grep -o 'text="[^"]*"' forensic-evidence/prediction-idle.xml | tail -30 >&2 || true
+    exit 1
+fi
+adb shell input text improvem
+sleep 3
+adb shell uiautomator dump /sdcard/keypop-prediction-typing.xml >/dev/null
+adb exec-out cat /sdcard/keypop-prediction-typing.xml \
+    > forensic-evidence/prediction-typing.xml
+if ! grep -Eq '(Suggestion:|Typed word:)' forensic-evidence/prediction-typing.xml; then
+    echo "REAL IME PREDICTION ROW MISSING WHILE TYPING" >&2
+    grep -o 'text="[^"]*"' forensic-evidence/prediction-typing.xml | tail -30 >&2 || true
+    exit 1
+fi
+echo "PASS: actual active IME prediction row visible while empty and typing"
+
 echo "[5/6] Verify installation identity"
 adb shell pm path "$PKG" | tee forensic-evidence/installed-package.txt
 echo "[6/6] Inspect Android runtime logcat for KeyPop fatal crashes"
