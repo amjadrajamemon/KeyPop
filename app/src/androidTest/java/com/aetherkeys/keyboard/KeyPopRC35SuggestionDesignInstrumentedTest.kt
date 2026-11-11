@@ -71,12 +71,14 @@ class KeyPopRC35SuggestionDesignInstrumentedTest {
 
     @Test fun liveDesignCanvasActuallyChangesForGeometryKeysetAndEnglishArrangement() {
         val prefs=context.getSharedPreferences("keypop",Context.MODE_PRIVATE)
+        val priorTheme=prefs.getInt("theme",0)
         val priorArrangement=prefs.getInt("englishLayout",0)
         val previousCustom=prefs.getString("customLayout_0",null)
-        val results=BooleanArray(3)
+        val results=BooleanArray(4)
         try {
             InstrumentationRegistry.getInstrumentation().runOnMainSync{
                 KeyPopLayouts.choose(context,0)
+                prefs.edit().putInt("theme",0).commit()
                 val preview=KeyboardPresetPreview(context,
                     KeyboardPresetCatalog.byId(KeyboardPresetCatalog.MATERIAL)!!,
                     KeyPopKeysets.GBOARD)
@@ -94,13 +96,22 @@ class KeyPopRC35SuggestionDesignInstrumentedTest {
                     KeyPopKeysets.GBOARD)
                 val dvorak=screenshot(preview)
                 results[2]=!base.sameAs(dvorak)
+                KeyPopLayouts.choose(context,0)
+                prefs.edit().putInt("theme",1).commit()
+                preview.showLive(KeyboardPresetCatalog.byId(KeyboardPresetCatalog.MATERIAL)!!,
+                    KeyPopKeysets.GBOARD)
+                val light=screenshot(preview)
+                results[3]=!base.sameAs(light)
                 base.recycle();geometry.recycle();keyset.recycle();dvorak.recycle()
+                light.recycle()
             }
             assertTrue("Changing geometry did not change preview pixels",results[0])
             assertTrue("Changing keyset did not change preview pixels",results[1])
             assertTrue("Changing English arrangement did not change preview pixels",results[2])
+            assertTrue("Changing theme did not change preview pixels",results[3])
         }finally{
-            prefs.edit().putInt("englishLayout",priorArrangement).apply{
+            prefs.edit().putInt("theme",priorTheme)
+                .putInt("englishLayout",priorArrangement).apply{
                 if(previousCustom==null)remove("customLayout_0")
                 else putString("customLayout_0",previousCustom)
             }.commit()
