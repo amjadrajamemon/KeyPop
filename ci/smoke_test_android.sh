@@ -99,6 +99,18 @@ adb shell am force-stop "$PKG"
 adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopHomeActivity" \
     --ez keypopVisualSmoke true > forensic-evidence/prediction-focus.txt
 sleep 3
+# Android can silently revert the selected IME to the system Latin keyboard
+# when the package providing the active IME was force-stopped. The previous
+# screen capture verified Gboard, not KeyPop. Select KeyPop again *after*
+# opening the editor and assert it remains selected before inspecting chips.
+adb shell ime enable "$SERVICE"
+adb shell ime set "$SERVICE"
+adb shell dumpsys input_method > forensic-evidence/prediction-selected-ime.txt
+if ! grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-selected-ime.txt; then
+    echo "KEYPOP NOT ACTIVE: Android switched to another IME" >&2
+    grep 'mCurMethodId=' forensic-evidence/prediction-selected-ime.txt || true
+    exit 1
+fi
 adb shell uiautomator dump /sdcard/keypop-prediction-host.xml >/dev/null
 adb exec-out cat /sdcard/keypop-prediction-host.xml \
     > forensic-evidence/prediction-host.xml
@@ -124,6 +136,12 @@ read -r tap_x tap_y <<< "$coords"
 adb shell input tap "$tap_x" "$tap_y"
 sleep 3
 adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
+if ! grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-ime-state.txt; then
+    echo "KEYPOP NOT ACTIVE AT VISUAL CHECK: refuse to inspect Gboard" >&2
+    grep 'mCurMethodId=' forensic-evidence/prediction-ime-state.txt || true
+    exit 1
+fi
+adb exec-out screencap -p > forensic-evidence/prediction-actual-ime.png
 adb shell uiautomator dump /sdcard/keypop-prediction-idle.xml >/dev/null
 adb exec-out cat /sdcard/keypop-prediction-idle.xml \
     > forensic-evidence/prediction-idle.xml
