@@ -11,10 +11,10 @@ import android.widget.RadioButton
  * A system light dialog must never render white option labels on white.
  */
 object KeyPopOptionStyle {
-    const val SURFACE:Int = 0xFF172D3C.toInt()
-    const val EDGE:Int = 0xFF35586B.toInt()
-    const val LABEL:Int = Color.WHITE
-    const val ACCENT:Int = 0xFF79E9D6.toInt()
+    val SURFACE:Int = 0xFF172D3C.toInt()
+    val EDGE:Int = 0xFF35586B.toInt()
+    val LABEL:Int = Color.WHITE
+    val ACCENT:Int = 0xFF79E9D6.toInt()
 
     fun decorate(context:Context,radio:RadioButton) {
         val density=context.resources.displayMetrics.density
