@@ -568,7 +568,7 @@ class MainActivity:Activity() {
                 }
             }
             lateinit var layoutName:TextView
-            layoutName=picker(this,"Keyboard geometry",preset.name) {
+            layoutName=picker(this,"Layout",preset.name) {
                 chooseLiveDesign("Keyboard geometry",KeyboardPresetCatalog.all.map{it.name},
                     KeyboardPresetCatalog.all.indexOfFirst{
                         it.id==KeyboardPresetCatalog.selected(this@MainActivity).id
