@@ -69,7 +69,7 @@ object KeyPopRegionalWordBank {
         "نئون نئين پراڻو پراڻي "+
         "چڱو چڱي سٺو سٺي ٺيڪ"
     ).split(Regex("\\s+")).filter{it.length>=2}.distinct()
-    fun words(language:Int):List<String>=when(language) {
+    fun words(language:Int):List<String> = when(language) {
         1->urdu;2->sindhi;else->emptyList()
     }
 }
