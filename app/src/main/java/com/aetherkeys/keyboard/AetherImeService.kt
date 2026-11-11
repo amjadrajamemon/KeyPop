@@ -1381,20 +1381,26 @@ class AetherImeService : InputMethodService() {
             if(!emojiSearch)return
         }
         if(!secure && !isNumeric && !symbols && prefs.getBoolean("suggestions",true) && !emojiOpen) {
-            val bar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+            val bar=LinearLayout(this).apply{
+                orientation=LinearLayout.HORIZONTAL
+                gravity=Gravity.CENTER_VERTICAL
+                background=KeyPopGlass.panel(this@AetherImeService,s)
+                contentDescription="KeyPop word prediction and suggestion row"
+            }
             val preferred=prefs.getInt("suggestionHeight",45).coerceIn(38,64)
-            root.addView(bar,LinearLayout.LayoutParams(-1,d(
-                if(materialToolbar)preferred else preferred.coerceAtLeast(38))))
+            // Keep prediction in the topmost row where it cannot be pushed
+            // below a large toolbar or hidden behind tall custom key rows.
+            root.addView(bar,0,LinearLayout.LayoutParams(-1,d(preferred)))
             suggestionBar=bar
             // Precreate the strip and populate it after the IME attaches.
             for(i in 0 until 3) {
-                val chip=chip(if(i==1)"Start typing" else ""){}
+                val chip=chip(""){}
                 chip.textSize=prefs.getInt("suggestionFont",17).coerceIn(12,24).toFloat()
                 bar.addView(chip,LinearLayout.LayoutParams(0,d(preferred),1f).apply {
                     leftMargin=d(2);rightMargin=d(2)
                 })
             }
-            bar.visibility=View.VISIBLE
+            KeyPopSuggestionPresentation.waiting(bar)
             requestSuggestionRefresh(0)
         }
         if(cursorTools) {
@@ -1938,13 +1944,17 @@ class AetherImeService : InputMethodService() {
     /** Only one editor snapshot is fetched for a burst of selection updates. */
     private fun refreshSuggestions() {
         val bar=suggestionBar ?:return
-        val input=currentInputConnection ?:return
         if(sensitive(currentInputEditorInfo) || numeric(currentInputEditorInfo) ||
             !KeyPopTypingRules.textAllowsSuggestions(currentInputEditorInfo?.inputType?:0)) {
             predictionGeneration++
             predictionPending?.let{predictionHandler.removeCallbacks(it)}
             bar.visibility=View.GONE
             materialTopBar?.visibility=View.VISIBLE
+            return
+        }
+        val input=currentInputConnection
+        if(input==null) {
+            KeyPopSuggestionPresentation.waiting(bar)
             return
         }
         val before=if(translatorOpen && translateDraftMode)translateDraft.takeLast(140)
@@ -1978,13 +1988,10 @@ class AetherImeService : InputMethodService() {
         }
         // Immediately expose what the person typed; never show a stale
         // *correction* from the previous word while the new word is entering.
-        for(i in 0 until bar.childCount) {
-            val chip=bar.getChildAt(i) as? Button ?:continue
-            if(word.isNotEmpty() && i==1) {
-                chip.text=word
-                chip.visibility=View.VISIBLE
-            } else chip.visibility=View.INVISIBLE
-        }
+        // Keep the strip visibly useful even while asynchronous word
+        // ranking is running or has no candidate for this context.
+        if(word.isNotEmpty())KeyPopSuggestionPresentation.composing(bar,word)
+        else KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
         val without=before.removeSuffix(word).trimEnd()
         val previous=trailingWordPattern.find(without)?.value.orEmpty()
         val task=Runnable {
@@ -2119,6 +2126,10 @@ class AetherImeService : InputMethodService() {
                 })
             }
         }
+        if(offers.isEmpty()) {
+            KeyPopSuggestionPresentation.waiting(bar,before.isNotBlank())
+            return
+        }
         for(i in 0..2) {
             val button=bar.getChildAt(i) as Button
             val offer=offers.getOrNull(i)
@@ -2127,9 +2138,9 @@ class AetherImeService : InputMethodService() {
                 // typed word must never inflate into one giant full-width key.
                 button.visibility=View.INVISIBLE
             } else {
-                button.visibility=View.VISIBLE
                 button.textSize=size.toFloat()
                 button.text=offer.first
+                KeyPopSuggestionPresentation.markAvailable(button,offer.first)
                 button.setOnClickListener {tapFeedback(button);offer.second.invoke()}
             }
         }
