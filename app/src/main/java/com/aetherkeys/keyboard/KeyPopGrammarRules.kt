@@ -4,7 +4,8 @@ package com.aetherkeys.keyboard
  * Explicit, deterministic offline corrections. This is a deliberately narrow
  * rule set; it never claims to be a comprehensive grammar model.
  */
-data class KeyPopGrammarFix(val label:String,val remove:Int,val replacement:String)
+data class KeyPopGrammarFix(val label:String,val remove:Int,
+                            val replacement:String,val automatic:Boolean=true)
 
 object KeyPopGrammarRules {
     private val rules=listOf(
@@ -27,6 +28,17 @@ object KeyPopGrammarRules {
         Regex("(?i)\\bwe\\s+was$") to "we were",
         Regex("(?i)\\bthey\\s+was$") to "they were",
         Regex("(?i)\\bthere\\s+is\\s+many$") to "there are many",
+        Regex("(?i)\\bhe\\s+are$") to "he is",
+        Regex("(?i)\\bshe\\s+are$") to "she is",
+        Regex("(?i)\\bit\\s+are$") to "it is",
+        Regex("(?i)\\bhe\\s+were$") to "he was",
+        Regex("(?i)\\bshe\\s+were$") to "she was",
+        Regex("(?i)\\bit\\s+were$") to "it was",
+        Regex("(?i)\\bi\\s+have\\s+went$") to "I have gone",
+        Regex("(?i)\\bhe\\s+have\\s+went$") to "he has gone",
+        Regex("(?i)\\bi\\s+am\\s+agree$") to "I agree",
+        Regex("(?i)\\bdid\\s+not\\s+went$") to "did not go",
+        Regex("(?i)\\bdoes\\s+not\\s+has$") to "does not have",
         Regex("(?i)\\bdont$") to "don't",
         Regex("(?i)\\bdoesnt$") to "doesn't",
         Regex("(?i)\\bcant$") to "can't",
@@ -47,11 +59,25 @@ object KeyPopGrammarRules {
                 replacement.replaceFirstChar{it.uppercase()} else replacement
             return KeyPopGrammarFix("Fix: "+adjusted,match.value.length,adjusted)
         }
+        // Articles depend on pronunciation and exceptions. Suggest only;
+        // never silently insert a/an on Space without a pronunciation model.
+        val article=Regex("(?i)\\b(a|an)\\s+"+
+            "(apple|orange|egg|office|engineer|idea|answer|book|car|report|"+
+            "letter|meeting|document|phone)$").find(text)
+        if(article!=null && article.range.last==text.lastIndex) {
+            val noun=article.groupValues[2]
+            val expected=if(noun.lowercase().first() in "aeiou")"an" else "a"
+            if(article.groupValues[1].lowercase()!=expected) {
+                val replacement=expected+" "+noun
+                return KeyPopGrammarFix("Suggestion: "+replacement,
+                    article.value.length,replacement,false)
+            }
+        }
         val pair=Regex("(?i)\\b([a-z]{2,})\\s+\\1$").find(text)
         if(pair!=null && pair.range.last==text.lastIndex){
             val single=pair.groupValues[1]
             return KeyPopGrammarFix("Remove repeated "+single,
-                pair.value.length,single)
+                pair.value.length,single,false)
         }
         return null
     }
