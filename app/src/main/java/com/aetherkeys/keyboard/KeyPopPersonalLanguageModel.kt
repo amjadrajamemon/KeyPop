@@ -220,7 +220,8 @@ class KeyPopPersonalLanguageModel(context:Context) {
             !prefs.getBoolean("personalHistoryLearning",true))return
         val source=normalize(original);val target=normalize(replacement)
         if(source.length !in 2..28 || target.length !in 2..28 ||
-            !source.all{it.isLetter()} || !target.all{it.isLetter()})return
+            !KeyPopUnicodeWords.isToken(source) ||
+            !KeyPopUnicodeWords.isToken(target))return
         val a=signature("source|"+source)
         val b=signature("target|"+target)
         val db=helper.writableDatabase
