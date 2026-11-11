@@ -2,7 +2,7 @@ package com.aetherkeys.keyboard
 
 import android.content.Context
 
-/** Per-key width factor, local and exportable. Control keys remain fixed. */
+/** Saved per-key width and height, covering letters and editing controls. */
 object KeyPopKeyGeometry {
     private fun key(language:Int,row:Int,column:Int)="keyWidth_"+language+"_"+row+"_"+column
     fun valid(language:Int,row:Int,column:Int):Boolean =
@@ -32,7 +32,12 @@ object KeyPopKeyGeometry {
         "↵" -> "ENTER";"," -> "COMMA";"." -> "PERIOD"
         "🌐" -> "GLOBE";"☺" -> "EMOJI";"☺," -> "EMOJI_COMMA"
         "?123" -> "SYMBOLS";"ABC" -> "LETTERS"
-        else -> ""
+        else -> when {
+            label.length==1 && label[0].isDigit() -> "DIGIT_"+label
+            label.length==1 && !label[0].isLetter() ->
+                "CHAR_"+label[0].code
+            else -> ""
+        }
     }
     private fun heightKey(language:Int,row:Int,column:Int,label:String):String {
         val control=controlId(label)
@@ -78,7 +83,7 @@ object KeyPopKeyGeometry {
         prefs.all.keys.filter{
             it.startsWith("keyWidth_")||it.startsWith("keyHeight_")||
             it.startsWith("keyWidthControl_")||it.startsWith("keyHeightControl_")
-        }.forEach(edit::remove)
+        }.forEach { edit.remove(it) }
         edit.apply()
     }
     fun keys(context:Context):Map<String,Int> {
