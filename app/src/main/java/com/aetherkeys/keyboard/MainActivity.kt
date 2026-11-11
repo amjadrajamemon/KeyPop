@@ -99,7 +99,7 @@ class MainActivity:Activity() {
     }
     // Three independent selections, all on one screen. A tap immediately applies
     // the choice; the preview is rebuilt without a separate Save step.
-    private fun picker(parent:LinearLayout,label:String,selected:String,onTap:()->Unit) {
+    private fun picker(parent:LinearLayout,label:String,selected:String,onTap:()->Unit):TextView {
         val row=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL
             gravity=Gravity.CENTER_VERTICAL
@@ -112,10 +112,12 @@ class MainActivity:Activity() {
         }
         val labels=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
         labels.addView(text(label,12f,muted))
-        labels.addView(text(selected,16f,ink,true))
+        val valueText=text(selected,16f,ink,true)
+        labels.addView(valueText)
         row.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
         row.addView(text("⌄",20f,accent,true))
         parent.addView(row,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(9)})
+        return valueText
     }
     private fun option(parent:LinearLayout,title:String,key:String,default:Boolean=false){
         val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(48)}
@@ -499,57 +501,104 @@ class MainActivity:Activity() {
         }
         showTransfer()
     }
+    /** Keep both the dialog and settings preview attached while options
+     * change. No return to Settings, no scroll reset, no stale captured layout. */
+    private fun chooseLiveDesign(title:String,labels:List<String>,selected:Int,
+                                 preview:KeyboardPresetPreview,value:TextView,
+                                 apply:(Int)->Boolean) {
+        val body=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(10),dp(7),dp(10),dp(10))
+        }
+        val hint=text("Choose an option and watch the keyboard preview change immediately.",13f,ink)
+        body.addView(hint)
+        val live=KeyboardPresetPreview(this,KeyboardPresetCatalog.selected(this),
+            KeyPopKeysets.selectedId(this))
+        body.addView(live,LinearLayout.LayoutParams(-1,dp(154)).apply {
+            bottomMargin=dp(8)
+        })
+        val group=android.widget.RadioGroup(this).apply {
+            orientation=android.widget.RadioGroup.VERTICAL
+        }
+        labels.forEachIndexed {index,label->
+            val radio=android.widget.RadioButton(this).apply {
+                text=label
+                textSize=14f
+                setTextColor(ink)
+                id=android.view.View.generateViewId()
+                isChecked=index==selected
+                setPadding(dp(6),dp(5),dp(6),dp(5))
+                setOnClickListener {
+                    if(apply(index)) {
+                        value.text=label
+                        preview.showLive()
+                        live.showLive()
+                    } else Toast.makeText(this@MainActivity,
+                        "Unable to change "+title.lowercase(),Toast.LENGTH_SHORT).show()
+                }
+            }
+            group.addView(radio,android.widget.RadioGroup.LayoutParams(-1,dp(45)))
+        }
+        val list=ScrollView(this).apply {
+            isFillViewport=false
+            addView(group)
+        }
+        body.addView(list,LinearLayout.LayoutParams(-1,dp(232)))
+        AlertDialog.Builder(this).setTitle(title+" · Live Preview")
+            .setView(body).setPositiveButton("Done",null).show()
+    }
     private fun design(){
-        heading("Customize Keyboard")
+        heading("Customize Keyboard","Change a theme, geometry, keyset or alphabet and see the update immediately.")
         val skin=KeyPopSkins.index(this)
         val preset=KeyboardPresetCatalog.selected(this)
         val keyset=KeyPopKeysets.selectedId(this)
         addBlock {
-            addView(KeyboardPresetPreview(this@MainActivity,preset,keyset),
-                LinearLayout.LayoutParams(-1,dp(154)).apply{bottomMargin=dp(13)})
-            picker(this,"Theme",KeyPopSkins.all[skin].name) {
-                val labels=KeyPopSkins.all.map{it.name}.toTypedArray()
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Theme")
-                    .setSingleChoiceItems(labels,skin){dialog,index->
-                        prefs.edit().putInt("theme",index).remove("customAccent").apply()
-                        dialog.dismiss()
-                        navigate("design")
-                    }
-                    .setNegativeButton("Cancel",null).show()
+            val preview=KeyboardPresetPreview(this@MainActivity,preset,keyset)
+            addView(preview,LinearLayout.LayoutParams(-1,dp(154)).apply{
+                bottomMargin=dp(10)
+            })
+            addView(text("LIVE KEYBOARD PREVIEW · Select any option below to update it",
+                12f,accent,true))
+            lateinit var themeName:TextView
+            themeName=picker(this,"Theme",KeyPopSkins.all[skin].name) {
+                chooseLiveDesign("Theme",KeyPopSkins.all.map{it.name},
+                    KeyPopSkins.index(this@MainActivity),preview,themeName){index->
+                    prefs.edit().putInt("theme",index).remove("customAccent").apply()
+                    true
+                }
             }
-            picker(this,"Layout",preset.name) {
-                val labels=KeyboardPresetCatalog.all.map{it.name}.toTypedArray()
-                val selected=KeyboardPresetCatalog.all.indexOfFirst{it.id==preset.id}
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Layout")
-                    .setSingleChoiceItems(labels,selected){dialog,index->
-                        val applied=KeyboardPresetCatalog.apply(
-                            this@MainActivity,KeyboardPresetCatalog.all[index].id)
-                        dialog.dismiss()
-                        if(applied)navigate("design")
-                        else Toast.makeText(this@MainActivity,
-                            "Unable to change layout",Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("Cancel",null).show()
+            lateinit var layoutName:TextView
+            layoutName=picker(this,"Keyboard geometry",preset.name) {
+                chooseLiveDesign("Keyboard geometry",KeyboardPresetCatalog.all.map{it.name},
+                    KeyboardPresetCatalog.all.indexOfFirst{
+                        it.id==KeyboardPresetCatalog.selected(this@MainActivity).id
+                    }.coerceAtLeast(0),preview,layoutName){index->
+                    KeyboardPresetCatalog.apply(this@MainActivity,
+                        KeyboardPresetCatalog.all[index].id)
+                }
             }
-            val currentKeys=KeyPopKeysets.all.first{it.id==keyset}
-            picker(this,"Keys & Symbols",currentKeys.name) {
-                val labels=KeyPopKeysets.all.map{it.name}.toTypedArray()
-                val selected=KeyPopKeysets.all.indexOfFirst{it.id==keyset}
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Keys & Symbols")
-                    .setSingleChoiceItems(labels,selected){dialog,index->
-                        val applied=KeyPopKeysets.apply(
-                            this@MainActivity,KeyPopKeysets.all[index].id)
-                        dialog.dismiss()
-                        if(applied)navigate("design")
-                        else Toast.makeText(this@MainActivity,
-                            "Unable to change keys",Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("Cancel",null).show()
+            lateinit var arrangementName:TextView
+            arrangementName=picker(this,"English letter arrangement",
+                KeyPopLayouts.names[KeyPopLayouts.variant(this@MainActivity)]) {
+                chooseLiveDesign("English letter arrangement",KeyPopLayouts.names,
+                    KeyPopLayouts.variant(this@MainActivity),preview,arrangementName){index->
+                    KeyPopLayouts.choose(this@MainActivity,index)
+                    true
+                }
             }
-            action(this,"Resize keys"){showResizeDialog()}
+            lateinit var keysName:TextView
+            keysName=picker(this,"Keys & Symbols",
+                KeyPopKeysets.all.first{it.id==keyset}.name) {
+                chooseLiveDesign("Keys & Symbols",KeyPopKeysets.all.map{it.name},
+                    KeyPopKeysets.all.indexOfFirst{
+                        it.id==KeyPopKeysets.selectedId(this@MainActivity)
+                    }.coerceAtLeast(0),preview,keysName){index->
+                    KeyPopKeysets.apply(this@MainActivity,KeyPopKeysets.all[index].id)
+                }
+            }
+            action(this,"Resize individual keys","Live height, width, spacing and text size"){
+                showResizeDialog()
+            }
         }
     }
     private fun typing(){
