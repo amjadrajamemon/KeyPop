@@ -24,6 +24,12 @@ class KeyPopLiveKeyEditor(context:Context,
         removeAllViews()
         val skin=KeyboardPresetCatalog.selected(context)
         val height=preferences.getInt("height",51).coerceIn(36,90)
+        val widthPercent=preferences.getInt("keyboardWidthPercent",100).coerceIn(65,100)
+        val screenDp=(resources.displayMetrics.widthPixels/density).toInt()
+        val side=(((100-widthPercent)*screenDp)/200).coerceAtLeast(0)
+        setPadding(dp(side+3),dp(5),dp(side+3),dp(5))
+        if(preferences.getBoolean("numberRow",true))
+            appendRow((1..9).map(Int::toString)+listOf("0"),height-5,-1,skin.id)
         val rows=KeyPopLayouts.active(context,activeLanguage)
         rows.forEachIndexed {rowIndex,words ->
             val labels=if(rowIndex==rows.lastIndex)
@@ -37,6 +43,9 @@ class KeyPopLiveKeyEditor(context:Context,
         val container=LinearLayout(context).apply {
             orientation=HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
         }
+        val spacing=preferences.getInt("spacing",4).coerceIn(1,10)
+        val rounding=preferences.getInt("round",13).coerceIn(3,40)
+        val font=preferences.getInt("font",19).coerceIn(12,32)
         labels.forEachIndexed {index,token ->
             val column=if(row==2 && token !in setOf("⇧","⌫"))index-1
                 else if(row<0 || token in setOf("⇧","⌫"))-1 else index
@@ -51,7 +60,7 @@ class KeyPopLiveKeyEditor(context:Context,
                 token==selectedToken
             val button=Button(context).apply {
                 text=if(token=="SPACE")"Space" else token
-                textSize=if(token=="SPACE")11f else 13f
+                textSize=if(token=="SPACE")(font*.6f) else (font*.7f)
                 isAllCaps=false;minWidth=0;minimumWidth=0
                 minHeight=0;minimumHeight=0
                 setPadding(0,0,0,0)
@@ -60,7 +69,7 @@ class KeyPopLiveKeyEditor(context:Context,
                     setColor(if(isActive)0xFF7AE2D1.toInt()
                         else if(token=="SPACE")0xFF385975.toInt()
                         else 0xFF263A51.toInt())
-                    cornerRadius=dp(6).toFloat()
+                    cornerRadius=dp(rounding).toFloat()
                     setStroke(dp(1),0xFF658195.toInt())
                 }
                 contentDescription="Select "+token+" for individual width and height"
@@ -72,7 +81,9 @@ class KeyPopLiveKeyEditor(context:Context,
             }
             val weight=KeyboardPresetCatalog.keyWeight(preset,token)*factor
             container.addView(button,LayoutParams(0,dp(keyHeight),weight).apply{
-                leftMargin=dp(1);rightMargin=dp(1);bottomMargin=dp(2)
+                leftMargin=dp((spacing/2).coerceAtLeast(1))
+                rightMargin=dp((spacing/2).coerceAtLeast(1))
+                bottomMargin=dp(2)
             })
         }
         addView(container,LayoutParams(-1,-2))
