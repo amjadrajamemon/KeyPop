@@ -56,6 +56,7 @@ class AetherImeService : InputMethodService() {
     private var clipPanelGeneration=0
     private val lexicon by lazy { KeyPopLexicon(this) }
     private var suggestionBar:LinearLayout?=null
+    private val keyGeometryPositions=HashMap<Button,Triple<Int,Int,Int>>()
     private var materialTopBar:LinearLayout?=null
     private var lastSuggestionContext:String?=null
     private val predictionExecutor=Executors.newSingleThreadExecutor()
@@ -557,8 +558,11 @@ class AetherImeService : InputMethodService() {
                 val token=v.tag as? String ?: ""
                 val bonus=KeyboardPresetCatalog.controlHeightBonus(token)+
                     (if(token=="SPACE")12 else 0)
+                val position=(v as? Button)?.let{keyGeometryPositions[it]}
                 val actual=d(((height+offset+bonus)*
-                    KeyPopKeyGeometry.heightPercent(this,language,-1,-1,token)/100f)
+                    KeyPopKeyGeometry.heightPercent(this,
+                        position?.first?:language,position?.second?:-1,
+                        position?.third?:-1,token)/100f)
                     .toInt().coerceAtLeast(30))
                 if(layout.height!=actual) {layout.height=actual;v.layoutParams=layout}
             }
@@ -1006,6 +1010,7 @@ class AetherImeService : InputMethodService() {
         predictionPending?.let{predictionHandler.removeCallbacks(it)}
         predictionPending=null
         keyViews.clear()
+        keyGeometryPositions.clear()
         renderedRows.clear()
         val s=KeyPopSkins.active(this)
         renderSkin=s
@@ -1513,6 +1518,7 @@ class AetherImeService : InputMethodService() {
             keyViews.add(button to label)
             val indexInLayout=if(layoutRow==2 && label !in setOf("⇧","⌫"))index-1
                 else if(label in setOf("⇧","⌫"))-1 else index
+            keyGeometryPositions[button]=Triple(layoutLanguage,layoutRow,indexInLayout)
             val widthFactor=KeyPopKeyGeometry.widthPercent(this,layoutLanguage,
                 layoutRow,indexInLayout,label)/100f
             val bonus=KeyboardPresetCatalog.controlHeightBonus(label)+
@@ -1937,7 +1943,9 @@ class AetherImeService : InputMethodService() {
             else readContext(input,140)
         val word=trailingWordPattern.find(before)?.value.orEmpty()
         val nextWords=prefs.getBoolean("predictNext",true)
-        val show=word.isNotEmpty() || (nextWords && before.isNotBlank())
+        // Enabled means visible even in an empty text field: an empty
+        // editor should offer starter next words, not silently hide the bar.
+        val show=prefs.getBoolean("suggestions",true)
         materialTopBar?.visibility=if(KeyPopPredictionContext.toolbarVisible(
             prefs.getBoolean("alwaysShowToolbar",true),show))
             View.VISIBLE else View.GONE
@@ -1950,7 +1958,7 @@ class AetherImeService : InputMethodService() {
             else -> language
         }
         val key="$language|$translatorOpen|$predLang|$before|$nextWords"
-        if(lastSuggestionContext==key)return
+        if(lastSuggestionContext==key && bar.visibility==View.VISIBLE)return
         lastSuggestionContext=key
         val token=++predictionGeneration
         predictionPending?.let{predictionHandler.removeCallbacks(it)}
