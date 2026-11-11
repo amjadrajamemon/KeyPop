@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PKG="com.aetherkeys.keyboard.previewv136"
+PKG="com.aetherkeys.keyboard.previewv137"
 SERVICE="$PKG/com.aetherkeys.keyboard.AetherImeService"
 # Derive the actual file names published by this build, not a stale version.
 APK="$(find dist -maxdepth 1 -name 'KeyPop-*-x86_64-debug.apk' -type f | head -1)"
@@ -18,7 +18,7 @@ test -s "$APK"; test -s "$TEST_APK"
 AAPT="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" -name aapt -type f | sort -V | tail -1)"
 test -n "$AAPT"
 "$AAPT" dump badging "$APK" > forensic-evidence/apk-badging.txt
-if ! grep -q "previewv136" forensic-evidence/apk-badging.txt; then
+if ! grep -q "previewv137" forensic-evidence/apk-badging.txt; then
     echo "Unexpected APK package identity; dump:" >&2
     head -30 forensic-evidence/apk-badging.txt >&2
     exit 1
@@ -43,7 +43,7 @@ fi
 echo "[1/6] Install the application and Android instrumentation tests"
 # Regression for the reported INSTALL_FAILED_UPDATE_INCOMPATIBLE.
 # Install the last released RC21 APK on the *same* emulator first, then
-# install RC36 without uninstalling RC21. Both must remain installed.
+# install RC37 without uninstalling RC21. Both must remain installed.
 OLD_APK="dist/KeyPop-v1.0.20-rc21-x86_64-debug.apk"
 LEGACY_AVAILABLE=0
 echo "[coexistence] Attempt prior preview download (optional external dependency)"
@@ -54,17 +54,17 @@ if curl -fLsS --retry 2 --connect-timeout 12 --max-time 40 \
   adb shell pm path com.aetherkeys.keyboard.previewv121 | grep -q package:
   LEGACY_AVAILABLE=1
 else
-  echo "::warning::The legacy RC21 asset could not be fetched. Proceeding with all mandatory RC36 emulator and instrumentation validation."
+  echo "::warning::The legacy RC21 asset could not be fetched. Proceeding with all mandatory RC37 emulator and instrumentation validation."
   rm -f "$OLD_APK"
 fi
-echo "[installation] Install RC36 and check its package identity"
+echo "[installation] Install RC37 and check its package identity"
 adb install -r "$APK"
-adb shell pm path com.aetherkeys.keyboard.previewv136 | grep -q package:
+adb shell pm path com.aetherkeys.keyboard.previewv137 | grep -q package:
 if [ "$LEGACY_AVAILABLE" = "1" ]; then
   adb shell pm path com.aetherkeys.keyboard.previewv121 | grep -q package:
-  echo "PASS: RC21 and RC36 coexist without a signature conflict"
+  echo "PASS: RC21 and RC37 coexist without a signature conflict"
 else
-  echo "PASS: RC36 installs with a unique package ID. Legacy coexistence was not independently tested in this run."
+  echo "PASS: RC37 installs with a unique package ID. Legacy coexistence was not independently tested in this run."
 fi
 adb install -r "$TEST_APK"
 adb logcat -c
@@ -89,134 +89,135 @@ adb shell ime set "$SERVICE"
 adb shell dumpsys input_method > forensic-evidence/ime-details.txt
 grep -Fq "$PKG" forensic-evidence/ime-details.txt
 
-# Prior 50 passing instrumentation tests did not catch a user-visible EMPTY
-# prediction strip. Inspect the actual active IME's accessibility hierarchy
-# with an ordinary focused EditText on the running Android emulator.
-echo "[visual] Focus real text field and verify visible prediction row"
-# Force a fresh Activity rather than reusing the launcher started above.
-# Otherwise the test-only intent extra might never reach onCreate.
+echo "[predictions] Verify suggestions in one uninterrupted Android editor session"
 adb shell am force-stop "$PKG"
 adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopHomeActivity" \
-    --ez keypopVisualSmoke true > forensic-evidence/prediction-focus.txt
-sleep 3
-# Android can silently revert the selected IME to the system Latin keyboard
-# when the package providing the active IME was force-stopped. The previous
-# screen capture verified Gboard, not KeyPop. Select KeyPop again *after*
-# opening the editor and assert it remains selected before inspecting chips.
+    --ez keypopPredictionSmoke true > forensic-evidence/prediction-launch.txt
 adb shell ime enable "$SERVICE"
 adb shell ime set "$SERVICE"
-adb shell dumpsys input_method > forensic-evidence/prediction-selected-ime.txt
-if ! grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-selected-ime.txt; then
-    echo "KEYPOP NOT ACTIVE: Android switched to another IME" >&2
-    grep 'mCurMethodId=' forensic-evidence/prediction-selected-ime.txt || true
-    exit 1
-fi
-# The accessibility/UIAutomator root intermittently returns "null root node"
-# even when the actual KeyPop IME and three suggestion chips are visible in
-# the saved screenshot. Inspect the real attached IME view via its debug-only,
-# on-device SharedPreferences probe instead; this is stricter and deterministic.
+
 read_live_probe() {
     adb shell run-as "$PKG" cat shared_prefs/keypop_visual_probe.xml 2>/dev/null || true
 }
-echo "[visual] Verify actual IME view is on-screen with a visible suggestion chip"
-probe_ok=0
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    sleep 1
-    read_live_probe > forensic-evidence/prediction-idle-probe.xml
-    if grep -Fq 'name="active_visible" value="true"' forensic-evidence/prediction-idle-probe.xml &&
-       grep -Eq '<int name="visible_chips" value="[1-9]' forensic-evidence/prediction-idle-probe.xml; then
-        probe_ok=1
-        break
-    fi
-done
-adb exec-out screencap -p > forensic-evidence/prediction-actual-ime.png
-if [ "$probe_ok" != 1 ]; then
-    echo "REAL KEYPOP IME PREDICTION ROW MISSING (or detached)" >&2
-    cat forensic-evidence/prediction-idle-probe.xml >&2 || true
-    adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
-    grep 'mCurMethodId=' forensic-evidence/prediction-ime-state.txt >&2 || true
-    exit 1
-fi
-echo "[visual] Type known misspelling and verify live suggestion refresh"
-adb shell input text improvem
-typing_ok=0
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    sleep 1
-    read_live_probe > forensic-evidence/prediction-typing-probe.xml
-    if grep -Fq 'name="active_visible" value="true"' forensic-evidence/prediction-typing-probe.xml &&
-       grep -Fq '<string name="typed">improvem</string>' forensic-evidence/prediction-typing-probe.xml &&
-       grep -Eq '<int name="visible_chips" value="[1-9]' forensic-evidence/prediction-typing-probe.xml; then
-        typing_ok=1
-        break
-    fi
-done
-adb exec-out screencap -p > forensic-evidence/prediction-typing-screen.png
-if [ "$typing_ok" != 1 ]; then
-    echo "REAL KEYPOP PREDICTIONS FAILED TO UPDATE DURING TYPING" >&2
-    cat forensic-evidence/prediction-typing-probe.xml >&2 || true
-    exit 1
-fi
-echo "PASS: real attached KeyPop IME row visible while empty and after typing"
-adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
-grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-ime-state.txt
 
-# Reproduce the reported Google search input on a genuine Android EditText.
-# It sets WEB_EDIT_TEXT + NO_SUGGESTIONS, which historically hid the strip
-# despite the keyboard's Suggestions setting being enabled.
-echo "[search] Verify KeyPop predictions remain visible in host NO_SUGGESTIONS fields"
-adb shell am force-stop "$PKG"
-adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopHomeActivity" \
-    --ez keypopSearchVisualSmoke true > forensic-evidence/search-field-launch.txt
-sleep 3
-adb shell ime enable "$SERVICE"
-adb shell ime set "$SERVICE"
-# Programmatic showSoftInput() can be denied during app launch, and simply
-# choosing an IME does not force it to attach. Reproduce the user's real tap
-# on the search field after KeyPop is selected using that field's measured
-# screen coordinates (not a guessed emulator position).
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    adb shell run-as "$PKG" cat shared_prefs/keypop_visual_test.xml \
-        > forensic-evidence/search-field-tap-coordinates.xml 2>/dev/null || true
-    if grep -Fq 'name="field_center_x"' forensic-evidence/search-field-tap-coordinates.xml &&
-       grep -Fq 'name="field_center_y"' forensic-evidence/search-field-tap-coordinates.xml; then
-        break
-    fi
-    sleep 1
-done
-coordinates="$(python3 - <<'PY'
+tap_prediction_field() {
+    local field="$1" xy=""
+    for attempt in $(seq 1 10); do
+        adb shell run-as "$PKG" cat shared_prefs/keypop_visual_test.xml \
+            > forensic-evidence/prediction-fields.xml 2>/dev/null || true
+        if xy="$(python3 - forensic-evidence/prediction-fields.xml "$field" <<'PY'
+import sys
 import xml.etree.ElementTree as ET
-root=ET.parse('forensic-evidence/search-field-tap-coordinates.xml').getroot()
-vals={node.attrib.get('name'):node.attrib.get('value')
-      for node in root if node.tag=='int'}
-x,y=vals.get('field_center_x'),vals.get('field_center_y')
-if x is None or y is None:
-    raise SystemExit('Search field was not positioned by the debug Activity')
-print(x,y)
+try:
+    prefs = {x.attrib["name"]: x.attrib["value"] for x in ET.parse(sys.argv[1]).getroot()}
+    x, y = (int(prefs[sys.argv[2] + suffix]) for suffix in ("_x", "_y"))
+    if x <= 0 or y <= 0:
+        raise ValueError("unmeasured field")
+    print(x, y)
+except (ET.ParseError, KeyError, ValueError):
+    sys.exit(1)
+PY
+        )"; then
+            local x y
+            read -r x y <<< "$xy"
+            adb shell input tap "$x" "$y"
+            return
+        fi
+        sleep 1
+    done
+    echo "No measured bounds for $field" >&2
+    return 1
+}
+
+assert_prediction() {
+    local scenario="$1" field="$2" visible="$3" typed="$4" candidate="$5" newer="${6:-0}"
+    local snapshot="forensic-evidence/prediction-$scenario.xml"
+    for attempt in $(seq 1 18); do
+        read_live_probe > "$snapshot"
+        if python3 - "$snapshot" "$field" "$visible" "$typed" "$candidate" "$newer" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+path, field, visible, typed, candidate, newer = sys.argv[1:]
+try:
+    prefs = {x.attrib["name"]: x.get("value", x.text or "") for x in ET.parse(path).getroot()}
+    labels = prefs.get("suggestions", "").lower().split("|")
+    valid = (prefs.get("field") == field and prefs.get("active_visible") == visible
+             and prefs.get("typed") == typed and int(prefs.get("updated_uptime", "0")) > int(newer))
+    if visible == "true":
+        valid = valid and int(prefs.get("visible_chips", "0")) > 0
+    else:
+        valid = valid and int(prefs.get("visible_chips", "0")) == 0
+    if candidate == "starter":
+        valid = valid and bool(labels[0])
+    elif candidate == "none":
+        valid = valid and not labels[0]
+    else:
+        valid = valid and any(label.startswith(candidate) for label in labels)
+except (ET.ParseError, KeyError, ValueError):
+    valid = False
+sys.exit(0 if valid else 1)
+PY
+        then
+            echo "PASS: $scenario"
+            return
+        fi
+        sleep 1
+    done
+    echo "Prediction check failed: $scenario" >&2
+    cat "$snapshot" >&2
+    return 1
+}
+
+tap_prediction_field plain
+assert_prediction plain-idle plain true "" starter
+adb shell input text improvem
+assert_prediction plain-typing plain true improvem improvem
+
+tap_prediction_field web
+assert_prediction web-idle web true "" starter
+adb shell input text improvem
+assert_prediction web-typing web true improvem improvem
+read -r chip_x chip_y < <(python3 - <<'PY'
+import xml.etree.ElementTree as ET
+prefs = {x.get("name"): x.get("value") for x in
+         ET.parse("forensic-evidence/prediction-web-typing.xml").getroot()}
+print(prefs["choice_x"], prefs["choice_y"])
+PY
+)
+test "$chip_x" -gt 0 && test "$chip_y" -gt 0
+adb shell input tap "$chip_x" "$chip_y"
+assert_prediction web-suggestion-tap web true "" starter
+
+tap_prediction_field address
+assert_prediction private-search-idle address true "" starter
+adb shell input text improvem
+assert_prediction private-search-typing address true improvem improvem
+adb exec-out screencap -p > forensic-evidence/private-search-predictions.png
+adb shell input text .example
+assert_prediction url-token address true "" none
+
+tap_prediction_field password
+assert_prediction password password false "" none
+tap_prediction_field plain
+assert_prediction return-to-plain plain true improvem improvem
+
+tap_prediction_field toggle
+assert_prediction switch-off plain false "" none
+tap_prediction_field toggle
+assert_prediction switch-on plain true improvem improvem
+
+before_reopen="$(python3 - <<'PY'
+import xml.etree.ElementTree as ET
+print(ET.parse("forensic-evidence/prediction-switch-on.xml")
+      .find("long[@name='updated_uptime']").get("value"))
 PY
 )"
-read -r search_x search_y <<< "$coordinates"
-adb shell input tap "$search_x" "$search_y"
-sleep 2
-search_ok=0
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    sleep 1
-    read_live_probe > forensic-evidence/search-field-prediction-probe.xml
-    if grep -Fq 'name="active_visible" value="true"' forensic-evidence/search-field-prediction-probe.xml &&
-       grep -Fq '<string name="typed">do</string>' forensic-evidence/search-field-prediction-probe.xml &&
-       grep -Eq '<int name="visible_chips" value="[1-9]' forensic-evidence/search-field-prediction-probe.xml; then
-        search_ok=1
-        break
-    fi
-done
-adb exec-out screencap -p > forensic-evidence/search-field-keypop-screenshot.png
-if [ "$search_ok" != 1 ]; then
-    echo "REGRESSION: KeyPop suggestion strip is hidden in Google-style search editors" >&2
-    cat forensic-evidence/search-field-prediction-probe.xml >&2 || true
-    exit 1
-fi
-adb shell dumpsys input_method > forensic-evidence/search-field-ime-state.txt
-grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/search-field-ime-state.txt
-echo "PASS: KeyPop suggestion strip visibly attached while typing 'How do' in a NO_SUGGESTIONS search editor"
+adb shell input keyevent KEYCODE_BACK
+sleep 1
+tap_prediction_field plain
+assert_prediction reopened-keyboard plain true improvem improvem "$before_reopen"
+adb shell dumpsys input_method > forensic-evidence/prediction-ime-state.txt
+grep -Fq "mCurMethodId=$SERVICE" forensic-evidence/prediction-ime-state.txt
 
 echo "[5/6] Verify installation identity"
 adb shell pm path "$PKG" | tee forensic-evidence/installed-package.txt

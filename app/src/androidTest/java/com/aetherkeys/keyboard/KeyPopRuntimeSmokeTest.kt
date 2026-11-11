@@ -59,7 +59,7 @@ class KeyPopRuntimeSmokeTest {
             scenario.onActivity { activity->
                 val text=visibleText(activity.window.decorView)
                 assertTrue("Advanced settings did not render",text.contains("KeyPop") &&
-                    text.contains("Your keyboard, your settings"))
+                    text.contains("Customize Keyboard"))
             }
         }
     }
@@ -103,18 +103,17 @@ class KeyPopRuntimeSmokeTest {
                     }
                     return null
                 }
-                var category:View?=find(activity.window.decorView,"Typing & Size")
+                var category:View?=find(activity.window.decorView,"Typing")
                 while(category!=null && !category.hasOnClickListeners())
                     category=category.parent as? View
                 assertTrue("Typing settings inaccessible",category!=null)
                 category?.performClick()
                 val prefs=activity.getSharedPreferences("keypop",Context.MODE_PRIVATE)
                 val typingText=visibleText(activity.window.decorView)
-                assertTrue("Missing live resize entry",typingText.contains("Resize keys"))
-                for(label in listOf("Suggestion font size","Suggestion strip height")) {
-                    assertTrue("Missing suggestion adjustment: $label",
-                        typingText.contains(label+":"))
-                }
+                assertTrue("Missing link to strip settings",
+                    typingText.contains("Suggestion strip settings"))
+                assertFalse("Size controls should have one settings location",
+                    typingText.contains("Keyboard width:"))
                 for((label,key) in listOf(
                     "Auto-correct spelling" to "autoCorrect",
                     "Auto punctuation" to "autoPunctuate",

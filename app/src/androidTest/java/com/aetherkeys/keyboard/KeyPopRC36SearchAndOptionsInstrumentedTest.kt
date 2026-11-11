@@ -37,6 +37,18 @@ class KeyPopRC36SearchAndOptionsInstrumentedTest {
         }
     }
 
+    @Test fun genericDictionaryDoesNotSurfacePersonalWords() {
+        val lexicon=KeyPopLexicon(context)
+        val custom="zelymavon"
+        try {
+            assertTrue(lexicon.addManual(0,custom))
+            assertTrue(custom in lexicon.suggestions(0,"zelyma",limit=8))
+            assertFalse(custom in lexicon.suggestions(0,"zelyma",limit=8,allowPersonal=false))
+        } finally {
+            lexicon.forget(0,custom)
+        }
+    }
+
     @Test fun themeAndLayoutOptionLabelsHaveReadableContrastOnLightSystemDialogs() {
         val measured=BooleanArray(4)
         InstrumentationRegistry.getInstrumentation().runOnMainSync {

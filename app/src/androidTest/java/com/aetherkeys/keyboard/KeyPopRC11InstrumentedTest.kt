@@ -36,21 +36,20 @@ class KeyPopRC11InstrumentedTest {
         assertEquals("create",typo.first())
     }
 
-    @Test fun settingsShowProfessionalSectionsAndToolbarControl() {
+    @Test fun customizationSettingsExposePersistentToolbarControl() {
         ActivityScenario.launch(MainActivity::class.java).use {scenario->
             scenario.onActivity {activity->
                 val view=activity.window.decorView
-                for(name in listOf("01   GET STARTED","02   TYPING INTELLIGENCE",
-                    "03   KEYBOARD DESIGN","04   TRANSLATION & LANGUAGES",
-                    "05   PRIVACY & UTILITIES"))
-                    assertNotNull("Missing settings group: $name",find(view,name))
-                val typing=find(view,"Typing & Size")
-                var parent:View?=typing
-                while(parent!=null && !parent.hasOnClickListeners())
-                    parent=parent.parent as? View
-                assertNotNull("Cannot enter typing settings",parent)
-                parent?.performClick()
-                val label=find(view,"Always show toolbar while typing")
+                fun open(label:String) {
+                    var parent:View?=find(view,label)
+                    while(parent!=null && !parent.hasOnClickListeners())
+                        parent=parent.parent as? View
+                    assertNotNull("Cannot open $label",parent)
+                    parent?.performClick()
+                }
+                open("Customize Keyboard")
+                open("Suggestion strip")
+                val label=find(view,"Keep toolbar visible with suggestions")
                 assertNotNull("Missing persistent toolbar toggle",label)
                 val row=label?.parent as? ViewGroup
                 val toggle=(0 until (row?.childCount?:0)).map{row?.getChildAt(it)}

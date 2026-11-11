@@ -46,9 +46,6 @@ class MainActivity:Activity() {
     private lateinit var scroller:ScrollView
     private var section="settingsHome"
     private val pageHistory=ArrayDeque<String>()
-    private var previewThemeIndex=-1
-    private var previewLayoutIndex=-1
-    private var previewKeysetIndex=-1
     private var downloadMessage:TextView?=null
     private var downloadProgress:ProgressBar?=null
     private val ticker=Handler(Looper.getMainLooper())
@@ -107,7 +104,6 @@ class MainActivity:Activity() {
             setPadding(dp(12),dp(8),dp(12),dp(8))
             background=shape(0xFF244B60.toInt(),12,0xFF4D8494.toInt())
             isClickable=true;isFocusable=true
-            contentDescription="$label: $selected. Double tap to change."
             setOnClickListener {onTap()}
         }
         val labels=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
@@ -119,44 +115,48 @@ class MainActivity:Activity() {
         parent.addView(row,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(9)})
         return valueText
     }
-    private fun option(parent:LinearLayout,title:String,key:String,default:Boolean=false){
+    private fun option(parent:LinearLayout,title:String,key:String,default:Boolean=false,
+                       onChange:()->Unit={}) {
         val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(48)}
         val label=text(title,14f,ink)
         row.addView(label,LinearLayout.LayoutParams(0,-2,1f))
         val toggle=Switch(this).apply{
             isChecked=prefs.getBoolean(key,default)
-            setOnCheckedChangeListener{_,value->prefs.edit().putBoolean(key,value).apply()}
+            contentDescription=title
+            setOnCheckedChangeListener { _,value ->
+                prefs.edit().putBoolean(key,value).apply()
+                onChange()
+            }
         }
         row.addView(toggle)
         parent.addView(row)
     }
-    private fun range(parent:LinearLayout,title:String,key:String,min:Int,max:Int,value:Int){
+    private fun range(parent:LinearLayout,title:String,key:String,min:Int,max:Int,value:Int,
+                      unit:String,onChange:()->Unit={}) {
         val label=text("",14f,ink)
         val seek=SeekBar(this).apply{
             this.max=max-min
             progress=(prefs.getInt(key,value)-min).coerceIn(0,max-min)
+            contentDescription=title
         }
-        label.text=title+": "+(seek.progress+min)
+        label.text="$title: ${seek.progress+min}$unit"
         seek.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
             override fun onProgressChanged(bar:SeekBar?,progress:Int,byUser:Boolean) {
-                label.text=title+": "+(progress+min)
-                if(byUser)prefs.edit().putInt(key,progress+min).apply()
+                label.text="$title: ${progress+min}$unit"
+                if(byUser) {
+                    prefs.edit().putInt(key,progress+min).apply()
+                    onChange()
+                }
             }
             override fun onStartTrackingTouch(bar:SeekBar?){}
             override fun onStopTrackingTouch(bar:SeekBar?){}
         })
         parent.addView(label);parent.addView(seek)
     }
-    /**
-     * Resizing keeps this canvas fixed at the top while its controls scroll.
-     * Slider changes persist and redraw the canvas without rebuilding the dialog.
-     */
-    private fun showResizeDialog() {
-        val shell=LinearLayout(this).apply {
-            orientation=LinearLayout.VERTICAL
-            setPadding(dp(12),dp(8),dp(12),0)
-        }
-        val caption=text("Tap any key below, then adjust its individual width or height. Changes appear live and remain saved.",13f,ink)
+    private fun designKeys() {
+        heading("Individual keys")
+        val shell=block()
+        val caption=text("Tap a key to adjust its width or height.",13f,muted)
         shell.addView(caption)
         var language=0
         val languageSwitch=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
@@ -194,16 +194,7 @@ class MainActivity:Activity() {
                     board.selectedRow=-1;board.selectedColumn=-1
                     board.selectedToken="SPACE"
                     board.refresh()
-                    // Refresh selected values after switching language.
-                    val selectedWidth=KeyPopKeyGeometry.widthPercent(
-                        this@MainActivity,index,-1,-1,"SPACE")
-                    val selectedHeight=KeyPopKeyGeometry.heightPercent(
-                        this@MainActivity,index,-1,-1,"SPACE")
-                    selectionLabel.text="SELECTED KEY: Spacebar · "+name
-                    widthLabel.text="Selected key width: $selectedWidth%"
-                    heightLabel.text="Selected key height: $selectedHeight%"
-                    keyWidth.progress=selectedWidth-65
-                    keyHeight.progress=selectedHeight-70
+                    updateSelection()
                 }
             }
             languageSwitch.addView(option,LinearLayout.LayoutParams(0,dp(38),1f))
@@ -213,7 +204,8 @@ class MainActivity:Activity() {
             isFillViewport=false
             addView(board)
         }
-        shell.addView(previewArea,LinearLayout.LayoutParams(-1,dp(255)))
+        val previewHeight=(resources.configuration.screenHeightDp/3).coerceIn(128,255)
+        shell.addView(previewArea,LinearLayout.LayoutParams(-1,dp(previewHeight)))
         val controls=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL;setPadding(0,dp(7),0,dp(8))
         }
@@ -260,56 +252,13 @@ class MainActivity:Activity() {
         }
         controls.addView(keyHeight)
         updateSelection()
-        controls.addView(text("WHOLE KEYBOARD · live settings",14f,accent,true))
-        val general=mutableListOf<Triple<SeekBar,String,Int>>()
-        fun sizeSlider(label:String,key:String,min:Int,max:Int,initial:Int,unit:String) {
-            val title=text("$label: ${prefs.getInt(key,initial).coerceIn(min,max)}$unit",
-                14f,ink,true)
-            val slider=SeekBar(this).apply{
-                this.max=max-min
-                progress=prefs.getInt(key,initial).coerceIn(min,max)-min
-                contentDescription=label
-                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
-                    override fun onProgressChanged(s:SeekBar?,v:Int,user:Boolean){
-                        title.text="$label: ${v+min}$unit"
-                        if(user){prefs.edit().putInt(key,v+min).apply();board.refresh()}
-                    }
-                    override fun onStartTrackingTouch(s:SeekBar?){}
-                    override fun onStopTrackingTouch(s:SeekBar?){}
-                })
-            }
-            controls.addView(title);controls.addView(slider)
-            general.add(Triple(slider,key,min))
-        }
-        sizeSlider("All keys · base height","height",36,90,51," dp")
-        sizeSlider("Keyboard width","keyboardWidthPercent",65,100,100,"%")
-        sizeSlider("Horizontal key spacing","spacing",1,10,4," dp")
-        sizeSlider("Key text size","font",12,32,19," sp")
-        sizeSlider("Corner rounding","round",3,40,13," dp")
-        val numberRow=Switch(this).apply{
-            text="Show number row";setTextColor(ink)
-            isChecked=prefs.getBoolean("numberRow",true)
-            setOnCheckedChangeListener{_,yes->
-                prefs.edit().putBoolean("numberRow",yes).apply();board.refresh()
-            }
-        }
-        controls.addView(numberRow)
-        action(controls,"Reset all key dimensions to defaults"){
+        action(controls,"Reset individual key sizes") {
             KeyPopKeyGeometry.resetAllDimensions(this)
-            prefs.edit().putInt("height",51).putInt("keyboardWidthPercent",100)
-                .putInt("spacing",4).putInt("font",19).putInt("round",13).apply()
-            val values=mapOf("height" to 51,"keyboardWidthPercent" to 100,
-                "spacing" to 4,"font" to 19,"round" to 13)
-            general.forEach{(bar,key,min)->bar.progress=values.getValue(key)-min}
             board.refresh()
             updateSelection()
         }
-        val scroll=ScrollView(this).apply{isVerticalScrollBarEnabled=true;addView(controls)}
-        val available=(resources.displayMetrics.heightPixels/resources.displayMetrics.density*
-            .36f).toInt().coerceIn(220,360)
-        shell.addView(scroll,LinearLayout.LayoutParams(-1,dp(available)))
-        AlertDialog.Builder(this).setTitle("Live Key-by-Key Resizing")
-            .setView(shell).setPositiveButton("Done",null).show()
+        shell.addView(controls)
+        content.addView(shell)
     }
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
@@ -332,18 +281,17 @@ class MainActivity:Activity() {
         ViewCompat.requestApplyInsets(scroller)
         // Attach the window before building any optional settings subsection.
         setContentView(scroller)
-        section=intent.getStringExtra("openSection")?:"settingsHome"
-        if(section=="settings")section="typing"
-        if(section=="languagePacks")section="languagePacks"
-        if(section !in setOf("settingsHome","typing","languagePacks","themes",
-                "layouts","keysets","design","translation","security","tools","onboarding"))
-            section="settingsHome"
-        val target=section
-        section="settingsHome"
-        if(target!="settingsHome")pageHistory.addLast("settingsHome")
-        navigate(target,false)
-        if(intent.getBooleanExtra("openResizeDialog",false))
-            content.post {showResizeDialog()}
+        if(savedInstanceState==null)openRequestedSection(intent)
+        else {
+            savedInstanceState.getStringArrayList("pageHistory")?.let{pageHistory.addAll(it)}
+            navigate(savedInstanceState.getString("section")?:"settingsHome",false)
+        }
+    }
+
+    override fun onSaveInstanceState(outState:Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("section",section)
+        outState.putStringArrayList("pageHistory",ArrayList(pageHistory))
     }
     override fun onResume(){
         super.onResume()
@@ -367,11 +315,29 @@ class MainActivity:Activity() {
     override fun onNewIntent(intent:Intent){
         super.onNewIntent(intent)
         setIntent(intent)
-        val target=intent.getStringExtra("openSection")?:"settingsHome"
-        navigate(if(target=="settings")"typing" else target)
+        openRequestedSection(intent)
     }
-    private fun navigate(destination:String,record:Boolean=true){
-        val next=if(destination in setOf("themes","layouts","keysets"))"design" else destination
+
+    private fun openRequestedSection(intent:Intent) {
+        val target=if(intent.getBooleanExtra("openResizeDialog",false))"designKeys"
+            else when(val requested=intent.getStringExtra("openSection")) {
+                "settings" -> "typing"
+                "themes" -> "designTheme"
+                "layouts","keysets" -> "designLayout"
+                "settingsHome","typing","languagePacks","design","designSize","designKeys",
+                "designTheme","designLayout","designSuggestions","translation","security",
+                "tools","onboarding" -> requested ?: "settingsHome"
+                else -> "settingsHome"
+            }
+        pageHistory.clear()
+        if(target!="settingsHome")pageHistory.addLast("settingsHome")
+        if(target in setOf("designTheme","designLayout","designSize","designKeys","designSuggestions"))
+            pageHistory.addLast("design")
+        if(target=="designKeys")pageHistory.addLast("designSize")
+        navigate(target,false)
+    }
+
+    private fun navigate(next:String,record:Boolean=true) {
         if(record && next!=section)pageHistory.addLast(section)
         if(next=="settingsHome" && record)pageHistory.clear()
         section=next
@@ -396,13 +362,15 @@ class MainActivity:Activity() {
         if(section!="settingsHome") {
             val previous=pageHistory.lastOrNull()?:"settingsHome"
             val parentLabel=when(previous) {
-                "design"->"Keyboard Design";"typing"->"Typing & Size"
-                "tools"->"Tools";"translation"->"Translation"
-                "security"->"Clipboard & Security";else->"All Settings"
+                "design"->"Customize Keyboard"
+                "designSize"->"Size & keys"
+                "typing"->"Typing"
+                "tools"->"Tools"
+                "translation"->"Translation"
+                "security"->"Clipboard & Security"
+                else->"Settings"
             }
             action(content,"‹  Back to $parentLabel"){backOneSection()}
-            if(previous!="settingsHome")
-                action(content,"All Settings"){navigate("settingsHome")}
         }
         try {
             when(section){
@@ -410,6 +378,11 @@ class MainActivity:Activity() {
                 "onboarding"->setup()
                 "languagePacks"->offlinePacks()
                 "design"->design()
+                "designTheme"->designTheme()
+                "designLayout"->designLayout()
+                "designSize"->designSize()
+                "designKeys"->designKeys()
+                "designSuggestions"->designSuggestions()
                 "typing"->typing()
                 "translation"->translation()
                 "security"->privacy()
@@ -424,30 +397,22 @@ class MainActivity:Activity() {
         }
         scroller.post{scroller.scrollTo(0,0)}
     }
-    private fun dashboard(){
-        heading("KeyPop Settings","Your keyboard, your settings")
+    private fun dashboard() {
+        heading("KeyPop Settings")
         addBlock {
-            addView(text("01   GET STARTED",12f,accent,true))
-            action(this,"Keyboard Setup","Activate KeyPop and test your keyboard"){navigate("onboarding")}
-            action(this,"Offline Packs","Manage downloaded translation languages"){navigate("languagePacks")}
+            action(this,"Customize Keyboard","Theme, layout, size and suggestion strip") {
+                navigate("design")
+            }
+            action(this,"Typing","Predictions, corrections and feedback"){navigate("typing")}
         }
         addBlock {
-            addView(text("02   TYPING INTELLIGENCE",12f,accent,true))
-            action(this,"Typing & Size",
-                "Corrections, predictions, grammar, toolbar and key sizes"){navigate("typing")}
+            action(this,"Keyboard Setup","Activate and test KeyPop"){navigate("onboarding")}
+            action(this,"Offline Packs","Manage downloaded languages"){navigate("languagePacks")}
+            action(this,"Translation","Choose translation engines and settings"){navigate("translation")}
         }
         addBlock {
-            addView(text("03   KEYBOARD DESIGN",12f,accent,true))
-            action(this,"Customize Keyboard"){navigate("design")}
-        }
-        addBlock {
-            addView(text("04   TRANSLATION & LANGUAGES",12f,accent,true))
-            action(this,"Translation","Compact live mode, cloud or offline engines"){navigate("translation")}
-        }
-        addBlock {
-            addView(text("05   PRIVACY & UTILITIES",12f,accent,true))
             action(this,"Clipboard & Security","Private history and saved logins"){navigate("security")}
-            action(this,"Tools","Dictionary, advanced layout editor and diagnostics"){navigate("tools")}
+            action(this,"Tools","Personal dictionary and diagnostics"){navigate("tools")}
         }
     }
     private fun setup(){
@@ -514,8 +479,6 @@ class MainActivity:Activity() {
             // selectable but invisible on the user's phone.
             background=shape(base,15,edge)
         }
-        val hint=text("Choose an option and watch the keyboard preview change immediately.",13f,ink)
-        body.addView(hint)
         val live=KeyboardPresetPreview(this,KeyboardPresetCatalog.selected(this),
             KeyPopKeysets.selectedId(this))
         body.addView(live,LinearLayout.LayoutParams(-1,dp(154)).apply {
@@ -542,7 +505,8 @@ class MainActivity:Activity() {
                         "Unable to change "+title.lowercase(),Toast.LENGTH_SHORT).show()
                 }
             }
-            group.addView(radio,android.widget.RadioGroup.LayoutParams(-1,dp(53)).apply {
+            radio.minimumHeight=dp(51)
+            group.addView(radio,android.widget.RadioGroup.LayoutParams(-1,-2).apply {
                 bottomMargin=dp(5)
             })
         }
@@ -551,85 +515,140 @@ class MainActivity:Activity() {
             background=shape(base,12)
             addView(group)
         }
-        body.addView(list,LinearLayout.LayoutParams(-1,dp(232)))
-        AlertDialog.Builder(this).setTitle(title+" · Live Preview")
+        val listHeight=(resources.configuration.screenHeightDp*0.36f).toInt().coerceIn(96,270)
+        body.addView(list,LinearLayout.LayoutParams(-1,dp(listHeight)))
+        AlertDialog.Builder(this).setTitle(title)
             .setView(body).setPositiveButton("Done",null).show()
     }
-    private fun design(){
-        heading("Customize Keyboard","Change a theme, geometry, keyset or alphabet and see the update immediately.")
-        val skin=KeyPopSkins.index(this)
-        val preset=KeyboardPresetCatalog.selected(this)
-        val keyset=KeyPopKeysets.selectedId(this)
+    private fun designPreview(parent:LinearLayout):KeyboardPresetPreview {
+        val preview=KeyboardPresetPreview(this,KeyboardPresetCatalog.selected(this),
+            KeyPopKeysets.selectedId(this))
+        parent.addView(preview,LinearLayout.LayoutParams(-1,dp(154)).apply {
+            bottomMargin=dp(12)
+        })
+        return preview
+    }
+
+    private fun design() {
+        heading("Customize Keyboard")
         addBlock {
-            val preview=KeyboardPresetPreview(this@MainActivity,preset,keyset)
-            addView(preview,LinearLayout.LayoutParams(-1,dp(154)).apply{
-                bottomMargin=dp(10)
-            })
-            addView(text("LIVE KEYBOARD PREVIEW · Select any option below to update it",
-                12f,accent,true))
+            designPreview(this)
+            action(this,"Theme","Colors and key appearance"){navigate("designTheme")}
+            action(this,"Layout","Geometry, letter order, keys and symbols"){navigate("designLayout")}
+            action(this,"Size & keys","Keyboard size and individual key dimensions"){navigate("designSize")}
+            action(this,"Suggestion strip","Visibility, position, text and colors"){navigate("designSuggestions")}
+        }
+        addBlock {
+            action(this,"Design Backup"){
+                startActivity(Intent(this@MainActivity,KeyPopProfileActivity::class.java))
+            }
+        }
+    }
+
+    private fun designTheme() {
+        heading("Theme")
+        addBlock {
+            val preview=designPreview(this)
             lateinit var themeName:TextView
-            themeName=picker(this,"Theme",KeyPopSkins.all[skin].name) {
-                chooseLiveDesign("Theme",KeyPopSkins.all.map{it.name},
+            themeName=picker(this,"Keyboard theme",KeyPopSkins.all[KeyPopSkins.index(this@MainActivity)].name) {
+                chooseLiveDesign("Keyboard theme",KeyPopSkins.all.map{it.name},
                     KeyPopSkins.index(this@MainActivity),preview,themeName){index->
                     prefs.edit().putInt("theme",index).remove("customAccent").apply()
                     true
                 }
             }
+            option(this,"High contrast","highContrast"){preview.showLive()}
+            option(this,"Animated themes","animatedThemes")
+            range(this,"Key corner radius","round",3,40,13," dp"){preview.showLive()}
+        }
+    }
+
+    private fun designLayout() {
+        heading("Layout")
+        addBlock {
+            val preview=designPreview(this)
             lateinit var layoutName:TextView
-            layoutName=picker(this,"Layout",preset.name) {
+            layoutName=picker(this,"Keyboard geometry",KeyboardPresetCatalog.selected(this@MainActivity).name) {
                 chooseLiveDesign("Keyboard geometry",KeyboardPresetCatalog.all.map{it.name},
                     KeyboardPresetCatalog.all.indexOfFirst{
                         it.id==KeyboardPresetCatalog.selected(this@MainActivity).id
                     }.coerceAtLeast(0),preview,layoutName){index->
-                    KeyboardPresetCatalog.apply(this@MainActivity,
-                        KeyboardPresetCatalog.all[index].id)
+                    KeyboardPresetCatalog.apply(this@MainActivity,KeyboardPresetCatalog.all[index].id)
                 }
             }
             lateinit var arrangementName:TextView
-            arrangementName=picker(this,"English letter arrangement",
+            arrangementName=picker(this,"English letter order",
                 KeyPopLayouts.names[KeyPopLayouts.variant(this@MainActivity)]) {
-                chooseLiveDesign("English letter arrangement",KeyPopLayouts.names,
+                chooseLiveDesign("English letter order",KeyPopLayouts.names,
                     KeyPopLayouts.variant(this@MainActivity),preview,arrangementName){index->
                     KeyPopLayouts.choose(this@MainActivity,index)
                     true
                 }
             }
             lateinit var keysName:TextView
-            keysName=picker(this,"Keys & Symbols",
-                KeyPopKeysets.all.first{it.id==keyset}.name) {
-                chooseLiveDesign("Keys & Symbols",KeyPopKeysets.all.map{it.name},
+            keysName=picker(this,"Keys & symbols",
+                KeyPopKeysets.all.first{it.id==KeyPopKeysets.selectedId(this@MainActivity)}.name) {
+                chooseLiveDesign("Keys & symbols",KeyPopKeysets.all.map{it.name},
                     KeyPopKeysets.all.indexOfFirst{
                         it.id==KeyPopKeysets.selectedId(this@MainActivity)
                     }.coerceAtLeast(0),preview,keysName){index->
                     KeyPopKeysets.apply(this@MainActivity,KeyPopKeysets.all[index].id)
                 }
             }
-            action(this,"Resize keys","Live individual key height, width, spacing and text size"){
-                showResizeDialog()
+            option(this,"Show number row","numberRow",true){preview.showLive()}
+            option(this,"Roman Urdu / Sindhi","romanMode")
+            action(this,"Edit layout by language"){
+                startActivity(Intent(this@MainActivity,KeyPopLayoutStudioActivity::class.java))
             }
         }
     }
-    /** Settings preview renders using exactly the same styling functions as
-     * the active IME; every adjustment repaints while the dialog stays open. */
-    private fun suggestionAppearanceEditor() {
-        val column=LinearLayout(this).apply {
-            orientation=LinearLayout.VERTICAL
-            setPadding(dp(13),dp(9),dp(13),dp(12))
-            background=shape(base,14,edge)
+
+    private fun designSize() {
+        heading("Size & keys")
+        addBlock {
+            action(this,"Individual keys","Resize a letter, number or control key"){navigate("designKeys")}
         }
+        addBlock {
+            val preview=KeyPopSizingPreview(this@MainActivity)
+            addView(preview,LinearLayout.LayoutParams(-1,dp(164)))
+            range(this,"Key height","height",36,90,51," dp"){preview.refresh()}
+            range(this,"Keyboard width","keyboardWidthPercent",65,100,100,"%"){preview.refresh()}
+            range(this,"Key spacing","spacing",1,10,4," dp"){preview.refresh()}
+            range(this,"Key text size","font",12,32,19," sp"){preview.refresh()}
+            range(this,"Space below keyboard","bottomLift",0,96,0," dp"){preview.refresh()}
+            option(this,"Floating keyboard","floating") {
+                if(prefs.getBoolean("floating",false) && prefs.getInt("keyboardWidthPercent",100)==100) {
+                    prefs.edit().putInt("keyboardWidthPercent",85).apply()
+                    navigate("designSize",false)
+                }
+                preview.refresh()
+            }
+            action(this,"Reset keyboard size") {
+                val layout=KeyboardPresetCatalog.selected(this@MainActivity)
+                prefs.edit().putInt("height",layout.height).putInt("spacing",layout.spacing)
+                    .remove("keyboardWidthPercent").remove("font").remove("bottomLift")
+                    .remove("floating").remove("floatX").remove("floatY").apply()
+                navigate("designSize",false)
+            }
+        }
+    }
+
+    private fun designSuggestions() {
+        heading("Suggestion strip")
+        val column=block()
+        content.addView(column)
         val previewContainer=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
             setPadding(dp(6),dp(6),dp(6),dp(8))
             background=shape(card,12,edge)
         }
-        column.addView(text("LIVE PREVIEW · Placement relative to toolbar",13f,accent,true))
-        column.addView(previewContainer,LinearLayout.LayoutParams(-1,dp(117)).apply {
+        column.addView(previewContainer,LinearLayout.LayoutParams(-1,-2).apply {
             bottomMargin=dp(8)
         })
         fun updatePreview() {
             previewContainer.removeAllViews()
             val toolbar=TextView(this).apply {
-                text="▦   Clipboard     ✦   Translate     ⚙   Settings"
+                text="Toolbar"
                 textSize=12f
                 gravity=Gravity.CENTER
                 setTextColor(ink)
@@ -648,13 +667,13 @@ class MainActivity:Activity() {
                 KeyPopSuggestionStyle.heightDp(this))).apply{
                 topMargin=dp(3)
             }
-            if(KeyPopSuggestionStyle.position(this)==KeyPopSuggestionStyle.ABOVE_TOOLBAR) {
+            val show=prefs.getBoolean("suggestions",true)
+            val showToolbar=KeyPopPredictionContext.toolbarVisible(
+                prefs.getBoolean("alwaysShowToolbar",true),show)
+            if(show && KeyPopSuggestionStyle.position(this)==KeyPopSuggestionStyle.ABOVE_TOOLBAR)
                 previewContainer.addView(prediction,rowParams)
-                previewContainer.addView(toolbar,toolbarParams)
-            }else {
-                previewContainer.addView(toolbar,toolbarParams)
-                previewContainer.addView(prediction,rowParams)
-            }
+            if(showToolbar)previewContainer.addView(toolbar,toolbarParams)
+            if(show && prediction.parent==null)previewContainer.addView(prediction,rowParams)
         }
         fun save(key:String,value:Int) {
             prefs.edit().putInt(key,value).apply()
@@ -698,79 +717,47 @@ class MainActivity:Activity() {
             AlertDialog.Builder(this).setTitle(title)
                 .setView(rgb).setPositiveButton("Done",null).show()
         }
-        column.addView(text("Position",14f,ink,true))
-        val placements=android.widget.RadioGroup(this).apply {
-            orientation=android.widget.RadioGroup.HORIZONTAL
-        }
-        listOf("Above toolbar","Below toolbar").forEachIndexed{index,name->
-            val radio=android.widget.RadioButton(this).apply {
-                text=name;textSize=13f;setTextColor(ink)
-                id=android.view.View.generateViewId()
-                isChecked=KeyPopSuggestionStyle.position(this@MainActivity)==index
-                setOnClickListener{save("suggestionPosition",index)}
+        option(column,"Show word suggestions","suggestions",true){updatePreview()}
+        option(column,"Keep toolbar visible with suggestions","alwaysShowToolbar",true){updatePreview()}
+        fun select(title:String,key:String,labels:List<String>,selected:()->Int,
+                   afterSelect:()->Unit={}) {
+            lateinit var value:TextView
+            value=picker(column,title,labels[selected()]) {
+                AlertDialog.Builder(this).setTitle(title)
+                    .setSingleChoiceItems(labels.toTypedArray(),selected()) { dialog,index ->
+                        save(key,index)
+                        value.text=labels[index]
+                        afterSelect()
+                        dialog.dismiss()
+                    }.setNegativeButton("Cancel",null).show()
             }
-            placements.addView(radio,android.widget.RadioGroup.LayoutParams(
-                0,dp(42)).apply{weight=1f})
         }
-        column.addView(placements)
-        column.addView(text("Color theme",14f,ink,true))
-        val palettePanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-        KeyPopSuggestionStyle.paletteNames.forEachIndexed{index,name->
-            val radio=android.widget.RadioButton(this).apply {
-                text=name;textSize=14f
-                KeyPopOptionStyle.decorate(this@MainActivity,this)
-                isChecked=KeyPopSuggestionStyle.palette(this@MainActivity)==index
-                setOnClickListener{save("suggestionPalette",index)}
-            }
-            palettePanel.addView(radio)
+        select("Position","suggestionPosition",listOf("Above toolbar","Below toolbar"),
+            {KeyPopSuggestionStyle.position(this)})
+        val colors=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
+        select("Color palette","suggestionPalette",KeyPopSuggestionStyle.paletteNames,
+            {KeyPopSuggestionStyle.palette(this)}) {
+            colors.visibility=if(KeyPopSuggestionStyle.palette(this)==6)View.VISIBLE else View.GONE
         }
-        // Exclusive selection across all seven theme choices.
-        val paletteGroup=android.widget.RadioGroup(this).apply {
-            orientation=android.widget.RadioGroup.VERTICAL
-        }
-        while(palettePanel.childCount>0){
-            val child=palettePanel.getChildAt(0)
-            palettePanel.removeViewAt(0)
-            child.id=android.view.View.generateViewId()
-            paletteGroup.addView(child)
-        }
-        column.addView(paletteGroup)
-        column.addView(text("Custom colors · Adjust RGB values live",14f,accent,true))
-        action(column,"Background color","Choose an exact RGB color"){
+        column.addView(colors)
+        colors.visibility=if(KeyPopSuggestionStyle.palette(this)==6)View.VISIBLE else View.GONE
+        action(colors,"Background color"){
             colorEditor("Suggestion background","suggestionBackgroundColor",
                 prefs.getInt("suggestionBackgroundColor",0xFF213746.toInt()))
         }
-        action(column,"Suggestion chip color","Color of each suggested word"){
+        action(colors,"Chip color"){
             colorEditor("Suggestion chip","suggestionChipColor",
                 prefs.getInt("suggestionChipColor",0xFF38566B.toInt()))
         }
-        action(column,"Prediction text color","Text color independent of keyboard theme"){
-            colorEditor("Prediction text","suggestionTextColor",
+        action(colors,"Text color"){
+            colorEditor("Suggestion text","suggestionTextColor",
                 prefs.getInt("suggestionTextColor",Color.WHITE))
         }
-        fun slider(title:String,key:String,min:Int,max:Int,initial:Int,suffix:String) {
-            val value=prefs.getInt(key,initial).coerceIn(min,max)
-            val label=text("$title: $value$suffix",14f,ink,true)
-            column.addView(label)
-            column.addView(SeekBar(this).apply {
-                this.max=max-min;progress=value-min
-                contentDescription=title
-                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
-                    override fun onProgressChanged(s:SeekBar?,n:Int,user:Boolean){
-                        val current=n+min
-                        label.text="$title: $current$suffix"
-                        if(user)save(key,current)
-                    }
-                    override fun onStartTrackingTouch(s:SeekBar?){}
-                    override fun onStopTrackingTouch(s:SeekBar?){}
-                })
-            })
-        }
-        slider("Prediction font size","suggestionFont",12,32,17," sp")
-        slider("Prediction row height","suggestionHeight",38,78,45," dp")
-        slider("Space between suggestions","suggestionGap",0,16,4," dp")
-        slider("Suggestion corner rounding","suggestionCorner",0,28,12," dp")
-        slider("Row background opacity","suggestionOpacity",45,100,100,"%")
+        range(column,"Text size","suggestionFont",12,32,17," sp"){updatePreview()}
+        range(column,"Strip height","suggestionHeight",38,78,45," dp"){updatePreview()}
+        range(column,"Chip spacing","suggestionGap",0,16,4," dp"){updatePreview()}
+        range(column,"Chip corner radius","suggestionCorner",0,28,12," dp"){updatePreview()}
+        range(column,"Background opacity","suggestionOpacity",45,100,100,"%"){updatePreview()}
         column.addView(Switch(this).apply {
             text="Bold suggestion text";setTextColor(ink)
             isChecked=KeyPopSuggestionStyle.bold(this@MainActivity)
@@ -779,7 +766,7 @@ class MainActivity:Activity() {
                 updatePreview()
             }
         })
-        action(column,"Restore suggestion-row defaults"){
+        action(column,"Reset strip appearance"){
             prefs.edit()
                 .remove("suggestionPosition").remove("suggestionPalette")
                 .remove("suggestionBackgroundColor").remove("suggestionChipColor")
@@ -787,24 +774,16 @@ class MainActivity:Activity() {
                 .remove("suggestionHeight").remove("suggestionGap")
                 .remove("suggestionCorner").remove("suggestionOpacity")
                 .remove("suggestionBold").apply()
-            Toast.makeText(this,"Prediction row defaults restored",
-                Toast.LENGTH_SHORT).show()
-            updatePreview()
+            navigate("designSuggestions",false)
         }
         updatePreview()
-        val scrolling=ScrollView(this).apply {
-            isFillViewport=false
-            addView(column)
-        }
-        AlertDialog.Builder(this).setTitle("Suggestion Row · Live Customization")
-            .setView(scrolling).setPositiveButton("Done",null).show()
     }
 
     private fun typing(){
-        heading("Typing & Size","Configure behavior first, then appearance and feedback")
+        heading("Typing")
         addBlock {
-            addView(text("01   PREDICTIONS & GRAMMAR",13f,accent,true))
-            option(this,"Word suggestions","suggestions",true)
+            addView(text("Predictions & grammar",14f,accent,true))
+            action(this,"Suggestion strip settings"){navigate("designSuggestions")}
             option(this,"Aggressive predictions","aggressivePredictions",true)
             option(this,"Predict next word","predictNext",true)
             option(this,"Learn my words on this device","learningEnabled",true)
@@ -826,40 +805,20 @@ class MainActivity:Activity() {
                 "passwords, URLs and special text fields are excluded.",12f,muted))
         }
         addBlock {
-            addView(text("02   PUNCTUATION & CAPITALS",13f,accent,true))
+            addView(text("Punctuation & capitals",14f,accent,true))
             option(this,"Auto punctuation","autoPunctuate",true)
             option(this,"Double-space punctuation","doubleSpace",true)
             option(this,"Capitalize sentence beginnings","autoCap",true)
             option(this,"Auto-space after selected suggestions","suggestionSpace",true)
         }
         addBlock {
-            addView(text("03   TOOLBAR & SUGGESTIONS",13f,accent,true))
-            option(this,"Always show toolbar while typing","alwaysShowToolbar",true)
-            addView(text("When disabled, the Material toolbar gives way to suggestions "+
-                "while you type. When enabled, both remain visible.",12f,muted))
-            range(this,"Suggestion font size","suggestionFont",12,32,17)
-            range(this,"Suggestion strip height","suggestionHeight",38,78,45)
-            action(this,"Customize suggestion row · Live preview",
-                "Position, fonts, text/chip colors, background, opacity, height, spacing and corners") {
-                suggestionAppearanceEditor()
-            }
-            addView(text("Set above or below the toolbar, preview changes instantly, and "+
-                "retain your settings across English, Urdu and Sindhi keyboards.",12f,muted))
-        }
-        addBlock {
-            addView(text("04   KEYBOARD SIZE",13f,accent,true))
-            action(this,"Resize keys"){showResizeDialog()}
-            option(this,"Roman Urdu / Sindhi","romanMode")
-        }
-        addBlock {
-            addView(text("05   FEEDBACK & ACCESSIBILITY",13f,accent,true))
+            addView(text("Feedback & accessibility",14f,accent,true))
             option(this,"Haptic feedback","haptics")
             option(this,"Keyboard sounds","sound")
             option(this,"Spacebar cursor gesture","spaceCursor",true)
-            option(this,"High contrast","highContrast")
         }
         addBlock {
-            addView(text("06   RECENT SCREENSHOTS",13f,accent,true))
+            addView(text("Recent screenshots",14f,accent,true))
             option(this,"Show copied screenshots on keyboard","screenshotClipOffer",true)
             option(this,"Suggest new screenshots automatically",
                 "autoScreenshotSuggestions",true)
@@ -973,7 +932,6 @@ class MainActivity:Activity() {
                 "Clipboard → menu → Back up everything. Restore it in the "+
                 "newly installed package. Android cannot transfer private "+
                 "storage automatically between different package IDs.",12f,muted))
-            option(this,"High contrast labels","highContrast")
             option(this,"Private performance metrics","performanceMetrics")
             action(this,"Import my saved text history into predictions",
                 "Explicit opt-in · safe natural-language clips only") {
@@ -1048,12 +1006,6 @@ class MainActivity:Activity() {
         addBlock {
             action(this,"Personal Dictionary"){
                 startActivity(Intent(this@MainActivity,KeyPopDictionaryActivity::class.java))
-            }
-            action(this,"Layout Lab"){
-                startActivity(Intent(this@MainActivity,KeyPopLayoutStudioActivity::class.java))
-            }
-            action(this,"Design Backup"){
-                startActivity(Intent(this@MainActivity,KeyPopProfileActivity::class.java))
             }
             action(this,"Voice Translate"){
                 startActivity(Intent(this@MainActivity,KeyPopVoiceActivity::class.java))
