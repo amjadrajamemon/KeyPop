@@ -107,9 +107,19 @@ class KeyPopHomeActivity : Activity() {
             }
         }
         column.addView(typingTest,LinearLayout.LayoutParams(-1,-2))
-        // An explicit test intent lets CI inspect the REAL active IME view,
-        // rather than only the shared suggestion-row helper widget.
-        if(intent.getBooleanExtra("keypopVisualSmoke",false)) {
+        // Reproduce Google-style search editors that explicitly set the
+        // system NO_SUGGESTIONS flag. This check uses a real InputConnection
+        // and real active KeyPop IME rather than an isolated helper view.
+        val searchVisualSmoke=intent.getBooleanExtra("keypopSearchVisualSmoke",false)
+        if(searchVisualSmoke) {
+            typingTest.inputType=android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            typingTest.setText("How do")
+            typingTest.setSelection(typingTest.text.length)
+        }
+        if(intent.getBooleanExtra("keypopVisualSmoke",false) ||
+            searchVisualSmoke) {
             typingTest.requestFocus()
             typingTest.postDelayed({
                 (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
@@ -133,6 +143,7 @@ class KeyPopHomeActivity : Activity() {
         column.addView(text("English ↔ Urdu works offline with downloaded Google ML Kit packs. Sindhi model files are experimental and must pass independent translation checks.",13f,muted))
         val settings=getSharedPreferences("keypop",MODE_PRIVATE)
         if(!intent.getBooleanExtra("keypopVisualSmoke",false) &&
+            !intent.getBooleanExtra("keypopSearchVisualSmoke",false) &&
             !settings.getBoolean("firstSindhiOfferV100",false)) {
             settings.edit().putBoolean("firstSindhiOfferV100",true).apply()
             column.post {
