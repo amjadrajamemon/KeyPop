@@ -247,7 +247,9 @@ class KeyPopLexicon(context:Context) {
             .take(limit.coerceIn(1,8))
     }
     fun nextWords(lang:Int,previous:String,beforeCursor:String=""):List<String> =
-        KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor)
+        (KeyPopContextPhraseModel.suggest(lang,beforeCursor,6)+
+            KeyPopTypingIntelligence.nextWords(lang,previous,beforeCursor))
+            .distinct().take(8)
     /**
      * Spacebar fast path: only constant-time verified substitutions. The full
      * SCOWL edit-distance ranking runs on the prediction worker, never here.
