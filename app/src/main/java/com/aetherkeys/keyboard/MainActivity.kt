@@ -826,6 +826,8 @@ class MainActivity:Activity() {
             option(this,"Always show toolbar while typing","alwaysShowToolbar",true)
             addView(text("When disabled, the Material toolbar gives way to suggestions "+
                 "while you type. When enabled, both remain visible.",12f,muted))
+            range(this,"Suggestion font size","suggestionFont",12,32,17)
+            range(this,"Suggestion strip height","suggestionHeight",38,78,45)
             action(this,"Customize suggestion row · Live preview",
                 "Position, fonts, text/chip colors, background, opacity, height, spacing and corners") {
                 suggestionAppearanceEditor()
