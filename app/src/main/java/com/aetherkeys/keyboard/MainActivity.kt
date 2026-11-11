@@ -45,6 +45,7 @@ class MainActivity:Activity() {
     private lateinit var content:LinearLayout
     private lateinit var scroller:ScrollView
     private var section="settingsHome"
+    private val pageHistory=ArrayDeque<String>()
     private var previewThemeIndex=-1
     private var previewLayoutIndex=-1
     private var previewKeysetIndex=-1
@@ -335,7 +336,10 @@ class MainActivity:Activity() {
         if(section !in setOf("settingsHome","typing","languagePacks","themes",
                 "layouts","keysets","design","translation","security","tools","onboarding"))
             section="settingsHome"
-        navigate(section)
+        val target=section
+        section="settingsHome"
+        if(target!="settingsHome")pageHistory.addLast("settingsHome")
+        navigate(target,false)
     }
     override fun onResume(){
         super.onResume()
@@ -346,11 +350,15 @@ class MainActivity:Activity() {
         ticker.removeCallbacks(refresh)
         super.onPause()
     }
-    // Back exits the settings task in one step. The visible "All Settings"
-    // control remains available when the user intentionally wants the index.
+    /** Android Back and our toolbar Back share the same one-level history. */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed(){
-        finish()
+        backOneSection()
+    }
+    private fun backOneSection() {
+        if(pageHistory.isNotEmpty())navigate(pageHistory.removeLast(),false)
+        else if(section!="settingsHome")navigate("settingsHome",false)
+        else finish()
     }
     override fun onNewIntent(intent:Intent){
         super.onNewIntent(intent)
@@ -358,8 +366,11 @@ class MainActivity:Activity() {
         val target=intent.getStringExtra("openSection")?:"settingsHome"
         navigate(if(target=="settings")"typing" else target)
     }
-    private fun navigate(destination:String){
-        section=if(destination in setOf("themes","layouts","keysets"))"design" else destination
+    private fun navigate(destination:String,record:Boolean=true){
+        val next=if(destination in setOf("themes","layouts","keysets"))"design" else destination
+        if(record && next!=section)pageHistory.addLast(section)
+        if(next=="settingsHome" && record)pageHistory.clear()
+        section=next
         downloadMessage=null;downloadProgress=null
         content.removeAllViews()
         val header=LinearLayout(this).apply {
@@ -379,7 +390,15 @@ class MainActivity:Activity() {
         header.addView(close,LinearLayout.LayoutParams(-2,dp(42)))
         content.addView(header)
         if(section!="settingsHome") {
-            action(content,"‹  All Settings"){navigate("settingsHome")}
+            val previous=pageHistory.lastOrNull()?:"settingsHome"
+            val parentLabel=when(previous) {
+                "design"->"Keyboard Design";"typing"->"Typing & Size"
+                "tools"->"Tools";"translation"->"Translation"
+                "security"->"Clipboard & Security";else->"All Settings"
+            }
+            action(content,"‹  Back to $parentLabel"){backOneSection()}
+            if(previous!="settingsHome")
+                action(content,"All Settings"){navigate("settingsHome")}
         }
         try {
             when(section){
