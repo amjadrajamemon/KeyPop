@@ -17,6 +17,7 @@ class KeyPopLexicon(context:Context) {
     // Common-word deletion index recovers missing leading letters without
     // scanning all 39,000 SCOWL forms on every keystroke.
     private val deleteIndex=HashMap<String,MutableList<RankedWord>>()
+    private val glideIndex=HashMap<String,MutableList<RankedWord>>()
     @Volatile private var recentFuzzy:Pair<String,List<KeyPopFuzzyRanker.Match>>?=null
     private val scowlIndex by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         val index=HashMap<String,MutableList<RankedWord>>()
@@ -33,6 +34,10 @@ class KeyPopLexicon(context:Context) {
                     if(word.length !in 2..24 || word.any { !it.isLetter() })return@forEach
                     val item=RankedWord(word,tier)
                     index.getOrPut(word.take(2)){ArrayList()}.add(item)
+                    if(tier<=20 && word.length in 3..17) {
+                        val gestureKey=""+word.first()+word.last()
+                        glideIndex.getOrPut(gestureKey){ArrayList()}.add(item)
+                    }
                     if(tier<=10 && word.length in 3..16)for(i in word.indices) {
                         val key=word.removeRange(i,i+1)
                         val items=deleteIndex.getOrPut(key){ArrayList()}
@@ -291,19 +296,43 @@ class KeyPopLexicon(context:Context) {
             rankedFuzzy(normalized,beforeCursor),
             prefs.getBoolean("aggressivePredictions",true))
     }
+    /** Frequent-word glide decoder indexed by starting and ending keys.
+     * Repeated letters are collapsed because a finger traces each key once
+     * ("helo" can legitimately mean "hello"). No full dictionary scan or
+     * Android IPC is performed on the touch dispatch path. */
     fun glide(lang:Int,path:List<String>):String? {
         if(lang!=0 || path.size<3)return null
-        val sequence=path.joinToString("").lowercase(Locale.ROOT)
-        val start=sequence.firstOrNull() ?:return null
-        val end=sequence.lastOrNull() ?:return null
-        fun isSubsequence(word:String):Boolean {
-            var i=0
-            for(ch in sequence)if(i<word.length && word[i]==ch)i++
-            return i==word.length
+        val trace=path.map{it.lowercase(Locale.ROOT)}
+            .filter{it.length==1 && it[0] in 'a'..'z'}
+            .joinToString("")
+        if(trace.length<3)return null
+        val first=trace.first();val last=trace.last()
+        fun compact(text:String):String=buildString {
+            for(c in text)if(isEmpty()||last()!=c)append(c)
         }
-        return (words(lang)+KeyPopTypingIntelligence.list(lang)).asSequence().filter {
-            it.length>=3 && it.first()==start && it.last()==end && isSubsequence(it)
-        }.minByOrNull { kotlin.math.abs(it.length-sequence.length) }
+        fun skipped(word:String):Int? {
+            val expected=compact(word)
+            if(expected.firstOrNull()!=first || expected.lastOrNull()!=last)return null
+            var pos=0
+            for(char in trace)if(pos<expected.length && char==expected[pos])pos++
+            return if(pos==expected.length)trace.length-expected.length else null
+        }
+        val familiar=if(scowlReady)glideIndex[""+first+last].orEmpty()
+            else emptyList()
+        val custom=words(lang).asSequence().filter {
+            it.length in 3..17 && it.firstOrNull()==first &&
+                it.lastOrNull()==last
+        }.map{RankedWord(it,10)}
+        return (familiar.asSequence()+custom)
+            .distinctBy{it.word}
+            .mapNotNull { item ->
+                val excess=skipped(item.word)?:return@mapNotNull null
+                val score=(if(item.tier<=10)120 else 65)-
+                    excess*17-kotlin.math.abs(item.word.length-trace.length)*3
+                item.word to score
+            }
+            .maxWithOrNull(compareBy<Pair<String,Int>>{it.second}
+                .thenByDescending{it.first.length})?.first
     }
     private fun editDistanceAtMost2(a:String,b:String):Int {
         if(kotlin.math.abs(a.length-b.length)>2)return 3
