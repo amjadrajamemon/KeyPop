@@ -2259,8 +2259,10 @@ class AetherImeService : InputMethodService() {
                     val before=currentInputConnection?.let{readContext(it,48)}.orEmpty()
                     val word=trailingWordPattern.find(before)?.value.orEmpty()
                     if(word.isNotBlank()) {
-                        val predLang=if(language!=0 &&
-                            prefs.getBoolean("romanMode",false))0 else language
+                        // Roman key events are Latin, but after a Space
+                        // converts the word, store the resulting word under
+                        // its native Urdu/Sindhi language, not English.
+                        val predLang=language
                         val inputType=currentInputEditorInfo?.inputType?:0
                         val corrected=if(KeyPopTypingRules.autocorrectEnabled(
                                 prefs.getBoolean("autoCorrect",true),inputType)) {
