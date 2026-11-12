@@ -95,6 +95,9 @@ adb shell am start -W -n "$PKG/com.aetherkeys.keyboard.KeyPopHomeActivity" \
     --ez keypopPredictionSmoke true > forensic-evidence/prediction-launch.txt
 adb shell ime enable "$SERVICE"
 adb shell ime set "$SERVICE"
+# CI emulators can report a physical keyboard; explicitly permit the on-screen
+# IME so a tapped editor actually attaches the suggestion strip.
+adb shell settings put secure show_ime_with_hard_keyboard 1
 
 read_live_probe() {
     adb shell run-as "$PKG" cat shared_prefs/keypop_visual_probe.xml 2>/dev/null || true
