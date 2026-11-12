@@ -168,6 +168,8 @@ PY
     return 1
 }
 
+# The smoke screen deliberately focuses its root; select an actual text editor
+# before expecting the IME to attach and publish prediction probe data.
 tap_prediction_field plain
 assert_prediction plain-idle plain true "" starter
 adb shell input text improvem
