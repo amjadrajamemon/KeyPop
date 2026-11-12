@@ -10,9 +10,11 @@ import android.view.inputmethod.InputConnection
  * IME_ACTION_SEND is a request to show a Send key, not a requirement to send
  * when the keyboard visibly offers Enter. */
 object KeyPopEnterPolicy {
-    fun insertsNewline(info:EditorInfo?):Boolean {
-        if(info==null)return true
-        val inputType=info.inputType
+    fun insertsNewline(info:EditorInfo?):Boolean =
+        info==null || insertsNewline(info.inputType,info.imeOptions,info.packageName.orEmpty())
+
+    /** Pure overload for host-editor policy regression tests. */
+    fun insertsNewline(inputType:Int,imeOptions:Int,packageName:String):Boolean {
         if(inputType and InputType.TYPE_MASK_CLASS!=InputType.TYPE_CLASS_TEXT)return false
         val variation=inputType and InputType.TYPE_MASK_VARIATION
         if(variation in setOf(
@@ -23,13 +25,12 @@ object KeyPopEnterPolicy {
             InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
             InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
         ))return false
-        val action=info.imeOptions and EditorInfo.IME_MASK_ACTION
+        val action=imeOptions and EditorInfo.IME_MASK_ACTION
         if(action in setOf(EditorInfo.IME_ACTION_SEARCH,EditorInfo.IME_ACTION_GO,
             EditorInfo.IME_ACTION_NEXT,EditorInfo.IME_ACTION_DONE,
             EditorInfo.IME_ACTION_PREVIOUS))return false
-        if(info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION!=0)return true
-        val pkg=info.packageName.orEmpty()
-        if(pkg=="com.whatsapp" || pkg=="com.whatsapp.w4b")return true
+        if(imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION!=0)return true
+        if(packageName=="com.whatsapp" || packageName=="com.whatsapp.w4b")return true
         return inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE!=0
     }
 }
@@ -42,7 +43,7 @@ object KeyPopEditorActions {
 
     fun deleteBackward(connection:InputConnection?,selectionReported:Boolean=false):Deletion {
         if(connection==null)return Deletion.FAILED
-        val selected=runCatching {
+        val selected=selectionReported || runCatching {
             connection.getSelectedText(0)?.isNotEmpty()==true
         }.getOrDefault(false)
         if(selected || selectionReported) {
