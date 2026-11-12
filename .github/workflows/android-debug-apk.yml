@@ -1,8 +1,8 @@
-name: KeyPop RC38 suggestion strip and keyboard design
+name: KeyPop RC39 suggestion strip and keyboard design
 on:
   push:
     branches:
-      - feature/rc38-prediction-autospace-20261112
+      - feature/rc39-enter-selection-backspace-20261112
   pull_request:
   workflow_dispatch:
 
@@ -44,51 +44,51 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.37-rc38-${abi}-debug.apk"
+            cp "app/build/outputs/apk/debug/app-${abi}-debug.apk" "dist/KeyPop-v1.0.38-rc39-${abi}-debug.apk"
           done
-          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.37-rc38-universal-debug.apk"
-          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.37-rc38-androidTest.apk"
+          cp "app/build/outputs/apk/debug/app-universal-debug.apk" "dist/KeyPop-v1.0.38-rc39-universal-debug.apk"
+          cp "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "dist/KeyPop-v1.0.38-rc39-androidTest.apk"
           ls -lh dist/*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-all-five-apks
+          name: KeyPop-v1.0.38-rc39-all-five-apks
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-instrumentation
-          path: dist/KeyPop-v1.0.37-rc38-androidTest.apk
+          name: KeyPop-v1.0.38-rc39-instrumentation
+          path: dist/KeyPop-v1.0.38-rc39-androidTest.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-ARM64
-          path: dist/KeyPop-v1.0.37-rc38-arm64-v8a-debug.apk
+          name: KeyPop-v1.0.38-rc39-ARM64
+          path: dist/KeyPop-v1.0.38-rc39-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-ARM32
-          path: dist/KeyPop-v1.0.37-rc38-armeabi-v7a-debug.apk
+          name: KeyPop-v1.0.38-rc39-ARM32
+          path: dist/KeyPop-v1.0.38-rc39-armeabi-v7a-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-x86
-          path: dist/KeyPop-v1.0.37-rc38-x86-debug.apk
+          name: KeyPop-v1.0.38-rc39-x86
+          path: dist/KeyPop-v1.0.38-rc39-x86-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-x86_64
-          path: dist/KeyPop-v1.0.37-rc38-x86_64-debug.apk
+          name: KeyPop-v1.0.38-rc39-x86_64
+          path: dist/KeyPop-v1.0.38-rc39-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-Universal
-          path: dist/KeyPop-v1.0.37-rc38-universal-debug.apk
+          name: KeyPop-v1.0.38-rc39-Universal
+          path: dist/KeyPop-v1.0.38-rc39-universal-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -101,11 +101,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-x86_64
+          name: KeyPop-v1.0.38-rc39-x86_64
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-instrumentation
+          name: KeyPop-v1.0.38-rc39-instrumentation
           path: dist
       - name: Grant KVM permission for Android emulator
         run: |
@@ -125,7 +125,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-emulator-forensic-evidence
+          name: KeyPop-v1.0.38-rc39-emulator-forensic-evidence
           path: forensic-evidence/
           if-no-files-found: ignore
           retention-days: 30
@@ -135,15 +135,15 @@ jobs:
     needs: [android, emulator-smoke]
     # Testing-only prerelease APKs: NOT a production release. GH issue #13
     # still blocks claims of complete offline Sindhi translation readiness.
-    # Publish only the specific RC38 integration branch after both CI jobs pass.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc38-prediction-autospace-20261112' }}
+    # Publish only the specific RC39 integration branch after both CI jobs pass.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/rc39-enter-selection-backspace-20261112' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: KeyPop-v1.0.37-rc38-all-five-apks
+          name: KeyPop-v1.0.38-rc39-all-five-apks
           path: dist
       - name: Publish or refresh GitHub preview release assets
         shell: bash
@@ -152,8 +152,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="v1.0.37-rc38-debug-preview"
-          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc38-prediction-autospace-20261112" --jq '.commit.sha')"
+          TAG="v1.0.38-rc39-debug-preview"
+          LATEST="$(gh api "repos/$GH_REPO/branches/feature/rc39-enter-selection-backspace-20261112" --jq '.commit.sha')"
           if [ "$LATEST" != "$GITHUB_SHA" ]; then
             echo "Not publishing stale commit $GITHUB_SHA (latest is $LATEST)." >&2
             exit 1
@@ -165,6 +165,6 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "KeyPop v1.0.37-rc38 Debug Preview — Android APKs" \
-              --notes "KeyPop RC38 debug preview. Fixes missing auto-space when selecting predictions, including Chrome search fields, with URL protections and deferred space recovery. Settings > Customize Keyboard groups theme, layout, sizing and suggestion-strip controls. This side-by-side preview uses a new Android keyboard identity (com.aetherkeys.keyboard.previewv137). Enable and select KeyPop RC38 Preview Keyboard after installing."
+              --title "KeyPop v1.0.38-rc39 Debug Preview — Android APKs" \
+              --notes "KeyPop RC39 debug preview. Fixes WhatsApp Enter behaving as Send and selected-text Backspace deletion, retaining RC38 prediction auto-spacing. Settings > Customize Keyboard groups theme, layout, sizing and suggestion-strip controls. This side-by-side preview uses a new Android keyboard identity (com.aetherkeys.keyboard.previewv137). Enable and select KeyPop RC39 Preview Keyboard after installing."
           fi
