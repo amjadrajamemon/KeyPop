@@ -166,5 +166,5 @@ jobs:
               --target "$GITHUB_SHA" \
               --prerelease \
               --title "KeyPop v1.0.39-rc40 Debug Preview — Android APKs" \
-              --notes "KeyPop RC40 debug preview. Fixes WhatsApp Enter mistakenly closing the keyboard when the editor advertises DONE/NEXT, while preserving RC39 Backspace and RC38 auto-space refinements. Settings > Customize Keyboard groups theme, layout, sizing and suggestion-strip controls. This side-by-side preview uses a new Android keyboard identity (com.aetherkeys.keyboard.previewv137). Enable and select KeyPop RC40 Preview Keyboard after installing."
+              --notes "KeyPop RC40 debug preview. Fixes WhatsApp Enter mistakenly closing the keyboard when the editor advertises DONE/NEXT, while preserving RC39 Backspace and RC38 auto-space refinements. Settings > Customize Keyboard groups theme, layout, sizing and suggestion-strip controls. This side-by-side preview uses a new Android keyboard identity (com.aetherkeys.keyboard.previewv140). RC40 uses a separate Android package because the earlier RC39 debug preview was signed with an ephemeral key and cannot be replaced with a different signature. Export your design and optional encrypted clipboard archive from RC39, then enable KeyPop RC40 Preview Keyboard after installing."
           fi
