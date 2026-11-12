@@ -1379,6 +1379,7 @@ class AetherImeService : InputMethodService() {
                 label=="SPACE" -> if(language==0) "English" else languages[language]
                 label=="☺," -> "☺"
                 label=="↵" && mayTranslateOnSend() &&
+                    !KeyPopEnterPolicy.insertsNewline(currentInputEditorInfo) &&
                     !sensitive(currentInputEditorInfo) -> "⇄ Send"
                 shift && (language==0 || prefs.getBoolean("romanMode",false)) &&
                     label.length==1 && label[0].isLetter() -> label.uppercase(Locale.ROOT)
@@ -1429,7 +1430,11 @@ class AetherImeService : InputMethodService() {
                 "ABC" -> "Switch to letters"
                 else -> if(label.length==1) "Type "+label else label
             }
-            button.isFocusable=true
+            // Virtual keys must not steal the host editor's focus. A
+            // focus-taking Enter key can dismiss an IME in chat editors.
+            // Accessibility focus is independent of keyboard input focus.
+            button.isFocusableInTouchMode=false
+            button.isFocusable=false
             if(label=="SPACE" && prefs.getBoolean("spaceCursor",true))
                 installSpaceGestures(button)
             keyViews.add(button to label)
@@ -2350,10 +2355,12 @@ class AetherImeService : InputMethodService() {
                 pendingSuggestionBoundary=null
                 val info=currentInputEditorInfo
                 if(KeyPopEnterPolicy.insertsNewline(info)) {
-                    // WhatsApp may advertise IME_ACTION_SEND even while the
-                    // visible key is Enter. Never trigger Send for this key.
+                    // WhatsApp may advertise SEND, DONE or NEXT even for
+                    // its message composer. Never dispatch these actions from
+                    // the visible Enter key: they may send or dismiss the IME.
+                    val connection=currentInputConnection
                     editorContext.committed("\n")
-                    if(currentInputConnection?.commitText("\n",1)!=true)
+                    if(connection?.commitText("\n",1)!=true)
                         editorContext.clear()
                     requestSuggestionRefresh()
                 } else if(mayTranslateOnSend() &&
