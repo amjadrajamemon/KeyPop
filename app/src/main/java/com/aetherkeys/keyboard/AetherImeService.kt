@@ -90,6 +90,11 @@ class AetherImeService : InputMethodService() {
     private data class SpaceAdvice(val language:Int,val before:String,
         val word:String,val correction:String?,val grammar:KeyPopGrammarFix?)
     private var latestSpaceAdvice:SpaceAdvice?=null
+    // Some editors (notably browser search fields) normalize trailing spaces.
+    // A short-lived boundary ensures the next typed word is still separated.
+    private data class PendingSuggestionBoundary(
+        val word:String,val targetPackage:String,val acceptedAtMs:Long)
+    private var pendingSuggestionBoundary:PendingSuggestionBoundary?=null
     private var predictionPending:Runnable?=null
     private var suggestionRefreshTask:Runnable?=null
     @Volatile private var predictionGeneration=0
@@ -412,6 +417,7 @@ class AetherImeService : InputMethodService() {
         cancelSuggestionWork()
         suggestionBar?.visibility=View.GONE
         editorContext.clear()
+        pendingSuggestionBoundary=null
         lastKnownSelection=null
         latestSpaceAdvice=null
         KeyPopDiagnostics.observeContextCache(this,contextCacheHits,contextCacheMisses)
@@ -433,6 +439,7 @@ class AetherImeService : InputMethodService() {
 
     override fun onStartInputView(info:EditorInfo?,restarting:Boolean) {
         editorContext.clear()
+        pendingSuggestionBoundary=null
         latestSpaceAdvice=null
         lastKnownSelection=info?.initialSelStart?.takeIf{it>=0}
         lastAppliedCorrection=null
@@ -1987,14 +1994,19 @@ class AetherImeService : InputMethodService() {
             if(editorBefore!=before)return
             val actual=trailingWordPattern.find(editorBefore)?.value.orEmpty()
             if(actual!=word)return
-            val address=KeyPopTypingRules.isAddressEditor(currentInputEditorInfo?.inputType?:0)
-            val after=connection.getTextAfterCursor(3,0)?.toString()
-            if(address && (KeyPopTypingRules.isAddressToken(editorBefore) ||
-                    after==null || after.firstOrNull()?.isWhitespace()==false))return
+            val inputType=currentInputEditorInfo?.inputType?:0
+            val address=KeyPopTypingRules.isAddressEditor(inputType)
+            // An address editor may also be a combined web search box. Protect
+            // URL tokens, but do not disable spacing for ordinary search words.
+            val after=connection.getTextAfterCursor(32,0)?.toString()
+            if(address && !KeyPopPredictionContext.searchWordsAllowSpacing(
+                    editorBefore,after))return
             val replacement=if(address)KeyPopTypingRules.preservesCase(actual,choice)
                 else KeyPopPredictionContext.wordCase(choice,actual,before)
-            val committed=if(!address && prefs.getBoolean("suggestionSpace",true))
-                KeyPopPredictionContext.committedWord(replacement,after.orEmpty()) else replacement
+            val autoSpace=prefs.getBoolean("suggestionSpace",true)
+            val committed=if(autoSpace)
+                KeyPopPredictionContext.committedWord(replacement,after.orEmpty())
+                else replacement
             editorContext.clear()
             connection.beginBatchEdit()
             val accepted=try {
@@ -2004,6 +2016,10 @@ class AetherImeService : InputMethodService() {
                 connection.endBatchEdit()
             }
             if(!accepted)return
+            pendingSuggestionBoundary=if(autoSpace && committed.endsWith(" "))
+                PendingSuggestionBoundary(replacement,
+                    currentInputEditorInfo?.packageName.orEmpty(),
+                    SystemClock.elapsedRealtime()) else null
             learnAsync(predLang,replacement)
             learnPersonalAsync(predLang,before.dropLast(word.length),replacement)
             if(!replacement.equals(actual,ignoreCase=true))
@@ -2155,6 +2171,7 @@ class AetherImeService : InputMethodService() {
         }
         when(value) {
             "⌫" -> {
+                pendingSuggestionBoundary=null
                 val connection=currentInputConnection
                 val entry=lastAppliedCorrection
                 val preceding=if(entry!=null)
@@ -2192,6 +2209,20 @@ class AetherImeService : InputMethodService() {
                 updateShiftKeys()
             }
             "SPACE" -> {
+                val boundary=pendingSuggestionBoundary
+                pendingSuggestionBoundary=null
+                if(boundary!=null &&
+                    boundary.targetPackage==currentInputEditorInfo?.packageName &&
+                    SystemClock.elapsedRealtime()-boundary.acceptedAtMs<=5000L) {
+                    val preceding=currentInputConnection?.getTextBeforeCursor(
+                        boundary.word.length+1,0)?.toString()
+                    // Tapping Space immediately after an accepted suggestion
+                    // should not produce a duplicate or a stray full stop.
+                    if(preceding?.endsWith(boundary.word+" ")==true) {
+                        requestSuggestionRefresh()
+                        return
+                    }
+                }
                 lastAppliedCorrection=null
                 if(!sensitive(currentInputEditorInfo)) {
                     if(language!=0 && prefs.getBoolean("romanMode",false)) {
@@ -2295,6 +2326,7 @@ class AetherImeService : InputMethodService() {
             "?123" -> { symbols=true;draw() }
             "ABC" -> { symbols=false;draw() }
             "↵" -> {
+                pendingSuggestionBoundary=null
                 if(mayTranslateOnSend() &&
                     !sensitive(currentInputEditorInfo) && !numeric(currentInputEditorInfo)) {
                     translateBeforeSend()
@@ -2307,6 +2339,11 @@ class AetherImeService : InputMethodService() {
             }
             else -> {
                 val connection=currentInputConnection
+                val boundary=pendingSuggestionBoundary?.takeIf {
+                    it.targetPackage==currentInputEditorInfo?.packageName &&
+                        SystemClock.elapsedRealtime()-it.acceptedAtMs<=5000L
+                }
+                pendingSuggestionBoundary=null
                 val prior=connection?.let{readContext(it,120)}.orEmpty()
                 val sentenceStart=prior.isBlank() || prior.trimEnd().lastOrNull() in listOf('.','!','?','\n')
                 val latinMode=language==0 || prefs.getBoolean("romanMode",false)
@@ -2325,13 +2362,21 @@ class AetherImeService : InputMethodService() {
                         prefs.getBoolean("autoPunctuate",true),
                         currentInputEditorInfo?.inputType?:0) &&
                     prior.trimEnd().lastOrNull()?.isLetterOrDigit()==true
-                if(doAutoPunct && prior.endsWith(" ")) {
+                val punctuationAfterSuggestion=punct && boundary!=null &&
+                    prior.endsWith(boundary.word+" ")
+                if((doAutoPunct || punctuationAfterSuggestion) && prior.endsWith(" ")) {
                     editorContext.deletedCharacters(1)
                     if(connection?.deleteSurroundingText(1,0)!=true)
                         editorContext.clear()
                 }
-                val characters=(if(capital && latinMode)
-                    value.uppercase(Locale.ROOT) else value)+
+                // Browser editors can drop the space committed with a selected
+                // word. Recover exactly one before the next letter/digit.
+                val recoverSpace=boundary!=null && value.length==1 &&
+                    value[0].isLetterOrDigit() &&
+                    KeyPopPredictionContext.needsBoundarySpace(prior,boundary.word)
+                val characters=(if(recoverSpace)" " else "")+
+                    (if(capital && latinMode)
+                        value.uppercase(Locale.ROOT) else value)+
                         (if(doAutoPunct)" " else "")
                 editorContext.committed(characters)
                 if(connection?.commitText(characters,1)!=true)
