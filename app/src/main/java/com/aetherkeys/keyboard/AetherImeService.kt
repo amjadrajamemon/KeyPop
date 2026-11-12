@@ -82,6 +82,7 @@ class AetherImeService : InputMethodService() {
     private var contextCacheMisses=0
     private var lastKeyboardTouchAt=0L
     private var lastKnownSelection:Int?=null
+    private var hasSelectedRange=false
     private val trailingWordPattern=Regex("[\\p{L}\\p{M}]+(?:['’][\\p{L}\\p{M}]+)*$")
     // Cache immutable visual primitives once per keyboard rebuild, not per key.
     private var renderSkin:KeyPopSkin?=null
@@ -401,6 +402,7 @@ class AetherImeService : InputMethodService() {
     override fun onUpdateSelection(oldSelStart:Int,oldSelEnd:Int,newSelStart:Int,newSelEnd:Int,candidatesStart:Int,candidatesEnd:Int) {
         super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
         if(!inputViewActive)return
+        hasSelectedRange=newSelStart>=0 && newSelEnd>newSelStart
         lastKnownSelection=newSelStart.takeIf{newSelStart==newSelEnd && it>=0}
         val ourEdit=editorContext.selectionChanged(newSelStart,newSelEnd)
         // press() already scheduled the prediction for our own edits.
@@ -418,6 +420,7 @@ class AetherImeService : InputMethodService() {
         suggestionBar?.visibility=View.GONE
         editorContext.clear()
         pendingSuggestionBoundary=null
+        hasSelectedRange=false
         lastKnownSelection=null
         latestSpaceAdvice=null
         KeyPopDiagnostics.observeContextCache(this,contextCacheHits,contextCacheMisses)
@@ -441,6 +444,8 @@ class AetherImeService : InputMethodService() {
         editorContext.clear()
         pendingSuggestionBoundary=null
         latestSpaceAdvice=null
+        hasSelectedRange=info!=null && info.initialSelStart>=0 &&
+            info.initialSelEnd>info.initialSelStart
         lastKnownSelection=info?.initialSelStart?.takeIf{it>=0}
         lastAppliedCorrection=null
         lastRejectedCorrection=null
@@ -1461,6 +1466,9 @@ class AetherImeService : InputMethodService() {
                 MotionEvent.ACTION_DOWN -> {
                     stopBackspaceRepeating()
                     button.isPressed=true
+                    // Delete on DOWN, not only on UP. Android selection popups
+                    // and keyboard view changes may cancel the UP event.
+                    press("⌫")
                     val ticker=object:Runnable {
                         var repeats=0
                         override fun run() {
@@ -1471,9 +1479,7 @@ class AetherImeService : InputMethodService() {
                                 translateSource=translateDraft
                                 liveSourceView?.text=translateDraft
                             } else {
-                                editorContext.deletedCodePoint()
-                                if(currentInputConnection?.deleteSurroundingTextInCodePoints(1,0)!=true)
-                                    editorContext.clear()
+                                deleteBackwardFromEditor(allowCorrectionUndo=false)
                             }
                             repeats++
                             // Avoid inflating suggestion views for every deleted character.
@@ -1493,8 +1499,7 @@ class AetherImeService : InputMethodService() {
                     button.isPressed=false
                     val repeated=didRepeatBackspace
                     stopBackspaceRepeating()
-                    if(!repeated)press("⌫")
-                    else {refreshSuggestions();scheduleLiveTranslation(270)}
+                    if(repeated) {refreshSuggestions();scheduleLiveTranslation(270)}
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> {
@@ -2127,6 +2132,46 @@ class AetherImeService : InputMethodService() {
         }
     }
 
+    /** Always delete a selection as a whole before considering correction undo.
+     * Reuse the same logic for single taps and held-backspace repeats. */
+    private fun deleteBackwardFromEditor(allowCorrectionUndo:Boolean=true) {
+        pendingSuggestionBoundary=null
+        val connection=currentInputConnection
+        val hasSelection=hasSelectedRange ||
+            (connection?.getSelectedText(0)?.isNotEmpty()==true)
+        if(hasSelection) {
+            KeyPopEditorActions.deleteBackward(connection,selectionReported=true)
+            editorContext.clear()
+            hasSelectedRange=false
+            lastAppliedCorrection=null
+            return
+        }
+        val entry=if(allowCorrectionUndo)lastAppliedCorrection else null
+        val preceding=if(entry!=null)
+            connection?.getTextBeforeCursor(entry.corrected.length+1,0)?.toString().orEmpty()
+            else ""
+        if(entry!=null && entry.editor==currentInputEditorInfo?.packageName &&
+            KeyPopTypingRules.canUndoRecentCorrection(preceding,entry.original,
+                entry.corrected,SystemClock.elapsedRealtime()-entry.time)) {
+            lastRejectedCorrection=entry.original to entry.corrected
+            val feedbackLanguage=if(language!=0 &&
+                prefs.getBoolean("romanMode",false))0 else language
+            correctionFeedbackAsync(feedbackLanguage,entry.original,
+                entry.corrected,false)
+            connection?.beginBatchEdit()
+            connection?.deleteSurroundingText(entry.corrected.length+1,0)
+            connection?.commitText(entry.original,1)
+            connection?.endBatchEdit()
+            editorContext.clear()
+        } else {
+            when(KeyPopEditorActions.deleteBackward(connection)) {
+                KeyPopEditorActions.Deletion.CODE_POINT -> editorContext.deletedCodePoint()
+                else -> editorContext.clear()
+            }
+        }
+        lastAppliedCorrection=null
+    }
+
     private fun press(value:String) {
         val pressStart=SystemClock.elapsedRealtimeNanos()
         lastKeyboardTouchAt=SystemClock.uptimeMillis()
@@ -2171,31 +2216,7 @@ class AetherImeService : InputMethodService() {
         }
         when(value) {
             "⌫" -> {
-                pendingSuggestionBoundary=null
-                val connection=currentInputConnection
-                val entry=lastAppliedCorrection
-                val preceding=if(entry!=null)
-                    connection?.getTextBeforeCursor(entry.corrected.length+1,0)?.toString()
-                        .orEmpty() else ""
-                if(entry!=null && entry.editor==currentInputEditorInfo?.packageName &&
-                    KeyPopTypingRules.canUndoRecentCorrection(preceding,entry.original,
-                        entry.corrected,SystemClock.elapsedRealtime()-entry.time)) {
-                    lastRejectedCorrection=entry.original to entry.corrected
-                    val feedbackLanguage=if(language!=0 &&
-                        prefs.getBoolean("romanMode",false))0 else language
-                    correctionFeedbackAsync(feedbackLanguage,entry.original,
-                        entry.corrected,false)
-                    connection?.beginBatchEdit()
-                    connection?.deleteSurroundingText(entry.corrected.length+1,0)
-                    connection?.commitText(entry.original,1)
-                    connection?.endBatchEdit()
-                } else {
-                    editorContext.deletedCodePoint()
-                    if(connection?.deleteSurroundingTextInCodePoints(1,0)!=true)
-                        editorContext.clear()
-                }
-                if(entry!=null && preceding.isNotEmpty())editorContext.clear()
-                lastAppliedCorrection=null
+                deleteBackwardFromEditor()
                 requestSuggestionRefresh()
             }
             "⇧" -> {
@@ -2327,15 +2348,24 @@ class AetherImeService : InputMethodService() {
             "ABC" -> { symbols=false;draw() }
             "↵" -> {
                 pendingSuggestionBoundary=null
-                if(mayTranslateOnSend() &&
-                    !sensitive(currentInputEditorInfo) && !numeric(currentInputEditorInfo)) {
+                val info=currentInputEditorInfo
+                if(KeyPopEnterPolicy.insertsNewline(info)) {
+                    // WhatsApp may advertise IME_ACTION_SEND even while the
+                    // visible key is Enter. Never trigger Send for this key.
+                    editorContext.committed("\n")
+                    if(currentInputConnection?.commitText("\n",1)!=true)
+                        editorContext.clear()
+                    requestSuggestionRefresh()
+                } else if(mayTranslateOnSend() &&
+                    !sensitive(info) && !numeric(info)) {
                     translateBeforeSend()
                     return
+                } else {
+                    val action=(info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
+                    if(action!=EditorInfo.IME_ACTION_NONE && action!=EditorInfo.IME_ACTION_UNSPECIFIED)
+                        currentInputConnection?.performEditorAction(action)
+                    else currentInputConnection?.commitText("\n",1)
                 }
-                val action=(currentInputEditorInfo?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
-                if(action!=EditorInfo.IME_ACTION_NONE && action!=EditorInfo.IME_ACTION_UNSPECIFIED)
-                    currentInputConnection?.performEditorAction(action)
-                else currentInputConnection?.commitText("\n",1)
             }
             else -> {
                 val connection=currentInputConnection
