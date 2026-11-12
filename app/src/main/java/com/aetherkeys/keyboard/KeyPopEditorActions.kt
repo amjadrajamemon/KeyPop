@@ -26,11 +26,17 @@ object KeyPopEnterPolicy {
             InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
         ))return false
         val action=imeOptions and EditorInfo.IME_MASK_ACTION
-        if(action in setOf(EditorInfo.IME_ACTION_SEARCH,EditorInfo.IME_ACTION_GO,
-            EditorInfo.IME_ACTION_NEXT,EditorInfo.IME_ACTION_DONE,
-            EditorInfo.IME_ACTION_PREVIOUS))return false
+        // Search and Go are explicit commands even inside messaging apps.
+        if(action==EditorInfo.IME_ACTION_SEARCH || action==EditorInfo.IME_ACTION_GO)
+            return false
+        // WhatsApp's composer may advertise DONE/NEXT despite exposing a
+        // multi-line chat box. Sending that editor action closes the keyboard.
+        // For the visible newline key, honor the chat composer before DONE.
+        if(packageName=="com.whatsapp" || packageName=="com.whatsapp.w4b")
+            return true
         if(imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION!=0)return true
-        if(packageName=="com.whatsapp" || packageName=="com.whatsapp.w4b")return true
+        if(action in setOf(EditorInfo.IME_ACTION_NEXT,EditorInfo.IME_ACTION_DONE,
+            EditorInfo.IME_ACTION_PREVIOUS))return false
         return inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE!=0
     }
 }
