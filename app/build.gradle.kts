@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 52
-        versionName = "1.0.36-rc37"
+        versionCode = 53
+        versionName = "1.0.37-rc38"
     }
     splits {
         abi {
@@ -42,7 +42,7 @@ android {
         debug {
             // Debug builds retain an ephemeral test-only signature and their
             // OWN app identity. Never distribute them as an upgrade path.
-            applicationIdSuffix = ".previewv137"
+            applicationIdSuffix = ".previewv138"
             versionNameSuffix = "-debug-test-only"
         }
         release {
