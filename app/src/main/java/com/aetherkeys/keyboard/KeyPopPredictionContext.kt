@@ -98,6 +98,24 @@ object KeyPopPredictionContext {
         else lower
     }
 
+    /** A combined search/address input can contain search phrases as well as
+     * URLs. Never insert spaces into a URL token or immediately before its
+     * continuation; for a plain search phrase, use ordinary word spacing. */
+    fun searchWordsAllowSpacing(beforeCursor:String,afterCursor:String?):Boolean {
+        if(KeyPopTypingRules.isAddressToken(beforeCursor))return false
+        val nextToken=afterCursor.orEmpty().takeWhile{!it.isWhitespace()}
+        return !KeyPopTypingRules.isAddressToken(nextToken)
+    }
+
+    /** The editor might have dropped a trailing space after commitText().
+     * Only restore it immediately before a word character, with a verified
+     * word boundary; never insert a second space. */
+    fun needsBoundarySpace(beforeCursor:String,selectedWord:String):Boolean {
+        if(selectedWord.isBlank() || !beforeCursor.endsWith(selectedWord))return false
+        val start=beforeCursor.length-selectedWord.length
+        return start==0 || !beforeCursor[start-1].isLetterOrDigit()
+    }
+
     fun committedWord(word:String,afterCursor:String):String {
         if(word.isEmpty())return word
         val next=afterCursor.firstOrNull()
